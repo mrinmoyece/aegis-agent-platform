@@ -26,6 +26,17 @@
 | Cross-tenant context or confused deputy | Forced RLS returns no row or rejects write | Deny and audit; never retry under broader role |
 | Event/audit mutation | Missing grants and append-only trigger | Treat attempt as an integrity/security incident |
 | Ambiguous external completion | Intent exists without result | Reconcile using idempotency key and target state; never invent success |
+| Unknown provider, model, or pricing | Catalog lookup fails | Deny before reservation; never select a default or assume price |
+| Tenant/capability/retention/residency denial | No eligible route | Record bounded denial reason; do not call a provider |
+| Model budget race | Tenant budget lock serializes reservations | One reservation commits; losers deny before network |
+| Model rate or concurrency limit | Local admission control denies | Back off/fail over within bounds; do not bypass limits |
+| Provider outage | Retryable classified error and circuit failures | Bounded backoff, then bounded fallback; open circuit |
+| Provider auth/safety/schema error | Permanent classified error | Do not retry or fail over as a transient success |
+| Provider timeout after acceptance | `billing_ambiguous=true` | Preserve failure evidence; reconcile provider billing before replay |
+| Malformed/oversized SDK response | Adapter containment error | Fail explicitly, release local reservation, never coerce success |
+| Usage exceeds reservation | Provider-bug classification | Do not surface response; preserve active evidence for reconciliation |
+| Stale worker after provider response | Result fence rejects append | Do not emit response or charge from stale worker; reconcile ambiguity |
+| Invalid structured output/tool arguments | Strict JSON Schema failure | No parser fallback; a repair would be a new budgeted durable call |
 
 Global event positions order commits but may contain numbers unused after a
 rolled-back PostgreSQL identity allocation. That is not corruption. A per-
@@ -34,3 +45,4 @@ aggregate sequence gap is corruption.
 The unresolved window is an external target accepting a future effect after its
 intent but before Aegis records the result. Target idempotency or explicit
 reconciliation is mandatory; Redis/inbox deduplication alone cannot solve it.
+Provider idempotency headers also do not guarantee exactly-once billing.

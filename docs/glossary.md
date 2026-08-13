@@ -57,6 +57,21 @@ not by itself fence stale writers.
 **Outbox** — Mutable delivery state committed atomically with causing events. It
 supports at-least-once publication but is not authoritative run state.
 
+**Budget reservation** — Durable worst-case token and cost capacity held before
+a model network effect, then charged and released against normalized actual
+usage under the same worker fence.
+
+**Circuit breaker** — Bounded provider-health state (`closed`, `open`,
+`half_open`) that prevents repeated calls during an outage and admits one
+deterministic recovery probe.
+
+**Pricing version** — Immutable catalog identifier and token-class rates applied
+to one usage record so historical cost never changes when current prices do.
+
+**Billing ambiguity** — State where a provider may have accepted/billed a call
+but Aegis did not receive a trustworthy response; it must be reconciled and is
+not exactly-once billing.
+
 **Projection** — Rebuildable query view derived from the event ledger.
 
 **Projection checkpoint** — Monotonic per-tenant cursor advanced atomically with

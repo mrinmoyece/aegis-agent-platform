@@ -95,6 +95,8 @@ class Permission(StrEnum):
     WORK_CANCEL = "work:cancel"
     DLQ_REQUEUE = "dlq:requeue"
     WORK_RECONCILE = "work:reconcile"
+    MODEL_READ = "model:read"
+    MODEL_DIAGNOSTIC = "model:diagnostic"
 
 
 @dataclass(frozen=True, slots=True)

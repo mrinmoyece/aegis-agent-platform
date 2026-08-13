@@ -50,35 +50,6 @@ ActorKind.SYSTEM = ActorKind._define("system")
 class DomainEventType(_StringConstant):
     """Implemented additive event names; existing meanings are never repurposed."""
 
-    INVESTIGATION_REQUESTED: ClassVar[DomainEventType]
-    RUN_STARTED: ClassVar[DomainEventType]
-    RUN_STATUS_CHANGED: ClassVar[DomainEventType]
-    RUN_COMPLETED: ClassVar[DomainEventType]
-    RUN_FAILED: ClassVar[DomainEventType]
-    ARTIFACT_RECORDED: ClassVar[DomainEventType]
-    APPROVAL_REQUESTED: ClassVar[DomainEventType]
-    APPROVAL_DECIDED: ClassVar[DomainEventType]
-    USAGE_RECORDED: ClassVar[DomainEventType]
-    SIDE_EFFECT_INTENT_RECORDED: ClassVar[DomainEventType]
-    SIDE_EFFECT_COMPLETED: ClassVar[DomainEventType]
-    SIDE_EFFECT_FAILED: ClassVar[DomainEventType]
-    OUTBOX_DEAD_LETTERED: ClassVar[DomainEventType]
-    TENANT_REGISTERED: ClassVar[DomainEventType]
-    WORK_REQUESTED: ClassVar[DomainEventType]
-    WORK_PUBLISHED: ClassVar[DomainEventType]
-    WORK_CLAIMED: ClassVar[DomainEventType]
-    WORK_STARTED: ClassVar[DomainEventType]
-    WORK_HEARTBEAT: ClassVar[DomainEventType]
-    WORK_LEASE_EXPIRED: ClassVar[DomainEventType]
-    WORK_SUCCEEDED: ClassVar[DomainEventType]
-    WORK_FAILED: ClassVar[DomainEventType]
-    WORK_RETRY_SCHEDULED: ClassVar[DomainEventType]
-    WORK_CANCEL_REQUESTED: ClassVar[DomainEventType]
-    WORK_CANCELLED: ClassVar[DomainEventType]
-    WORK_DEAD_LETTERED: ClassVar[DomainEventType]
-    WORK_RECONCILED: ClassVar[DomainEventType]
-
-
 DomainEventType.INVESTIGATION_REQUESTED = DomainEventType._define(
     "investigation.requested.v1"
 )
@@ -116,6 +87,44 @@ DomainEventType.WORK_CANCEL_REQUESTED = DomainEventType._define(
 DomainEventType.WORK_CANCELLED = DomainEventType._define("work.cancelled.v1")
 DomainEventType.WORK_DEAD_LETTERED = DomainEventType._define("work.dead_lettered.v1")
 DomainEventType.WORK_RECONCILED = DomainEventType._define("work.reconciled.v1")
+DomainEventType.MODEL_CALL_REQUESTED = DomainEventType._define(
+    "model.call_requested.v1"
+)
+DomainEventType.MODEL_CALL_STARTED = DomainEventType._define("model.call_started.v1")
+DomainEventType.MODEL_CALL_ATTEMPTED = DomainEventType._define(
+    "model.call_attempted.v1"
+)
+DomainEventType.MODEL_CALL_SUCCEEDED = DomainEventType._define(
+    "model.call_succeeded.v1"
+)
+DomainEventType.MODEL_CALL_FAILED = DomainEventType._define("model.call_failed.v1")
+DomainEventType.MODEL_CALL_TIMED_OUT = DomainEventType._define(
+    "model.call_timed_out.v1"
+)
+DomainEventType.MODEL_CALL_RATE_LIMITED = DomainEventType._define(
+    "model.call_rate_limited.v1"
+)
+DomainEventType.MODEL_CALL_CANCELLED = DomainEventType._define(
+    "model.call_cancelled.v1"
+)
+DomainEventType.MODEL_USAGE_RECORDED = DomainEventType._define(
+    "model.usage_recorded.v1"
+)
+DomainEventType.MODEL_ROUTE_DECIDED = DomainEventType._define(
+    "model.route_decided.v1"
+)
+DomainEventType.MODEL_FALLBACK_SELECTED = DomainEventType._define(
+    "model.fallback_selected.v1"
+)
+DomainEventType.MODEL_BUDGET_RESERVED = DomainEventType._define(
+    "model.budget_reserved.v1"
+)
+DomainEventType.MODEL_BUDGET_RELEASED = DomainEventType._define(
+    "model.budget_released.v1"
+)
+DomainEventType.MODEL_BUDGET_CHARGED = DomainEventType._define(
+    "model.budget_charged.v1"
+)
 
 
 @dataclass(frozen=True, slots=True)

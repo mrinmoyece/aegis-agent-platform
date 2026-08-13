@@ -110,6 +110,8 @@ def main() -> None:
         "create table work_items",
         "create table work_leases",
         "create table work_dead_letters",
+        "create table model_budget_reservations",
+        "create table model_usage_projection",
     )
     missing = [control for control in required if control not in schema]
     if missing:
