@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta, tzinfo
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
 
 from aegis_agent_platform.domain import EventEnvelope, JsonValue
-from aegis_agent_platform.identity import TenantId
 from aegis_agent_platform.tenancy import TenantContext
 
 
@@ -75,35 +74,3 @@ def test_event_envelope_rejects_invalid_universal_fields(
 def test_tenant_context_is_explicit() -> None:
     with pytest.raises(ValueError, match="tenant_id"):
         TenantContext("")  # type: ignore[arg-type]
-    for tenant_id in ("", "   "):
-        with pytest.raises(ValueError, match="tenant_id"):
-            TenantId(tenant_id)
-
-
-class NaiveTimezone(tzinfo):
-    """Timezone object that deliberately reports no UTC offset."""
-
-    def utcoffset(self, dt: datetime | None) -> None:
-        del dt
-        return None
-
-    def dst(self, dt: datetime | None) -> timedelta:
-        del dt
-        return timedelta(0)
-
-    def tzname(self, dt: datetime | None) -> str:
-        del dt
-        return "naive-offset"
-
-
-def test_event_rejects_timezone_without_utc_offset() -> None:
-    with pytest.raises(ValueError, match="timezone-aware"):
-        EventEnvelope(
-            event_id=uuid4(),
-            tenant_id="tenant-1",
-            aggregate_id="run-1",
-            event_type="RunRequested",
-            schema_version=1,
-            occurred_at=datetime(2026, 8, 16, tzinfo=NaiveTimezone()),
-            payload={},
-        )

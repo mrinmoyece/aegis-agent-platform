@@ -65,21 +65,17 @@ class SecretProvider(Protocol):
 
 
 class EnvironmentSecretProvider:
-    """Development provider bound to one tenant and environment snapshot."""
+    """Development provider over an explicit environment snapshot."""
 
     provider_name = "env"
 
-    def __init__(self, tenant_id: TenantId, values: Mapping[str, str]) -> None:
-        self._tenant_id = tenant_id
+    def __init__(self, values: Mapping[str, str]) -> None:
         self._values = dict(values)
 
     @classmethod
-    def from_process_environment(
-        cls,
-        tenant_id: TenantId,
-    ) -> EnvironmentSecretProvider:
+    def from_process_environment(cls) -> EnvironmentSecretProvider:
         """Capture process environment only when explicitly requested."""
-        return cls(tenant_id, os.environ)
+        return cls(os.environ)
 
     def resolve(
         self,
@@ -87,8 +83,6 @@ class EnvironmentSecretProvider:
         reference: SecretReference,
     ) -> SecretValue:
         _require_tenant(context, reference)
-        if reference.tenant_id != self._tenant_id:
-            raise SecretError("secret reference targets a different tenant provider")
         if reference.provider != self.provider_name:
             raise SecretError("secret reference targets a different provider")
         if reference.version is not None:

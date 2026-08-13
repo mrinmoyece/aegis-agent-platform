@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
@@ -86,8 +85,7 @@ class ControlPlaneApp:
         if not isinstance(path, str) or not path.startswith("/v1/"):
             await _respond(send, 404, {"status": "not-found"})
             return
-        correlation_id = uuid4()
-        principal = await self._authenticate(scope, send, correlation_id)
+        principal = await self._authenticate(scope, send)
         if principal is None:
             return
         if path == "/v1/me":
@@ -107,20 +105,10 @@ class ControlPlaneApp:
             )
             return
         if len(segments) == 3:
-            await self._get_tenant(
-                send,
-                principal,
-                tenant_id,
-                correlation_id,
-            )
+            await self._get_tenant(send, principal, tenant_id)
             return
         if segments[3] == "policy":
-            await self._get_policy(
-                send,
-                principal,
-                tenant_id,
-                correlation_id,
-            )
+            await self._get_policy(send, principal, tenant_id)
             return
         await _respond(send, 404, {"status": "not-found"})
 
@@ -144,8 +132,8 @@ class ControlPlaneApp:
         self,
         scope: AsgiMessage,
         send: Send,
-        correlation_id: UUID,
     ) -> Principal | None:
+        correlation_id = uuid4()
         if self._authentication is None:
             await _respond(
                 send,
@@ -155,10 +143,7 @@ class ControlPlaneApp:
             return None
         authorization_header = _single_header(scope, b"authorization")
         try:
-            principal = await asyncio.to_thread(
-                self._authentication.authenticate,
-                authorization_header,
-            )
+            principal = self._authentication.authenticate(authorization_header)
         except AuthenticationError as error:
             self._audit_event(
                 tenant_id=PLATFORM_TENANT_ID,
@@ -199,7 +184,6 @@ class ControlPlaneApp:
         send: Send,
         principal: Principal,
         tenant_id: TenantId,
-        correlation_id: UUID,
     ) -> None:
         if not await self._authorize(
             send,
@@ -207,7 +191,6 @@ class ControlPlaneApp:
             tenant_id,
             Permission.TENANT_READ,
             resource=f"tenant/{tenant_id}",
-            correlation_id=correlation_id,
         ):
             return
         tenant = self._tenants.get(TenantContext(tenant_id))
@@ -229,7 +212,6 @@ class ControlPlaneApp:
         send: Send,
         principal: Principal,
         tenant_id: TenantId,
-        correlation_id: UUID,
     ) -> None:
         if not await self._authorize(
             send,
@@ -237,7 +219,6 @@ class ControlPlaneApp:
             tenant_id,
             Permission.POLICY_READ,
             resource=f"tenant/{tenant_id}/policy",
-            correlation_id=correlation_id,
         ):
             return
         policy = self._policies.get(TenantContext(tenant_id))
@@ -254,7 +235,6 @@ class ControlPlaneApp:
         permission: Permission,
         *,
         resource: str,
-        correlation_id: UUID,
     ) -> bool:
         decision = self._authorization.decide(
             principal=principal,
@@ -262,12 +242,7 @@ class ControlPlaneApp:
             permission=permission,
             at=datetime.now(UTC),
         )
-        self._audit_authorization(
-            principal,
-            resource,
-            decision,
-            correlation_id,
-        )
+        self._audit_authorization(principal, resource, decision)
         if decision.allowed:
             return True
         await _respond(
@@ -287,7 +262,6 @@ class ControlPlaneApp:
         principal: Principal,
         resource: str,
         decision: AuthorizationDecision,
-        correlation_id: UUID,
     ) -> None:
         self._audit_event(
             tenant_id=principal.tenant_id,
@@ -296,7 +270,7 @@ class ControlPlaneApp:
             actor_id=principal.actor_id,
             action=decision.permission,
             resource=resource,
-            correlation_id=correlation_id,
+            correlation_id=uuid4(),
             details={
                 "attempted_tenant_id": str(decision.tenant_id),
                 "reason": decision.reason,
