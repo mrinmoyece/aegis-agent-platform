@@ -1,0 +1,23 @@
+{
+  "realm": "aegis",
+  "enabled": true,
+  "displayName": "Aegis local development",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "clients": [
+    {
+      "clientId": "aegis-control-plane",
+      "name": "Aegis control plane",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8080/*"
+      ],
+      "webOrigins": [
+        "http://localhost:8080"
+      ]
+    }
+  ]
+}

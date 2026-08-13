@@ -1,0 +1,45 @@
+name: Bug report
+description: Report reproducible behavior that violates a documented contract
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Do not report security vulnerabilities here. Follow SECURITY.md.
+  - type: input
+    id: layer
+    attributes:
+      label: Roadmap layer
+      description: Which implemented layer is affected?
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: Include a minimal reproduction and sanitized output.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Link the contract, invariant, or documentation being violated.
+    validations:
+      required: true
+  - type: input
+    id: revision
+    attributes:
+      label: Revision
+      description: Commit SHA or release version.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety checks
+      options:
+        - label: I removed secrets, tenant data, and sensitive prompts.
+          required: true
+        - label: This is not a private security report.
+          required: true
