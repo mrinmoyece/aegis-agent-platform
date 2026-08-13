@@ -79,23 +79,25 @@ RLS, immutable rows, audit redaction, replay, and projection rebuild.
 **Acceptance gate:** persistence and replay mechanics are done. No external effect
 path is implemented yet; later layers must consume
 `effect.intent_recorded.v1` before adding any effect. Deterministic incident state
-transitions, fixture-backed investigation behavior, Redis workers, and agent
-execution remain Layer 4+ work rather than being falsely claimed here.
+transitions, fixture-backed investigation behavior, and agent execution remain
+future work. Redis workers are implemented separately in Layer 4.
 
-## Layer 4 — Workers, leases, and providers
+## Layer 4 — Workers and leases
 
-Implement durable work claiming, fenced renewable leases, retry policy,
-provider-neutral model adapters, metering, idempotent provider calls, and
-read-only Dynatrace/GitHub connectors for telemetry, topology, changes, pull
-requests, and deployments. Add coordinator scheduling for a validated dependency
-DAG with fixed per-role capability, budget, and timeout envelopes.
+Implement durable publication/consumption, fenced renewable leases, bounded
+workers, fair tenant scheduling, cancellation, retry/DLQ, and reconciliation.
 
-**Acceptance gate:** duplicate delivery, lease expiry, worker death, timeout,
-rate-limit, and ambiguous provider outcomes recover without concurrent ownership
-or lost work. Connector contract tests replay the canonical incident without
-requiring live vendor accounts. Parallel investigation tests prove deterministic
-aggregation regardless of completion order, and failed or timed-out specialists
-cannot exceed their limits or silently disappear from the incident record.
+**Status:** the distributed execution substrate is implemented and live-tested.
+PostgreSQL remains authoritative; Redis Streams is shared at-least-once
+transport. Provider calls, connectors, coordinator/specialist reasoning, and
+remediation are intentionally deferred.
+
+**Acceptance gate:** duplicate delivery, lease expiry/reclaim, stale writers,
+publisher restart windows, cancellation races, timeout/retry exhaustion, poison
+messages, and DLQ operations have deterministic or live-service evidence.
+Provider rate limits, ambiguous provider outcomes, connector fixtures, and
+deterministic specialist aggregation remain later Layer 4 follow-ups and are not
+claimed by this worker layer.
 
 ## Layer 5 — Tools, policy, and sandbox
 

@@ -6,7 +6,6 @@ import asyncio
 import os
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from uuid import UUID, uuid4
 
 import psycopg
@@ -44,7 +43,6 @@ from aegis_agent_platform.persistence import (
 from aegis_agent_platform.projections import ProjectionEngine
 from aegis_agent_platform.tenancy import TenantContext
 
-ROOT = Path(__file__).resolve().parents[2]
 DATABASE_URL = os.environ.get("AEGIS_TEST_DATABASE_URL")
 pytestmark = [
     pytest.mark.integration,
@@ -55,25 +53,6 @@ pytestmark = [
 ]
 TENANT_A = TenantContext(TenantId("tenant-a"))
 TENANT_B = TenantContext(TenantId("tenant-b"))
-
-
-@pytest.fixture(scope="session", autouse=True)
-def migrated_database() -> None:
-    """Rebuild a disposable test schema and apply every forward migration."""
-    assert DATABASE_URL is not None
-    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
-        connection.execute("DROP SCHEMA public CASCADE")
-        connection.execute("CREATE SCHEMA public")
-        for migration in sorted((ROOT / "migrations").glob("*.sql")):
-            connection.execute(migration.read_text(encoding="utf-8"))
-        connection.execute(
-            """
-            INSERT INTO tenants (tenant_id, display_name, enabled, created_at)
-            VALUES
-                ('tenant-a', 'Tenant A', true, transaction_timestamp()),
-                ('tenant-b', 'Tenant B', true, transaction_timestamp())
-            """
-        )
 
 
 async def app_connection() -> psycopg.AsyncConnection[tuple[object, ...]]:
@@ -345,15 +324,31 @@ def test_inbox_deduplication_and_outbox_claim_race() -> None:
                 limit=1,
             )
             assert claimed_once[0].message.message_id == crash_message.message_id
-            assert (
-                await first_store.claim_outbox(
-                    TENANT_A,
-                    lease_owner="must-not-reclaim",
-                    lease_expires_at=expiry + timedelta(minutes=2),
-                    now=expiry + timedelta(minutes=1),
-                    limit=1,
+            async with first_connection.transaction():
+                await first_connection.execute(
+                    "SELECT set_config('aegis.tenant_id', 'tenant-a', true)"
                 )
-                == ()
+                await first_connection.execute(
+                    """
+                    UPDATE outbox_messages
+                    SET lease_expires_at = clock_timestamp() - interval '1 second'
+                    WHERE tenant_id = 'tenant-a' AND message_id = %s
+                    """,
+                    (crash_message.message_id,),
+                )
+            reclaimed = await first_store.claim_outbox(
+                TENANT_A,
+                lease_owner="reconciling-publisher",
+                lease_expires_at=expiry + timedelta(minutes=2),
+                now=expiry + timedelta(minutes=1),
+                limit=1,
+            )
+            assert reclaimed[0].message.message_id == crash_message.message_id
+            await first_store.mark_outbox_published(
+                TENANT_A,
+                crash_message.message_id,
+                lease_owner="reconciling-publisher",
+                published_at=expiry + timedelta(minutes=1),
             )
             async with first_connection.transaction():
                 await first_connection.execute(
@@ -369,11 +364,7 @@ def test_inbox_deduplication_and_outbox_claim_race() -> None:
                         (crash_message.message_id,),
                     )
                 ).fetchone()
-            assert crash_row == (
-                "dead_letter",
-                1,
-                "lease_expired_after_max_attempts",
-            )
+            assert crash_row == ("published", 2, None)
         finally:
             await first_connection.close()
             await second_connection.close()

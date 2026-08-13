@@ -86,6 +86,27 @@ DomainEventType.OUTBOX_DEAD_LETTERED = DomainEventType._define(
     "delivery.outbox_dead_lettered.v1"
 )
 DomainEventType.TENANT_REGISTERED = DomainEventType._define("tenant.registered.v1")
+DomainEventType.WORK_REQUESTED = DomainEventType._define("work.requested.v1")
+DomainEventType.WORK_PUBLISHED = DomainEventType._define("work.published.v1")
+DomainEventType.WORK_CLAIMED = DomainEventType._define("work.claimed.v1")
+DomainEventType.WORK_STARTED = DomainEventType._define("work.started.v1")
+DomainEventType.WORK_HEARTBEAT = DomainEventType._define("work.heartbeat.v1")
+DomainEventType.WORK_LEASE_EXPIRED = DomainEventType._define(
+    "work.lease_expired.v1"
+)
+DomainEventType.WORK_SUCCEEDED = DomainEventType._define("work.succeeded.v1")
+DomainEventType.WORK_FAILED = DomainEventType._define("work.failed.v1")
+DomainEventType.WORK_RETRY_SCHEDULED = DomainEventType._define(
+    "work.retry_scheduled.v1"
+)
+DomainEventType.WORK_CANCEL_REQUESTED = DomainEventType._define(
+    "work.cancel_requested.v1"
+)
+DomainEventType.WORK_CANCELLED = DomainEventType._define("work.cancelled.v1")
+DomainEventType.WORK_DEAD_LETTERED = DomainEventType._define(
+    "work.dead_lettered.v1"
+)
+DomainEventType.WORK_RECONCILED = DomainEventType._define("work.reconciled.v1")
 
 
 @dataclass(frozen=True, slots=True)

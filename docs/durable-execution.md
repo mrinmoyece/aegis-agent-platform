@@ -1,8 +1,8 @@
 # Durable execution and PostgreSQL ledger
 
-Layer 3 implements persistence mechanics, not agent execution. PostgreSQL is the
-authoritative event ledger; workers, models, live evidence connectors, Redis work
-claims, and remediation remain planned.
+Layer 3 implements persistence mechanics and Layer 4 uses them for reliable work.
+PostgreSQL is authoritative; Redis is at-least-once transport. Models, live
+connectors, specialist reasoning, and remediation remain planned.
 
 ## Event sourcing instead of mutable run state
 
@@ -42,7 +42,8 @@ claimed again; this does not rewrite event truth.
 This is at-least-once delivery. It is not exactly-once execution. A crash after an
 external system accepts a request but before Aegis records the result remains
 ambiguous. Later effect adapters must send the durable intent's idempotency key
-or reconcile target state. No external effect adapter exists in Layer 3.
+or reconcile target state. No external effect adapter exists. Layer 4 implements this protocol through work
+outcomes but deliberately performs no vendor/provider side effect.
 
 ## Projections and checkpoints
 
@@ -79,10 +80,12 @@ unauthenticated HTTP operation.
 ## Tests and observability
 
 `make check` runs the fast deterministic suite at a 90% coverage gate while
-excluding live-database adapter lines. `tests/integration/test_postgres_storage.py`
-executes those adapters against PostgreSQL 16 in CI and proves migrations,
+excluding live-database adapter lines. `tests/integration/`
+executes those adapters against PostgreSQL 16 and Redis 7.4 in CI and proves migrations,
 rollback, races, duplicate delivery, dead-letter transition, RLS, immutability,
 replay, projection rebuild, durable audit redaction, and repository isolation.
+The worker suite additionally proves claim races, renewal/reclaim, stale fencing,
+duplicate delivery, acknowledgement order, poison handling, and tenant isolation.
 
 `StorageTelemetry` defines bounded signals for append latency/conflicts, outbox
 lag, and projection lag. It accepts counts and durations only—never tenant IDs,

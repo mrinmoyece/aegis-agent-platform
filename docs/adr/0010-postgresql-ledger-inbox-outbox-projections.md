@@ -22,5 +22,6 @@ projection tables remain mutable delivery/query state, never a second source of
 truth. Global identity numbers order commits but are not promised gapless after
 rollback. Schema evolution remains additive and migrations are forward-only.
 
-Redis workers, provider calls, evidence connectors, and agent execution are
-explicitly outside this decision and remain later layers.
+Redis workers are explicitly outside this decision and are implemented by Layer
+4 plus ADR 0011. Provider calls, evidence connectors, and agent execution remain
+future layers.
