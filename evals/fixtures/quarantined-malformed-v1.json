@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "fixture_id": "quarantined-malformed-v1",
+  "synthetic": true,
+  "tenant_neutral": true,
+  "disposition": "quarantined",
+  "malformed_payload": "{\"result\": [1, 2, }",
+  "quarantine_reason": "synthetic malformed structured output",
+  "classification": "internal",
+  "contains_production_data": false,
+  "contains_credentials": false,
+  "contains_pii": false
+}

@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "fixture_id": "adversarial-channels-v1",
+  "synthetic": true,
+  "tenant_neutral": true,
+  "channels": [
+    "evidence",
+    "memory",
+    "model-output",
+    "tool-output",
+    "connector-metadata",
+    "sandbox-input",
+    "approval-request"
+  ],
+  "attack_classes": [
+    "prompt-injection",
+    "indirect-injection",
+    "unicode-bidi",
+    "schema-smuggling",
+    "citation-fabrication",
+    "cross-tenant-enumeration",
+    "role-approval-spoofing",
+    "confused-deputy",
+    "ssrf",
+    "path-archive-symlink-shell",
+    "secret-leakage",
+    "output-bomb",
+    "replay-idempotency-fencing-race",
+    "denial-of-wallet",
+    "malicious-provider-connector-backend"
+  ],
+  "expected_containment": [
+    "denied",
+    "quarantined",
+    "abstained",
+    "bounded"
+  ],
+  "classification": "internal",
+  "contains_production_data": false,
+  "contains_credentials": false,
+  "contains_pii": false
+}

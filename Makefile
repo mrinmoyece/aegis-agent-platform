@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install format format-check lint type test evals postgres-test integration-test docs-check manifest-check migration-check check compose-config container-check
+.PHONY: help install format format-check lint type test evals eval-behavioral eval-deterministic eval-adversarial eval-recovery eval-baseline eval-fixtures eval-meta eval-integration postgres-test integration-test docs-check manifest-check migration-check check compose-config container-check
 
 PYTHON ?= python3
 
@@ -25,8 +25,31 @@ type: ## Run strict type checks
 test: ## Run deterministic unit tests with coverage
 	PYTHONPATH=src:tests:$$PYTHONPATH $(PYTHON) -m pytest --cov --cov-report=term-missing
 
-evals: ## Run deterministic behavioral evaluations without live providers
+evals: eval-behavioral eval-deterministic eval-fixtures eval-baseline ## Run all required fake-only evaluation gates
+
+eval-behavioral: ## Preserve Layers 5 and 7-10 behavioral evaluation entrypoints
 	PYTHONPATH=src $(PYTHON) -m pytest tests/test_gateway_eval.py tests/test_agent_evals.py tests/test_remediation_evals.py tests/test_sandbox_evals.py tests/test_memory_evals.py
+
+eval-deterministic: ## Run the complete hermetic Layer 11 scenario catalog
+	$(PYTHON) -m aegis_agent_platform.evals run --output .aegis-evals/deterministic
+
+eval-adversarial: ## Run the deterministic adversarial safety pack
+	$(PYTHON) -m aegis_agent_platform.evals run --tag adversarial --tag safety --output .aegis-evals/adversarial
+
+eval-recovery: ## Run every deterministic recovery fault cut point
+	$(PYTHON) -m aegis_agent_platform.evals run --tag recovery --tag chaos --output .aegis-evals/recovery
+
+eval-baseline: ## Enforce the reviewed baseline and hard safety invariants
+	$(PYTHON) -m aegis_agent_platform.evals compare --output .aegis-evals/baseline
+
+eval-fixtures: ## Verify fixture provenance, digests, and secret/PII policy
+	$(PYTHON) -m aegis_agent_platform.evals check-fixtures
+
+eval-meta: ## Test evaluator determinism, scoring, gates, and redaction
+	$(PYTHON) -m pytest tests/test_evaluation_platform.py
+
+eval-integration: ## Exercise evaluation-relevant PostgreSQL, pgvector, and Redis paths
+	$(PYTHON) -m pytest tests/integration/test_postgres_storage.py tests/integration/test_worker_delivery.py tests/integration/test_memory_postgres.py
 
 postgres-test: ## Run live PostgreSQL integration tests (requires AEGIS_TEST_DATABASE_URL)
 	PYTHONPATH=src:tests:$$PYTHONPATH $(PYTHON) -m pytest tests/integration

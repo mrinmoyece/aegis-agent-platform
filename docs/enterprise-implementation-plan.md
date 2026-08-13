@@ -44,10 +44,11 @@ flowchart LR
   L6[Evidence connectors]
   L7[Specialist DAG]
   L8[Exact approvals and controlled effects]
-  L9[Sandbox, memory, and retrieval]
-  L10[Evals and observability]
-  L11[Enterprise operations and protocols]
-  L1 --> L2 --> L3 --> L4 --> L5 --> L6 --> L7 --> L8 --> L9 --> L10 --> L11
+  L9[Hardened sandbox]
+  L10[Event-grounded memory and RAG]
+  L11[Layered deterministic evaluation gates]
+  L12[Observability and enterprise operations]
+  L1 --> L2 --> L3 --> L4 --> L5 --> L6 --> L7 --> L8 --> L9 --> L10 --> L11 --> L12
   L3 --> L5
   L4 --> L6
   L2 --> L8
@@ -73,12 +74,12 @@ Each slice is intended to be a reviewable PR with one primary acceptance gate.
 | EP-08 | 6 | Dynatrace, GitHub, Kubernetes, and runbook read adapters | EP-02, EP-06 | fixture, rate-limit, pagination, provenance tests |
 | EP-09 | 7 | Coordinator DAG and fixed specialist runtime | EP-04, EP-06, EP-07, EP-08 | deterministic parallel aggregation and timeout tests |
 | EP-10 | 8 | Policy engine, exact approvals, and controlled tools | EP-05, EP-09 | no-action-before-approval and replay-denial tests |
-| EP-11 | 8 | Isolated sandbox and capability-scoped credentials | EP-10 | escape, egress, quota, cleanup, and secret tests |
-| EP-12 | 9 | Three-tier memory, pgvector retrieval, and compaction | EP-02, EP-04 | tenant isolation, provenance, deletion, fidelity tests |
-| EP-13 | 10 | Evaluation harness and release-quality gates | EP-09–EP-12 | known regressions blocked by deterministic/adversarial suites |
-| EP-14 | 10 | Production telemetry, audit, SLOs, and cost controls | EP-03–EP-13 | dashboards, alerts, trace/event correlation, SLO burn tests |
-| EP-15 | 11 | Deployment, secrets, backup/restore, HA, and multi-region | EP-14 | signed release, restore/failover, capacity evidence |
-| EP-16 | 11 | MCP adapters and external A2A interoperability | EP-10, EP-14, EP-15 | conformance, tenant, replay, cancellation, malicious-peer tests |
+| EP-11 | 9 | Isolated sandbox and capability-scoped credentials | EP-10 | escape, egress, quota, cleanup, and secret tests |
+| EP-12 | 10 | Three-tier memory, pgvector retrieval, and compaction | EP-02, EP-04 | tenant isolation, provenance, deletion, fidelity tests |
+| EP-13 | 11 | Layered evaluation harness and release gates | EP-09–EP-12 | known regressions blocked by deterministic/adversarial suites |
+| EP-14 | 12 | Production telemetry, audit, SLOs, and cost controls | EP-03–EP-13 | dashboards, alerts, trace/event correlation, SLO burn tests |
+| EP-15 | 12 | Deployment, secrets, backup/restore, HA, and multi-region | EP-14 | signed release, restore/failover, capacity evidence |
+| EP-16 | 12 | MCP adapters and external A2A interoperability | EP-10, EP-14, EP-15 | conformance, tenant, replay, cancellation, malicious-peer tests |
 
 ## EP-01–EP-02: Identity, tenancy, and RBAC
 
@@ -481,21 +482,79 @@ eight-dimensional; live providers, production encrypted blob/key storage,
 external scanning, HA/DR, and load certification remain exit evidence outside
 this repository layer.
 
-## EP-13–EP-14: Evaluation, observability, SLOs, and cost
+## EP-13: Layered deterministic evaluation gates
 
-### Evaluation
+**Layer 11 status: Implemented.** The decision and operational design are
+documented in
+[ADR 0018](adr/0018-layered-deterministic-evaluation-gates.md) and
+[evaluation.md](evaluation.md). `aegis_agent_platform.evals`, governed `evals/`
+artifacts, and `tests/test_evaluation_platform.py` implement the catalog,
+contracts, probes, 22 fault cuts, runner, scoring, hard gates, baseline/
+non-safety-waiver governance, fixture checks, bounded reports/telemetry, guarded
+optional-live boundary, and CLI. The required catalog contains 91 cases,
+including 12 adversarial cases; the evaluator meta-suite contains 22 tests.
+Existing Layers 7–10 deterministic fake matrices remain additional regression
+checks.
 
-- Version checkout-incident datasets by scenario, expected evidence, acceptable
-  hypotheses, prohibited claims/actions, and recovery criteria.
-- Deterministically grade schemas, citations, tenant isolation, budgets,
-  transition legality, approval binding, tool guards, and verification windows.
-- Grade semantic evidence coverage, causal reasoning, uncertainty, remediation
-  quality, and summary fidelity with calibrated human/model rubrics.
-- Add adversarial cases: misleading deployment timing, prompt-injected runbook,
-  conflicting telemetry, missing source, stale topology, poisoned memory,
-  provider truncation, and false recovery.
-- Block release on statistically and operationally meaningful regression, not a
-  single aggregate score.
+### Contracts and corpus
+
+- Define immutable additive provider-neutral dataset, scenario, grader, fault,
+  run, result, baseline, comparison, waiver, and report contracts. Bind stable
+  IDs, schema/content versions, provenance, classification, review, retention,
+  and code/policy/prompt/provider/model/grader versions.
+- Govern synthetic checkout scenario, adversarial, and recovery cases. Cover
+  misleading timing, missing/conflicting evidence, prompt-injected runbooks,
+  poisoned memory, tenant/role/citation attacks, unsafe proposals, duplicate
+  delivery, stale fences, crashes around durable boundaries, reconciliation,
+  projection rebuild, quarantine, deletion, and false recovery.
+- Quarantine provenance/schema/digest failures. Treat tamper as a release/security
+  incident. Deletion uses legal-hold checks, tombstones, derived-data purge, and
+  minimal non-sensitive audit evidence; historical reports are not rewritten.
+
+### Execution classes and gates
+
+- Required CI is hermetic and deterministic: fixed fixtures, clocks, IDs, seeds,
+  provider-neutral fakes, and named fault cut points. It uses no live secret,
+  network, model judge, or production effect.
+- Environment-gated integration uses disposable services and scoped
+  non-production identities. Live/statistical qualification is separately
+  opt-in, repeated, segmented, and uncertainty-aware. Production evidence is
+  bounded and redacted; it never becomes runtime truth or an automatic baseline.
+- Hard safety assertions for tenancy, authorization, citations, transitions,
+  budgets, approval, intent-before-effect, tools/sandbox, ambiguity, and recovery
+  block independently of aggregate quality.
+- Hard safety failures are non-waivable. A non-safety waiver binds exact
+  case/metric scope, owner, reason, and expiry; it never changes runtime
+  enforcement or silently updates a baseline.
+- An optional isolated model judge receives minimized redacted input, records
+  versioned calibration/uncertainty, has no tools or production authority, is
+  disabled in required CI, and is never the sole safety gate.
+- Reports contain bounded identifiers, digests, versions, counts, segments,
+  uncertainty, cost class, and classified errors—not raw prompts, credentials,
+  tenant evidence, transcripts, or high-cardinality labels.
+
+### Developer and release workflow
+
+The current CLI lists cases; runs all or repeatable `--case`/`--tag` selections;
+replays a bounded prior report; compares the canonical baseline; explicitly
+updates a reviewed baseline; checks fixtures; and writes the manifest under
+`python -m aegis_agent_platform.evals`. `make evals` runs the deterministic
+required path; focused `make eval-deterministic`, `eval-adversarial`,
+`eval-recovery`, `eval-baseline`, `eval-fixtures`, and `eval-meta` targets are
+hermetic, while `eval-integration` remains environment-gated. Hard-safety
+regression blocking, complete baseline coverage,
+quarantine/tamper handling, repeatability, sharding, redacted reporting, and
+guarded live configuration have evaluator meta-test coverage.
+
+Full production model/connector qualification, independent penetration testing,
+large-scale human labeling, operator UI, MCP/A2A, observability/SLOs, HA/DR,
+multi-region operation, and final load/chaos certification remain outside
+EP-13.
+
+## EP-14: Observability, SLOs, and cost
+
+This is a separate deferred layer. Evaluation results may inform its dashboards,
+but neither telemetry nor a report becomes authoritative run state.
 
 ### Observability
 
@@ -590,11 +649,15 @@ artifacts, authorization, approvals, or coordinator control.
 | --- | --- |
 | Layer 2 | Only an authorized tenant investigator can open/view the incident |
 | Layer 3 | Checkout incident and evidence artifacts replay after injected crashes |
-| Layer 4 | Read-only specialists correlate sanitized Dynatrace/GitHub/Kubernetes fixtures deterministically |
-| Layer 5 | Exact rollback requires durable scoped approval and controlled execution |
-| Layer 6 | Approved runbooks/past incidents are retrieved with tenant-safe provenance |
-| Layer 7 | Adversarial evaluation challenges the hypothesis; telemetry proves recovery |
-| Layer 8 | Signed deployment, restore/failover drill, SLOs, audit, and optional A2A exchange pass |
+| Layer 4 | Durable Redis delivery and fenced workers recover from duplicates and stale ownership |
+| Layer 5 | Provider routing, budgets, usage, and failures remain provider-neutral and durable |
+| Layer 6 | Read-only cited evidence is ingested and correlated without fabricating causality |
+| Layer 7 | Fixed specialists produce typed cited artifacts and deterministic critique/abstention |
+| Layer 8 | Exact approval gates a controlled effect and fresh recovery verification |
+| Layer 9 | Approval-bound sandbox lifecycle and artifacts remain isolated and reconcilable |
+| Layer 10 | Curated memory is retrieved/compacted with provenance, tenant filters, and deletion |
+| Layer 11 | Hermetic adversarial/recovery gates block a seeded regression and emit redacted release evidence |
+| Layer 12 | Signed deployment, observability/SLO, restore/failover, capacity, and optional A2A evidence pass |
 
 ## Production readiness review
 

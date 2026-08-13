@@ -93,6 +93,19 @@
 | Summary adds unsupported claim or loses citation coverage | Claim/reference validation, drift, depth, and contradiction checks | Append summary rejection and use bounded deterministic extractive fallback |
 | Legal hold or tenant deletion race | Current lifecycle fold and expected version | Hold blocks erasure; otherwise tombstone, purge derived rows/cache, erase referenced blob, and retain minimal ledger evidence |
 | Memory projection/index loss | Checkpoint or ledger/version mismatch | Rebuild from ledger and authorized source blobs; index/cache are never truth |
+| Evaluation dataset digest or provenance mismatch | Manifest verification fails before selection | Quarantine the version, block the gate, preserve bounded metadata, and open a tamper/release incident |
+| Required CI attempts live network, secret, judge, or production effect | Hermetic execution policy denies the capability | Fail the run; move explicitly approved work to an isolated environment-gated class |
+| Safety assertion regresses while aggregate quality improves | Per-gate comparison records a hard failure | Block release; never offset safety with a composite score |
+| Baseline update is implicit, stale, or unreviewed | Candidate/baseline digest or review binding fails | Preserve the candidate result and require an explicit reviewed new baseline version |
+| Waiver is expired, broadened, or applied to safety | Exact non-safety case/metric and expiry validation fails | Treat the regression as failed; hard safety remains non-waivable |
+| Named fault replay diverges | Fixed cut point, clock, IDs, seed, or fixture produces a different fold/result | Stop promotion, retain both redacted results, and investigate nondeterminism |
+| Model-judge configuration attempts sole safety authority or lacks a versioned delimited rubric | `ModelJudgeConfig` rejects the request | Execute no judge; deterministic safety gates still decide and required CI remains independent |
+| Evaluation report leaks sensitive/high-cardinality content | Report schema/redaction/cardinality validation fails | Quarantine/delete affected output, rotate exposed material if needed, and block publication |
+| Dataset deletion races an evaluation | Lifecycle/version check changes before result publication | Abort or mark unavailable; purge derived inputs/results per policy and never silently rewrite history |
+
+Layer 11 implements evaluator-side detection for catalog, fixture, baseline,
+waiver, replay, report, and configuration failures above. It does not perform
+live production qualification or external deletion/incident operations.
 
 Global event positions order commits but may contain numbers unused after a
 rolled-back PostgreSQL identity allocation. That is not corruption. A per-

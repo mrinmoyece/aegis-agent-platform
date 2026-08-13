@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "fixture_id": "checkout-incident-v1",
+  "synthetic": true,
+  "tenant_neutral": true,
+  "incident": {
+    "service": "checkout",
+    "environment": "test",
+    "symptom": "Elevated checkout latency follows a synthetic deployment.",
+    "signals": [
+      {
+        "source": "synthetic-observability",
+        "kind": "metric",
+        "summary": "Connection-pool saturation overlaps the latency window."
+      },
+      {
+        "source": "synthetic-change-log",
+        "kind": "deployment",
+        "summary": "A bounded test deployment precedes the first alert."
+      },
+      {
+        "source": "synthetic-runbook",
+        "kind": "runbook",
+        "summary": "Recovery requires exact approval and fresh verification."
+      }
+    ]
+  },
+  "classification": "internal",
+  "contains_production_data": false,
+  "contains_credentials": false,
+  "contains_pii": false
+}

@@ -26,6 +26,10 @@ poisoning handling, bounded compaction, tenant isolation, and derived purge with
 deterministic providers.
 The identity/tenancy slice runs against deterministic fixtures rather than a
 live-network Keycloak realm. Those omissions are later-layer acceptance work.
+Layer 11 adds the unified `aegis_agent_platform.evals` harness, governed 91-case
+dataset/baseline/waiver artifacts, all 22 named fault cuts, deterministic hard
+gates, bounded reports/telemetry, and the current CLI. It makes no live provider,
+connector, production, or model-judge qualification claim.
 
 ## Canonical story: checkout failures after deployment
 
@@ -74,7 +78,7 @@ reconciled, and provider acceptance does not establish verification.
 
 ## 15-minute implementation demo
 
-- **0–2:** Give the elevator pitch and state current Layer 9 limitations.
+- **0–2:** Give the elevator pitch and state current Layer 11 limitations.
 - **2–5:** Walk the package map and pure-domain dependency test.
 - **5–8:** Show the fixed DAG, role policies, typed artifacts, and replay fold.
 - **8–10:** Run the PostgreSQL/Redis race tests; show stale-fence rejection and
@@ -113,6 +117,26 @@ compaction fallback, cross-tenant denial, and deletion. State that the embedding
 profile is deterministic/eight-dimensional and no live provider or production
 blob store is used.
 
+## Run the Layer 11 deterministic evaluation demo
+
+```bash
+python -m aegis_agent_platform.evals list
+python -m aegis_agent_platform.evals check-fixtures
+python -m aegis_agent_platform.evals run --tag adversarial
+python -m aegis_agent_platform.evals run --case fault.after_intent_append
+python -m aegis_agent_platform.evals compare
+make eval-adversarial
+make eval-recovery
+make eval-baseline
+```
+
+Walk through a synthetic checkout regression at a named crash cut. Show the
+hard safety gate, immutable baseline comparison, non-waivable safety behavior,
+scoped expiring non-safety waiver, and fixture digest/quarantine checks. Contrast
+required hermetic CI with the guarded optional-live boundary. State that no live
+adapter is registered, no model judge executes, and no evaluator result becomes
+runtime truth.
+
 ## 30-minute architecture interview demo
 
 - **0–5:** Product, current status, and canonical incident.
@@ -120,7 +144,9 @@ blob store is used.
 - **10–16:** Multi-agent DAG, limits, ledger-only communication, and critique.
 - **16–22:** Durable events, duplicate delivery, intent, fencing, and recovery.
 - **22–26:** Approval, controlled rollback, verification, and threat controls.
-- **26–30:** Evaluation, SLOs, production gaps, alternatives, and questions.
+- **26–30:** Implemented deterministic evaluation gates, deferred SLOs,
+  production gaps,
+  alternatives, and questions.
 
 ## 60-minute end-to-end target demo
 
@@ -131,11 +157,15 @@ blob store is used.
 - **38–46:** Review the exact rollback, approval binding, and durable intent.
 - **46–52:** Execute the controlled action and inject a duplicate delivery.
 - **52–57:** Verify recovery over multiple signals and update the incident.
-- **57–60:** Show event replay, cost/evaluation results, and unresolved gaps.
+- **57–60:** Show event replay, cost, and redacted evaluation/baseline evidence;
+  close with unresolved production gaps.
 
 Investigation, critique, proposal, approval, fake controlled execution,
 reconciliation, postcondition verification, bounded fake sandbox analysis, and
-event-grounded memory/RAG are implemented. Live systems, production credentials/
-cluster sandbox controls, live models, production encrypted blob/key storage,
-operator UI, and incident update remain planned, so the full production narrative
-is not yet claimable.
+event-grounded memory/RAG and Layer 11 deterministic evaluation are implemented.
+Live systems, production credentials/cluster sandbox controls, live model/
+connector qualification, production encrypted blob/key storage, model-judge
+execution, independent penetration testing, large-scale human labeling, operator
+UI, MCP/A2A, observability/SLOs, HA/DR/multi-region, final load/chaos
+certification, and incident update remain planned, so the full production
+narrative is not yet claimable.

@@ -227,3 +227,18 @@ def test_kubernetes_sdk_is_isolated_to_official_adapter() -> None:
     ]
 
     assert not violations
+
+
+def test_evaluation_never_becomes_a_runtime_dependency() -> None:
+    evals = ROOT / "src" / "aegis_agent_platform" / "evals"
+    violations = [
+        str(path.relative_to(ROOT))
+        for path in (ROOT / "src" / "aegis_agent_platform").rglob("*.py")
+        if evals not in path.parents
+        and any(
+            module.startswith("aegis_agent_platform.evals")
+            for module in imported_modules(path)
+        )
+    ]
+
+    assert not violations

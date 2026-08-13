@@ -58,6 +58,7 @@ class ModelGateway:
         router: ModelRouter | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        fault_hook: Callable[[str], None] | None = None,
     ) -> None:
         catalog_providers = {entry.identity.provider for entry in catalog.entries()}
         if set(providers) != catalog_providers:
@@ -72,6 +73,7 @@ class ModelGateway:
         self._router = router or ModelRouter()
         self._clock = clock
         self._sleep = sleep
+        self._fault_hook = fault_hook or _no_fault
 
     async def complete(
         self,
@@ -98,6 +100,7 @@ class ModelGateway:
         token_limit = request.prompt_token_estimate + request.max_output_tokens
         reservation_cost = self._reservation_cost(request, candidates)
         try:
+            self._fault_hook("before_intent_append")
             reservation = await self._repository.reserve(
                 context,
                 request,
@@ -109,6 +112,7 @@ class ModelGateway:
                 price_version=route.selected.pricing.version,
                 at=self._clock(),
             )
+            self._fault_hook("after_intent_append")
         except BudgetDeniedError:
             self._metrics.add("budget_denials", route.selected.identity)
             raise
@@ -131,6 +135,7 @@ class ModelGateway:
                     self._validate_response(request, response)
                     cost = candidate.pricing.cost(response.usage)
                     response = replace(response, cost_usd=cost)
+                    self._fault_hook("before_result_append")
                     await self._repository.succeed(
                         context,
                         request,
@@ -140,8 +145,10 @@ class ModelGateway:
                         candidate.pricing,
                         at=self._clock(),
                     )
+                    self._fault_hook("after_result_append")
                 except ModelGatewayError as error:
-                    await self._repository.record_usage_failure(
+                    self._fault_hook("before_result_append")
+                    await self._repository.fail(
                         context,
                         request,
                         lease,
@@ -151,6 +158,7 @@ class ModelGateway:
                         error,
                         at=self._clock(),
                     )
+                    self._fault_hook("after_result_append")
                     raise
                 self._metrics.usage(candidate.identity, response.usage)
                 self._metrics.add("latency_ms", candidate.identity, response.latency_ms)
@@ -174,6 +182,7 @@ class ModelGateway:
                 "no_provider_attempt_succeeded",
                 retryable=True,
             )
+        self._fault_hook("before_result_append")
         await self._repository.fail(
             context,
             request,
@@ -182,6 +191,7 @@ class ModelGateway:
             last_error,
             at=self._clock(),
         )
+        self._fault_hook("after_result_append")
         raise last_error
 
     def estimate_reservation_cost(
@@ -263,17 +273,45 @@ class ModelGateway:
             )
         provider = self._providers[model.provider]
         last_error: ModelGatewayError | None = None
-        try:
-            for attempt in range(1, self._retry_policy.max_attempts + 1):
-                if not self._controls.admit(
-                    model,
-                    request.prompt_token_estimate + request.max_output_tokens,
-                ):
-                    last_error = ModelGatewayError(
-                        ModelErrorClass.RATE_LIMIT,
-                        "local_rate_limit",
-                        retryable=True,
-                    )
+        for attempt in range(1, self._retry_policy.max_attempts + 1):
+            if not self._controls.admit(
+                model,
+                request.prompt_token_estimate + request.max_output_tokens,
+            ):
+                last_error = ModelGatewayError(
+                    ModelErrorClass.RATE_LIMIT,
+                    "local_rate_limit",
+                    retryable=True,
+                )
+                self._metrics.add("rate_limits", model)
+                break
+            await self._repository.record_attempt(
+                context,
+                request,
+                lease,
+                reservation,
+                provider=model.provider,
+                model=model.model,
+                attempt=attempt,
+                fallback_index=fallback_index,
+                at=self._clock(),
+            )
+            self._metrics.add("attempts", model)
+            try:
+                async with self._controls.semaphore(model):
+                    with self._tracer.attempt(model):
+                        self._fault_hook("before_side_effect")
+                        response = await provider.complete(
+                            request,
+                            model,
+                            cancellation=cancellation,
+                        )
+                        self._fault_hook("after_side_effect")
+            except ModelGatewayError as error:
+                last_error = error
+                if error.error_class is ModelErrorClass.MALFORMED_RESPONSE:
+                    self._metrics.add("malformed_responses", model)
+                if error.error_class is ModelErrorClass.RATE_LIMIT:
                     self._metrics.add("rate_limits", model)
                     break
                 try:
@@ -371,6 +409,10 @@ class ModelGateway:
                         billing_ambiguous=True,
                     ) from error
                 validate_object(part.proposal.arguments, schema)
+
+
+def _no_fault(_cut_point: str) -> None:
+    return None
 
 
 __all__ = ["ModelGateway"]
