@@ -82,6 +82,17 @@
 | Artifact malware/secret scan | Scanner returns redact/quarantine | Store content-addressed redacted/quarantine reference; never treat output as instructions |
 | Sandbox cleanup repeatedly fails | Cleanup projection/attempt ceiling | Reconcile and redrive within bounds, then quarantine and escalate |
 | Sandbox projection loss | Ledger/projection version mismatch | Rebuild forced-RLS sandbox/artifact/claim/cleanup views; never edit authoritative state |
+| Memory candidate contract changes after review | Proposal contract digest mismatch | Reject acceptance; require a new version and review |
+| Scanner fails or identifies injection/poisoning | Durable scan intent without completion or quarantine disposition | Record classified failure or quarantine; never chunk/embed/index the source |
+| Embedding timeout or malformed/dimension/non-finite result | Intent exists and strict response/vector validation fails | Record classified/ambiguous failure, quarantine mismatches, and reconcile before retry |
+| Crash after index intent | Intent lacks terminal observation | Observe tenant/content/version key before retry; never assume absent or completed |
+| Tenant memory quota race | Atomic tenant-period conditional update loses | Record rejection/failure before provider call; never bypass the limit |
+| Cross-tenant/ACL/purpose retrieval | Application authorization or forced RLS/filter returns no candidates | Return bounded empty/denied result; never broaden caller scope |
+| Poisoned retrieved text asks for authority | Scanner mark and untrusted context delimiters | Treat as cited data only; runtime policy/tool/approval boundaries remain unchanged |
+| Retrieval tie, duplicate, stale item, or contradiction | Stable ranking/MMR/freshness/conflict metadata | Deterministically order, exclude stale by policy, preserve conflict, and require critic/abstention |
+| Summary adds unsupported claim or loses citation coverage | Claim/reference validation, drift, depth, and contradiction checks | Append summary rejection and use bounded deterministic extractive fallback |
+| Legal hold or tenant deletion race | Current lifecycle fold and expected version | Hold blocks erasure; otherwise tombstone, purge derived rows/cache, erase referenced blob, and retain minimal ledger evidence |
+| Memory projection/index loss | Checkpoint or ledger/version mismatch | Rebuild from ledger and authorized source blobs; index/cache are never truth |
 
 Global event positions order commits but may contain numbers unused after a
 rolled-back PostgreSQL identity allocation. That is not corruption. A per-

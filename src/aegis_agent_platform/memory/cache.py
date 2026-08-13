@@ -52,6 +52,7 @@ def memory_cache_key(context: TenantContext, query: RetrievalQuery) -> str:
             f"{','.join(sorted(query.roles))}|{query.principal_id}|{service_id}|"
             f"{query.top_k}|{query.candidate_limit}|{query.max_context_bytes}|"
             f"{query.max_context_tokens}|{query.minimum_quality:.12f}|"
+            f"{query.as_of.isoformat() if query.as_of is not None else ''}|"
             f"{query.embedding_model}|{query.embedding_model_version}|"
             f"{query.embedding_dimension}"
         ).encode()

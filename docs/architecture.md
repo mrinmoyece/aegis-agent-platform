@@ -500,9 +500,19 @@ tenant-scoped runbooks and curated incident knowledge with pgvector; it is a
 derived retrieval surface with source citations.
 
 All tiers carry tenant scope, provenance, classification, retention/deletion
-policy, and PII controls. Retrieval balances relevance, recency, source quality,
-and topology. Context compaction must retain citations, uncertainty, conflict,
-approval state, and budgets; summaries never replace event history. These are future memory-layer requirements, not implemented behavior.
+policy, and PII controls. Layer 10 implements these contracts in `domain.memory`
+and the `memory` package. Every scan, embedding, index, retrieval, and summary
+effect follows a durable intent and current work fence. Semantic candidates
+require explicit human or policy acceptance; generated text cannot promote
+itself to trusted knowledge.
+
+PostgreSQL forced RLS is the correctness authority. pgvector, lexical search,
+checkpoints, and tenant-digested reference-only Redis cache entries are derived
+and rebuildable. Metadata/ACL/retention filters run before deterministic hybrid
+ranking and diversity control. Context compaction retains citations, uncertainty,
+conflict, approval state, and budgets; summaries never replace event history.
+Retrieved snippets are delimited untrusted data and cannot grant tools, roles,
+approvals, or policy changes. See `memory-and-rag.md` and ADR 0017.
 
 ## Protocol positioning
 
@@ -570,8 +580,9 @@ verified token is still untrusted as tenant/role authority until
 `IdentityDirectory` resolves it against an authoritative local record.
 
 PostgreSQL owns the implemented event log and durable projections. Migrations
-`0001`–`0006` define identity, governance, ledger, delivery, gateway, evidence,
-and specialist read models with forced row-level security. Redis is used only
+`0001`–`0009` define identity, governance, ledger, delivery, gateway, evidence,
+specialist, remediation, sandbox, and memory read models with forced row-level
+security. Redis is used only
 where data loss cannot violate correctness. OpenTelemetry carries
 correlation metadata with tenant-safe cardinality; sensitive content is
 excluded by default, and audit-event redaction follows the same principle.

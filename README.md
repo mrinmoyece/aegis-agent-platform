@@ -14,7 +14,7 @@ deployments, Kubernetes/runtime changes, and runbooks. This narrow story makes
 durability, evidence provenance, authorization, and safe effects testable end
 to end.
 
-> **Current status: Layer 9 — Hardened ephemeral sandbox execution.** Layers 1–4 add
+> **Current status: Layer 10 — Event-grounded memory and RAG.** Layers 1–4 add
 > tenant-bound work events, a crash-reconcilable PostgreSQL outbox publisher,
 > Redis Streams consumer groups, inbox deduplication, PostgreSQL renewable
 > leases and fencing, fair bounded supervision, quota enforcement, cancellation,
@@ -35,8 +35,12 @@ to end.
 > current approval and policy rechecks, fenced intent-before-backend execution,
 > content-addressed artifacts, default-deny egress, bounded telemetry,
 > forced-RLS projections, deterministic fake scenarios, and a hardened suspended
-> Kubernetes Job adapter. External environments are unconfigured and unverified;
-> memory/RAG, operator UI, MCP/A2A, broad
+> Kubernetes Job adapter. Layer 10 adds immutable three-tier memory contracts,
+> durable scan/embed/index/retrieval/compaction lifecycle, tenant quotas,
+> forced-RLS pgvector/lexical retrieval, exact provenance/citations,
+> contradiction-aware bounded context, retention/legal hold/deletion, deterministic
+> demos/evals, and rebuildable indexes/caches. External environments are
+> unconfigured and unverified; operator UI, MCP/A2A, broad
 > autonomous remediation, production deployment, and tested HA remain planned. See
 > [Limitations and production gaps](docs/limitations.md) for the complete,
 > honest gap list.
@@ -69,11 +73,12 @@ to end.
    deterministic DAG scheduling, critic gates, and safe abstention.
 8. **Controlled remediation:** exact approvals, fenced effects,
    reconciliation, and explicit verification.
-9. **Hardened sandbox execution (current):** bounded analysis/test/patch
-   preparation with isolation, exact approval, artifacts, and cleanup. Memory and
-   retrieval remain separate future work.
-10. **Evaluation and observability:** production quality gates and signals.
-11. **Enterprise operations:** resilience, governance, and deployment evidence.
+9. **Hardened sandbox execution:** bounded analysis/test/patch preparation with
+   isolation, exact approval, artifacts, and cleanup.
+10. **Memory and retrieval (current):** event-grounded three-tier memory,
+    provenance-preserving pgvector RAG, cited compaction, and privacy lifecycle.
+11. **Evaluation and observability:** production quality gates and signals.
+12. **Enterprise operations:** resilience, governance, and deployment evidence.
 
 Across these layers the checkout-failure demo grows from fixture-backed evidence
 to durable investigation, approval-gated rollback, recovery verification, and

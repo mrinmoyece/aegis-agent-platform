@@ -20,6 +20,7 @@ ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyTy
                 Permission.INVESTIGATION_READ,
                 Permission.REMEDIATION_READ,
                 Permission.SANDBOX_READ,
+                Permission.MEMORY_READ,
             }
         ),
         Role.INVESTIGATOR: frozenset(
@@ -35,6 +36,10 @@ ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyTy
                 Permission.INVESTIGATION_READ,
                 Permission.REMEDIATION_READ,
                 Permission.SANDBOX_READ,
+                Permission.MEMORY_READ,
+                Permission.MEMORY_RETRIEVE,
+                Permission.MEMORY_INGEST,
+                Permission.MEMORY_FEEDBACK,
             }
         ),
         Role.APPROVER: frozenset(
@@ -48,6 +53,7 @@ ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyTy
                 Permission.INVESTIGATION_READ,
                 Permission.REMEDIATION_READ,
                 Permission.SANDBOX_READ,
+                Permission.MEMORY_READ,
             }
         ),
         Role.OPERATOR: frozenset(
@@ -69,6 +75,10 @@ ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyTy
                 Permission.ACTION_ROLLBACK,
                 Permission.SANDBOX_EXECUTE,
                 Permission.SANDBOX_READ,
+                Permission.MEMORY_READ,
+                Permission.MEMORY_RETRIEVE,
+                Permission.MEMORY_INGEST,
+                Permission.MEMORY_FEEDBACK,
             }
         ),
         Role.TENANT_ADMIN: frozenset(
@@ -99,6 +109,12 @@ ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyTy
                 Permission.ACTION_ROLLBACK,
                 Permission.SANDBOX_EXECUTE,
                 Permission.SANDBOX_READ,
+                Permission.MEMORY_READ,
+                Permission.MEMORY_RETRIEVE,
+                Permission.MEMORY_INGEST,
+                Permission.MEMORY_ACCEPT,
+                Permission.MEMORY_FEEDBACK,
+                Permission.MEMORY_ADMIN,
             }
         ),
         Role.PLATFORM_ADMIN: frozenset(

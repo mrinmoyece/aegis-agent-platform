@@ -137,8 +137,6 @@ CREATE INDEX memory_chunk_tenant_memory_idx
     ON memory_chunk_projection (tenant_id, memory_id, ordinal, chunk_id);
 CREATE INDEX memory_chunk_search_idx
     ON memory_chunk_projection USING gin (search_document);
--- Retrieval enables iterative HNSW scans per transaction so tenant post-filters
--- preserve recall for small tenants sharing the global ANN graph.
 CREATE INDEX memory_chunk_vector_idx
     ON memory_chunk_projection USING hnsw (embedding vector_cosine_ops);
 

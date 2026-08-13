@@ -92,6 +92,22 @@ canonical validation rejects shell families, interpolation/control operators,
 control characters, and policy-escaping Unicode. No adapter may use
 `shell=True`, `eval`, or a host subprocess fallback.
 
+### Why is pgvector not the memory source of truth?
+
+**Answer outline:** authoritative event/artifact references are distinct from
+derived search acceleration. Replay, lifecycle intent, forced RLS, tenant-first
+filtering, checkpoints/rebuild, and cache invalidation keep correctness outside
+the ANN index. pgvector cannot decide acceptance, retention, legal hold, or
+deletion.
+
+### How does compaction avoid turning a model summary into false memory?
+
+**Answer outline:** record summary intent and exact source references, validate
+every claim citation and coverage, preserve contradiction, bound recursive
+depth, reject unsupported output, use deterministic extractive fallback, and
+keep raw references. Summaries are derived, and retrieved text cannot grant
+tools, roles, policy, or approvals.
+
 ### How can specialists communicate safely?
 
 **Answer outline:** only through typed tenant/incident-scoped artifacts committed

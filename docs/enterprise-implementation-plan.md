@@ -450,6 +450,8 @@ credential/scanner integrations remain deployment exit evidence.
 
 ## EP-12: Three-tier memory and retrieval
 
+**Status: implemented as Layer 10.**
+
 - **Working memory:** bounded coordinator state and compacted context, rebuildable
   from durable state.
 - **Episodic memory:** authoritative incident event history and typed artifacts.
@@ -471,6 +473,13 @@ are classified, minimized, redacted, or excluded before indexing/model use.
 Adversarial tests prove no cross-tenant retrieval, poisoned knowledge cannot
 grant authority, stale content is visible, deletion propagates, and compaction
 does not alter material incident meaning.
+
+Executable evidence includes `domain.memory`, `memory`, migration `0009`,
+deterministic memory/API/demo/eval tests, and environment-gated PostgreSQL
+pgvector/forced-RLS/Redis tests. The implemented provider is deterministic and
+eight-dimensional; live providers, production encrypted blob/key storage,
+external scanning, HA/DR, and load certification remain exit evidence outside
+this repository layer.
 
 ## EP-13–EP-14: Evaluation, observability, SLOs, and cost
 

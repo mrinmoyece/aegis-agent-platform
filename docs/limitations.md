@@ -13,14 +13,16 @@
   and fake specialist execution are implemented. Agents cannot approve actions
   or create dynamic peers.
 - Exact-scope human approval, fenced controlled effects, reconciliation,
-  post-action verification, and bounded Layer 9 analysis sandbox execution are
-  implemented. Arbitrary tools, memory, and production evaluation packages
-  remain planned. Layers 7–9 include deterministic behavioral regression evals.
+  post-action verification, bounded Layer 9 analysis sandbox execution, and
+  Layer 10 event-grounded memory/RAG are implemented. Arbitrary tools and
+  production evaluation packages remain planned. Layers 7–10 include
+  deterministic behavioral regression evals.
 - Runtime spans and bounded metric instruments exist, but no production
   collector dashboards, alert rules, or SLO evidence are claimed.
-- Three-tier memory is a documented design only. No pgvector retrieval,
-  provenance pipeline, PII handling, retention/deletion, or context compaction
-  is implemented.
+- Three-tier memory, pgvector/lexical retrieval, provenance, scanner/redaction
+  hooks, retention/deletion, and context compaction are implemented. Live model
+  verification, encrypted production blob/key storage, external DLP/malware
+  services, backup expiry, and production load evidence are not.
 - No MCP or A2A endpoint exists. Neither protocol currently provides discovery,
   tool access, external task exchange, streaming, cancellation, or status.
 - CI scans and builds a baseline but does not yet emit an SBOM, provenance,
@@ -188,8 +190,36 @@
 - APIs expose only authenticated bounded redacted request/status/artifact/
   cleanup views. There is no attach, interactive exec, log streaming, raw
   artifact download, or production mutation endpoint.
-- Memory/RAG, operator UI, MCP/A2A, live external verification, HA/DR,
-  multi-region, and broad autonomous production mutation remain deferred.
+- Operator UI, MCP/A2A, live external verification, HA/DR, multi-region, and
+  broad autonomous production mutation remain deferred.
+
+## Current Layer 10 implementation (event-grounded memory and RAG)
+
+- Immutable working, episodic, semantic, ACL, retention, provenance, retrieval,
+  summary, and context contracts plus pure lifecycle replay are implemented.
+- Candidate acceptance is contract-digest bound. Scanning/redaction/quarantine,
+  deterministic chunking, embedding/index intent, exact vector/model validation,
+  fencing, reconciliation, supersession/conflict, and rebuild are executable.
+- Forced-RLS PostgreSQL tables provide tenant-first lexical/pgvector search,
+  atomic quota projections, jobs, and checkpoints. Redis caches tenant-digested
+  references only; indexes and caches are derived.
+- Retrieval filters tenant/ACL/purpose/lifecycle/retention/freshness before
+  deterministic hybrid ranking and diversity. Citations, score components,
+  freshness, and contradictions are preserved; no raw similarity API exists.
+- Context construction reserves safety budget, delimits retrieved text as
+  untrusted data, mitigates lost-middle placement, and abstains on contradiction
+  or insufficient context. Compaction rejects unsupported claims and falls back
+  deterministically without replacing source references.
+- Tombstone, supersession, TTL, legal hold, tenant deletion, derived purge,
+  cache invalidation, and referenced-blob erasure are implemented. Immutable
+  identifier/digest ledger evidence remains; comprehensive GDPR or backup
+  erasure is not claimed.
+- APIs, CLI/demo, tests, and evals are deterministic and use no live external
+  model. The implemented embedding profile is fixed at eight dimensions.
+- Operator UI, MCP/A2A, live provider verification, production encrypted blob/
+  key management, advanced DLP/malware services, HA/DR, multi-region/global
+  cache coherence, backup expiry, and final production load evidence remain
+  deferred.
 
 ## Current Layer 2 implementation (identity, tenancy, and governance)
 
@@ -274,8 +304,8 @@
 ## Claims deliberately not made
 
 Aegis does not currently diagnose live checkout failures, protect production data,
-guarantee exactly-once effects or provider billing, provide a secure code
-sandbox, satisfy a
+guarantee exactly-once effects, embedding, indexing, or provider billing, certify
+a production code sandbox, satisfy a
 compliance framework, meet an SLO, or support multi-region recovery. Live local
 PostgreSQL tests prove specific RLS and durability controls, not production
 deployment hardening or operational readiness.

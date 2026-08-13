@@ -2,18 +2,15 @@
 
 ## Current implementation
 
-Layer 1 defined internal Python contracts for events, queues, agents, artifacts,
-providers, integrations, tools, and policy. Layer 2 turns the identity and
-tenancy contracts into a real vertical slice — see `architecture.md`'s
-"Identity, tenancy, and governance boundary" section. Memory storage, MCP
-clients/servers, and A2A endpoints remain unimplemented. PostgreSQL with
-pgvector is present in the local Compose scaffold and now also initializes the
-identity/governance schema; the durable event store and memory retrieval
-integration remain planned.
+Internal Python contracts for events, queues, agents, artifacts, providers,
+integrations, tools, policy, and memory are implemented. Layer 10 supplies
+ledger-grounded memory storage, pgvector/lexical retrieval, context compaction,
+privacy lifecycle, and specialist context integration. MCP clients/servers and
+A2A endpoints remain unimplemented.
 
 ## Three-tier agent memory
 
-Aegis plans three deliberately different memory tiers:
+Aegis implements three deliberately different memory tiers:
 
 | Tier | Purpose | Authority and lifecycle |
 | --- | --- | --- |
@@ -23,15 +20,16 @@ Aegis plans three deliberately different memory tiers:
 
 Every tier is tenant-scoped. Ingestion records provenance, classification,
 source version, and retention policy. PII and secrets are minimized or redacted
-before model use and indexing. Deletion and legal-hold behavior must cover source
-records, embeddings, caches, summaries, and backups with auditable outcomes.
+before model use and indexing. Deletion and legal-hold behavior covers source
+references, embeddings, caches, and summaries with auditable outcomes. Production
+backup expiry remains unverified.
 
 Retrieval combines relevance, recency, source quality, incident topology, and
 policy. Context compaction preserves citations, uncertainty, unresolved
 conflicts, approvals, and budgets; a summary cannot silently become a fact or
-replace episodic history. Layer 6 must prove cross-tenant isolation, stale
-knowledge handling, deletion, provenance, compaction fidelity, and bounded
-context behavior.
+replace episodic history. Layer 10 tests cross-tenant isolation, stale knowledge
+handling, deletion, provenance, compaction fidelity, and bounded context behavior.
+See `memory-and-rag.md` and ADR 0017.
 
 ## Three protocol classes
 

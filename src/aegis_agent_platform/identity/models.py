@@ -105,6 +105,12 @@ class Permission(StrEnum):
     ACTION_ROLLBACK = "action:rollback"
     SANDBOX_EXECUTE = "sandbox:execute"
     SANDBOX_READ = "sandbox:read"
+    MEMORY_READ = "memory:read"
+    MEMORY_RETRIEVE = "memory:retrieve"
+    MEMORY_INGEST = "memory:ingest"
+    MEMORY_ACCEPT = "memory:accept"
+    MEMORY_FEEDBACK = "memory:feedback"
+    MEMORY_ADMIN = "memory:admin"
 
 
 @dataclass(frozen=True, slots=True)

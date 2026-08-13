@@ -100,6 +100,8 @@ omit = [
   "src/aegis_agent_platform/agents/postgres.py",
   "src/aegis_agent_platform/remediation/postgres.py",
   "src/aegis_agent_platform/sandbox/postgres.py",
+  "src/aegis_agent_platform/memory/postgres.py",
+  "src/aegis_agent_platform/memory/redis_cache.py",
   "src/aegis_agent_platform/evidence/transport.py",
   "src/aegis_agent_platform/integrations/kubernetes/official.py",
   "src/aegis_agent_platform/control_plane/__main__.py",
