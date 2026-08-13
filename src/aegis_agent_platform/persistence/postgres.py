@@ -207,13 +207,6 @@ class PostgresPolicyRepository(PolicyRepository):
                     max_tenant_cost_usd_per_period=Decimal(row[5]),
                     max_concurrent_runs=int(row[6]),
                 ),
-                allowed_providers=_string_set(document, "allowed_providers"),
-                allowed_data_residencies=_string_set(
-                    document, "allowed_data_residencies"
-                ),
-                allow_provider_retention=_required_bool(
-                    document, "allow_provider_retention"
-                ),
             )
         except (KeyError, TypeError, ValueError) as error:
             raise PermanentStorageError(
@@ -337,13 +330,6 @@ def _required_int(document: dict[str, object], key: str) -> int:
     value = document[key]
     if not isinstance(value, int) or isinstance(value, bool):
         raise ValueError(f"{key} must be an integer")
-    return value
-
-
-def _required_bool(document: dict[str, object], key: str) -> bool:
-    value = document[key]
-    if not isinstance(value, bool):
-        raise ValueError(f"{key} must be a boolean")
     return value
 
 

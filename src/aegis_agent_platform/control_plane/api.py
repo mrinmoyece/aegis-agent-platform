@@ -6,7 +6,8 @@ import json
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Protocol
+from urllib.parse import parse_qs
 from uuid import UUID, uuid4
 
 from aegis_agent_platform.audit import (
@@ -15,9 +16,11 @@ from aegis_agent_platform.audit import (
     AuditOutcome,
     AuditStore,
     InMemoryAuditStore,
+    redact_details,
 )
 from aegis_agent_platform.config import ConfigurationError, Settings
-from aegis_agent_platform.domain import JsonValue
+from aegis_agent_platform.domain import EventEnvelope, JsonValue
+from aegis_agent_platform.event_store import EventStore
 from aegis_agent_platform.identity import (
     PLATFORM_TENANT_ID,
     AuthenticationError,
@@ -44,6 +47,19 @@ type Receive = Callable[[], Awaitable[AsgiMessage]]
 type Send = Callable[[AsgiMessage], Awaitable[None]]
 
 
+class RunStatusReader(Protocol):
+    """Tenant-scoped read-model query port for the control plane."""
+
+    async def run_status(
+        self,
+        context: TenantContext,
+        *,
+        limit: int = 100,
+    ) -> tuple[Mapping[str, JsonValue], ...]:
+        """Return a bounded run-status view."""
+        ...
+
+
 class ControlPlaneApp:
     """Small injectable API showing the complete security boundary."""
 
@@ -55,12 +71,18 @@ class ControlPlaneApp:
         tenants: TenantRepository | None = None,
         policies: PolicyRepository | None = None,
         audit: AuditStore | None = None,
+        event_store: EventStore | None = None,
+        projections: RunStatusReader | None = None,
+        storage_ready: Callable[[], Awaitable[bool]] | None = None,
     ) -> None:
         self._authentication = authentication
         self._authorization = authorization or AuthorizationService()
         self._tenants = tenants or InMemoryTenantRepository(())
         self._policies = policies or InMemoryPolicyRepository(())
         self._audit = audit or InMemoryAuditStore()
+        self._event_store = event_store
+        self._projections = projections
+        self._storage_ready = storage_ready
 
     async def __call__(
         self,
@@ -92,7 +114,7 @@ class ControlPlaneApp:
             await _respond(send, 200, _principal_body(principal, datetime.now(UTC)))
             return
         segments = [segment for segment in path.split("/") if segment]
-        if len(segments) not in {3, 4} or segments[:2] != ["v1", "tenants"]:
+        if len(segments) < 3 or segments[:2] != ["v1", "tenants"]:
             await _respond(send, 404, {"status": "not-found"})
             return
         try:
@@ -107,8 +129,50 @@ class ControlPlaneApp:
         if len(segments) == 3:
             await self._get_tenant(send, principal, tenant_id)
             return
-        if segments[3] == "policy":
+        if len(segments) == 4 and segments[3] == "policy":
             await self._get_policy(send, principal, tenant_id)
+            return
+        if len(segments) == 4 and segments[3] == "ledger":
+            try:
+                after_position = _cursor_parameter(scope)
+            except ValueError:
+                await _respond(
+                    send,
+                    400,
+                    {"error": {"code": "invalid_cursor"}},
+                )
+                return
+            await self._get_ledger(
+                send,
+                principal,
+                tenant_id,
+                after_position=after_position,
+            )
+            return
+        if len(segments) == 6 and segments[3] == "runs" and segments[5] == "timeline":
+            try:
+                after_version = _cursor_parameter(scope)
+            except ValueError:
+                await _respond(
+                    send,
+                    400,
+                    {"error": {"code": "invalid_cursor"}},
+                )
+                return
+            await self._get_timeline(
+                send,
+                principal,
+                tenant_id,
+                segments[4],
+                after_version=after_version,
+            )
+            return
+        if (
+            len(segments) == 5
+            and segments[3] == "projections"
+            and segments[4] == "run-status"
+        ):
+            await self._get_run_status(send, principal, tenant_id)
             return
         await _respond(send, 404, {"status": "not-found"})
 
@@ -122,10 +186,24 @@ class ControlPlaneApp:
                 {"status": "not-ready", "reason": str(error)},
             )
             return
+        if self._storage_ready is not None and not await self._storage_ready():
+            await _respond(
+                send,
+                503,
+                {"status": "not-ready", "reason": "storage_unavailable"},
+            )
+            return
         await _respond(
             send,
             200,
-            {"status": "ready", "checks": ["configuration"]},
+            {
+                "status": "ready",
+                "checks": (
+                    ["configuration", "storage"]
+                    if self._storage_ready is not None
+                    else ["configuration"]
+                ),
+            },
         )
 
     async def _authenticate(
@@ -227,6 +305,103 @@ class ControlPlaneApp:
             return
         await _respond(send, 200, _policy_body(policy))
 
+    async def _get_ledger(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+        *,
+        after_position: int,
+    ) -> None:
+        if not await self._authorize(
+            send,
+            principal,
+            tenant_id,
+            Permission.RESOURCE_READ,
+            resource=f"tenant/{tenant_id}/ledger",
+        ):
+            return
+        if self._event_store is None:
+            await _respond(send, 503, {"error": {"code": "storage_not_configured"}})
+            return
+        page = await self._event_store.read_all(
+            TenantContext(tenant_id),
+            after_position=after_position,
+            limit=100,
+        )
+        await _respond(
+            send,
+            200,
+            {
+                "events": [_event_body(event) for event in page.events],
+                "next_cursor": page.next_cursor,
+            },
+        )
+
+    async def _get_timeline(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+        run_id: str,
+        *,
+        after_version: int,
+    ) -> None:
+        if not run_id:
+            await _respond(send, 400, {"error": {"code": "invalid_run_id"}})
+            return
+        if not await self._authorize(
+            send,
+            principal,
+            tenant_id,
+            Permission.RESOURCE_READ,
+            resource=f"tenant/{tenant_id}/runs/{run_id}/timeline",
+        ):
+            return
+        if self._event_store is None:
+            await _respond(send, 503, {"error": {"code": "storage_not_configured"}})
+            return
+        events = [
+            event
+            async for event in self._event_store.read_stream(
+                TenantContext(tenant_id),
+                run_id,
+                after_version=after_version,
+                limit=100,
+            )
+        ]
+        await _respond(
+            send,
+            200,
+            {
+                "run_id": run_id,
+                "events": list(map(_event_body, events)),
+                "next_cursor": (
+                    events[-1].aggregate_sequence if len(events) == 100 else None
+                ),
+            },
+        )
+
+    async def _get_run_status(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+    ) -> None:
+        if not await self._authorize(
+            send,
+            principal,
+            tenant_id,
+            Permission.RESOURCE_READ,
+            resource=f"tenant/{tenant_id}/projections/run-status",
+        ):
+            return
+        if self._projections is None:
+            await _respond(send, 503, {"error": {"code": "storage_not_configured"}})
+            return
+        rows = await self._projections.run_status(TenantContext(tenant_id), limit=100)
+        await _respond(send, 200, {"runs": list(rows)})
+
     async def _authorize(
         self,
         send: Send,
@@ -319,6 +494,25 @@ def _single_header(scope: AsgiMessage, name: bytes) -> str | None:
     return values[0]
 
 
+def _cursor_parameter(scope: AsgiMessage) -> int:
+    raw_query = scope.get("query_string", b"")
+    if not isinstance(raw_query, bytes):
+        raise ValueError("query string must be bytes")
+    try:
+        parameters = parse_qs(
+            raw_query.decode("ascii"),
+            keep_blank_values=True,
+        )
+    except UnicodeDecodeError as error:
+        raise ValueError("query string must be ASCII") from error
+    values = parameters.get("cursor")
+    if values is None:
+        return 0
+    if len(values) != 1 or not values[0].isdigit():
+        raise ValueError("cursor must be one non-negative integer")
+    return int(values[0])
+
+
 def _matching_header(item: object, name: bytes) -> str | None:
     if (
         isinstance(item, tuple)
@@ -371,6 +565,27 @@ def _policy_body(policy: TenantPolicy) -> dict[str, Any]:
             ),
             "max_concurrent_runs": quotas.max_concurrent_runs,
         },
+    }
+
+
+def _event_body(event: EventEnvelope) -> dict[str, Any]:
+    """Render a bounded redacted timeline representation."""
+    return {
+        "event_id": str(event.event_id),
+        "aggregate_id": event.aggregate_id,
+        "aggregate_sequence": event.aggregate_sequence,
+        "global_position": event.global_position,
+        "event_type": event.event_type,
+        "schema_version": event.schema_version,
+        "occurred_at": event.occurred_at.isoformat(),
+        "recorded_at": (
+            event.recorded_at.isoformat() if event.recorded_at is not None else None
+        ),
+        "correlation_id": (
+            str(event.correlation_id) if event.correlation_id is not None else None
+        ),
+        "payload": dict(redact_details(event.payload)),
+        "metadata": dict(redact_details(event.metadata)),
     }
 
 

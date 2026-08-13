@@ -5,651 +5,40 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from math import isfinite
+from enum import StrEnum
 from types import MappingProxyType
-from typing import ClassVar, Self, cast
+from typing import Self, cast
 from uuid import UUID
 
 type JsonScalar = str | int | float | bool | None
 type JsonValue = JsonScalar | Sequence[JsonValue] | Mapping[str, JsonValue]
 
 
-class _StringConstant(str):
-    _values: ClassVar[dict[str, Self]]
-
-    def __init_subclass__(cls) -> None:
-        super().__init_subclass__()
-        cls._values = {}
-
-    def __new__(cls, value: str) -> Self:
-        try:
-            return cls._values[value]
-        except KeyError as error:
-            raise ValueError(f"{value!r} is not a valid {cls.__name__}") from error
-
-    @property
-    def value(self) -> str:
-        return str(self)
-
-    @classmethod
-    def _define(cls, value: str) -> Self:
-        member: Self = str.__new__(cls, value)
-        cls._values[value] = member
-        return member
-
-
-class ActorKind(_StringConstant):
+class ActorKind(StrEnum):
     """Stable categories for the principal that caused an event."""
 
-    USER: ClassVar[ActorKind]
-    SERVICE: ClassVar[ActorKind]
-    SYSTEM: ClassVar[ActorKind]
+    USER = "user"
+    SERVICE = "service"
+    SYSTEM = "system"
 
 
-ActorKind.USER = ActorKind._define("user")
-ActorKind.SERVICE = ActorKind._define("service")
-ActorKind.SYSTEM = ActorKind._define("system")
-
-
-class DomainEventType(_StringConstant):
+class DomainEventType(StrEnum):
     """Implemented additive event names; existing meanings are never repurposed."""
 
-    INVESTIGATION_REQUESTED: ClassVar[DomainEventType]
-    RUN_STARTED: ClassVar[DomainEventType]
-    RUN_STATUS_CHANGED: ClassVar[DomainEventType]
-    RUN_COMPLETED: ClassVar[DomainEventType]
-    RUN_FAILED: ClassVar[DomainEventType]
-    ARTIFACT_RECORDED: ClassVar[DomainEventType]
-    APPROVAL_REQUESTED: ClassVar[DomainEventType]
-    APPROVAL_DECIDED: ClassVar[DomainEventType]
-    USAGE_RECORDED: ClassVar[DomainEventType]
-    SIDE_EFFECT_INTENT_RECORDED: ClassVar[DomainEventType]
-    SIDE_EFFECT_COMPLETED: ClassVar[DomainEventType]
-    SIDE_EFFECT_FAILED: ClassVar[DomainEventType]
-    OUTBOX_DEAD_LETTERED: ClassVar[DomainEventType]
-    TENANT_REGISTERED: ClassVar[DomainEventType]
-    WORK_REQUESTED: ClassVar[DomainEventType]
-    WORK_PUBLISHED: ClassVar[DomainEventType]
-    WORK_CLAIMED: ClassVar[DomainEventType]
-    WORK_STARTED: ClassVar[DomainEventType]
-    WORK_HEARTBEAT: ClassVar[DomainEventType]
-    WORK_LEASE_EXPIRED: ClassVar[DomainEventType]
-    WORK_SUCCEEDED: ClassVar[DomainEventType]
-    WORK_FAILED: ClassVar[DomainEventType]
-    WORK_RETRY_SCHEDULED: ClassVar[DomainEventType]
-    WORK_CANCEL_REQUESTED: ClassVar[DomainEventType]
-    WORK_CANCELLED: ClassVar[DomainEventType]
-    WORK_DEAD_LETTERED: ClassVar[DomainEventType]
-    WORK_RECONCILED: ClassVar[DomainEventType]
-    MODEL_CALL_REQUESTED: ClassVar[DomainEventType]
-    MODEL_CALL_STARTED: ClassVar[DomainEventType]
-    MODEL_CALL_ATTEMPTED: ClassVar[DomainEventType]
-    MODEL_CALL_SUCCEEDED: ClassVar[DomainEventType]
-    MODEL_CALL_FAILED: ClassVar[DomainEventType]
-    MODEL_CALL_TIMED_OUT: ClassVar[DomainEventType]
-    MODEL_CALL_RATE_LIMITED: ClassVar[DomainEventType]
-    MODEL_CALL_CANCELLED: ClassVar[DomainEventType]
-    MODEL_USAGE_RECORDED: ClassVar[DomainEventType]
-    MODEL_ROUTE_DECIDED: ClassVar[DomainEventType]
-    MODEL_FALLBACK_SELECTED: ClassVar[DomainEventType]
-    MODEL_BUDGET_RESERVED: ClassVar[DomainEventType]
-    MODEL_BUDGET_RELEASED: ClassVar[DomainEventType]
-    MODEL_BUDGET_CHARGED: ClassVar[DomainEventType]
-    EVIDENCE_QUERY_REQUESTED: ClassVar[DomainEventType]
-    EVIDENCE_QUERY_STARTED: ClassVar[DomainEventType]
-    EVIDENCE_QUERY_SUCCEEDED: ClassVar[DomainEventType]
-    EVIDENCE_QUERY_PARTIALLY_SUCCEEDED: ClassVar[DomainEventType]
-    EVIDENCE_QUERY_FAILED: ClassVar[DomainEventType]
-    EVIDENCE_QUERY_TIMED_OUT: ClassVar[DomainEventType]
-    EVIDENCE_QUERY_RATE_LIMITED: ClassVar[DomainEventType]
-    EVIDENCE_QUERY_CANCELLED: ClassVar[DomainEventType]
-    EVIDENCE_INGESTED: ClassVar[DomainEventType]
-    EVIDENCE_DEDUPLICATED: ClassVar[DomainEventType]
-    EVIDENCE_REDACTED: ClassVar[DomainEventType]
-    EVIDENCE_QUARANTINED: ClassVar[DomainEventType]
-    CORRELATION_STARTED: ClassVar[DomainEventType]
-    CORRELATION_COMPLETED: ClassVar[DomainEventType]
-    CORRELATION_FAILED: ClassVar[DomainEventType]
-    SOURCE_CURSOR_ADVANCED: ClassVar[DomainEventType]
-    INVESTIGATION_PLAN_RECORDED: ClassVar[DomainEventType]
-    INVESTIGATION_CANCEL_REQUESTED: ClassVar[DomainEventType]
-    INVESTIGATION_BUDGET_EXHAUSTED: ClassVar[DomainEventType]
-    SPECIALIST_TASK_DISPATCH_REQUESTED: ClassVar[DomainEventType]
-    SPECIALIST_TASK_STARTED: ClassVar[DomainEventType]
-    SPECIALIST_TASK_SUCCEEDED: ClassVar[DomainEventType]
-    SPECIALIST_TASK_FAILED: ClassVar[DomainEventType]
-    SPECIALIST_TASK_TIMED_OUT: ClassVar[DomainEventType]
-    SPECIALIST_TASK_CANCELLED: ClassVar[DomainEventType]
-    REASONING_ARTIFACT_RECORDED: ClassVar[DomainEventType]
-    COORDINATOR_DECISION_RECORDED: ClassVar[DomainEventType]
-    INVESTIGATION_FINALIZED: ClassVar[DomainEventType]
-    REMEDIATION_PROPOSED: ClassVar[DomainEventType]
-    REMEDIATION_PLAN_REVISED: ClassVar[DomainEventType]
-    REMEDIATION_POLICY_EVALUATED: ClassVar[DomainEventType]
-    REMEDIATION_APPROVAL_REQUESTED: ClassVar[DomainEventType]
-    REMEDIATION_APPROVAL_GRANTED: ClassVar[DomainEventType]
-    REMEDIATION_APPROVAL_DENIED: ClassVar[DomainEventType]
-    REMEDIATION_APPROVAL_EXPIRED: ClassVar[DomainEventType]
-    REMEDIATION_APPROVAL_REVOKED: ClassVar[DomainEventType]
-    ACTION_DISPATCH_CLAIMED: ClassVar[DomainEventType]
-    ACTION_PREFLIGHT_REQUESTED: ClassVar[DomainEventType]
-    ACTION_PREFLIGHT_COMPLETED: ClassVar[DomainEventType]
-    ACTION_PREFLIGHT_FAILED: ClassVar[DomainEventType]
-    ACTION_DRY_RUN_REQUESTED: ClassVar[DomainEventType]
-    ACTION_DRY_RUN_COMPLETED: ClassVar[DomainEventType]
-    ACTION_DRY_RUN_FAILED: ClassVar[DomainEventType]
-    ACTION_EXECUTION_REQUESTED: ClassVar[DomainEventType]
-    ACTION_EXECUTION_STARTED: ClassVar[DomainEventType]
-    ACTION_EXECUTION_SUCCEEDED: ClassVar[DomainEventType]
-    ACTION_EXECUTION_FAILED: ClassVar[DomainEventType]
-    ACTION_EXECUTION_AMBIGUOUS: ClassVar[DomainEventType]
-    ACTION_RECONCILIATION_REQUESTED: ClassVar[DomainEventType]
-    ACTION_RECONCILIATION_COMPLETED: ClassVar[DomainEventType]
-    ACTION_ROLLBACK_REQUESTED: ClassVar[DomainEventType]
-    ACTION_ROLLBACK_COMPLETED: ClassVar[DomainEventType]
-    ACTION_ROLLBACK_FAILED: ClassVar[DomainEventType]
-    ACTION_COMPENSATION_REQUESTED: ClassVar[DomainEventType]
-    ACTION_COMPENSATION_COMPLETED: ClassVar[DomainEventType]
-    ACTION_COMPENSATION_FAILED: ClassVar[DomainEventType]
-    ACTION_CANCELLATION_REQUESTED: ClassVar[DomainEventType]
-    ACTION_CANCELLED: ClassVar[DomainEventType]
-    ACTION_VERIFICATION_REQUESTED: ClassVar[DomainEventType]
-    ACTION_VERIFICATION_COMPLETED: ClassVar[DomainEventType]
-    MEMORY_CANDIDATE_PROPOSED: ClassVar[DomainEventType]
-    MEMORY_CANDIDATE_ACCEPTED: ClassVar[DomainEventType]
-    MEMORY_CANDIDATE_REJECTED: ClassVar[DomainEventType]
-    MEMORY_SOURCE_SNAPSHOT_RECORDED: ClassVar[DomainEventType]
-    MEMORY_SCAN_REQUESTED: ClassVar[DomainEventType]
-    MEMORY_REDACTION_COMPLETED: ClassVar[DomainEventType]
-    MEMORY_CLASSIFICATION_COMPLETED: ClassVar[DomainEventType]
-    MEMORY_SCAN_COMPLETED: ClassVar[DomainEventType]
-    MEMORY_SCAN_FAILED: ClassVar[DomainEventType]
-    MEMORY_QUARANTINED: ClassVar[DomainEventType]
-    MEMORY_CHUNKING_REQUESTED: ClassVar[DomainEventType]
-    MEMORY_CHUNKING_COMPLETED: ClassVar[DomainEventType]
-    MEMORY_EMBEDDING_REQUESTED: ClassVar[DomainEventType]
-    MEMORY_EMBEDDING_COMPLETED: ClassVar[DomainEventType]
-    MEMORY_EMBEDDING_FAILED: ClassVar[DomainEventType]
-    MEMORY_INDEXING_REQUESTED: ClassVar[DomainEventType]
-    MEMORY_INDEXING_COMPLETED: ClassVar[DomainEventType]
-    MEMORY_INDEXING_FAILED: ClassVar[DomainEventType]
-    MEMORY_RETRIEVAL_REQUESTED: ClassVar[DomainEventType]
-    MEMORY_RETRIEVAL_COMPLETED: ClassVar[DomainEventType]
-    MEMORY_RETRIEVAL_FAILED: ClassVar[DomainEventType]
-    MEMORY_CONTEXT_SELECTED: ClassVar[DomainEventType]
-    MEMORY_CONTEXT_COMPACTED: ClassVar[DomainEventType]
-    MEMORY_SUMMARY_REQUESTED: ClassVar[DomainEventType]
-    MEMORY_SUMMARY_COMPLETED: ClassVar[DomainEventType]
-    MEMORY_SUMMARY_REJECTED: ClassVar[DomainEventType]
-    MEMORY_FEEDBACK_RECORDED: ClassVar[DomainEventType]
-    MEMORY_QUALITY_UPDATED: ClassVar[DomainEventType]
-    MEMORY_SUPERSESSION_REQUESTED: ClassVar[DomainEventType]
-    MEMORY_SUPERSEDED: ClassVar[DomainEventType]
-    MEMORY_TOMBSTONE_REQUESTED: ClassVar[DomainEventType]
-    MEMORY_TOMBSTONED: ClassVar[DomainEventType]
-    MEMORY_RETENTION_UPDATE_REQUESTED: ClassVar[DomainEventType]
-    MEMORY_RETENTION_UPDATED: ClassVar[DomainEventType]
-    MEMORY_LEGAL_HOLD_UPDATE_REQUESTED: ClassVar[DomainEventType]
-    MEMORY_LEGAL_HOLD_PLACED: ClassVar[DomainEventType]
-    MEMORY_LEGAL_HOLD_RELEASED: ClassVar[DomainEventType]
-    MEMORY_DELETION_REQUESTED: ClassVar[DomainEventType]
-    MEMORY_DELETION_COMPLETED: ClassVar[DomainEventType]
-    MEMORY_CRYPTO_ERASURE_REQUESTED: ClassVar[DomainEventType]
-    MEMORY_CRYPTO_ERASURE_COMPLETED: ClassVar[DomainEventType]
-    MEMORY_REBUILD_REQUESTED: ClassVar[DomainEventType]
-    MEMORY_REBUILD_COMPLETED: ClassVar[DomainEventType]
-    MEMORY_CHECKPOINT_RECORDED: ClassVar[DomainEventType]
-    SANDBOX_REQUESTED: ClassVar[DomainEventType]
-    SANDBOX_POLICY_EVALUATED: ClassVar[DomainEventType]
-    SANDBOX_APPROVAL_BOUND: ClassVar[DomainEventType]
-    SANDBOX_EGRESS_DECIDED: ClassVar[DomainEventType]
-    SANDBOX_DISPATCH_CLAIMED: ClassVar[DomainEventType]
-    SANDBOX_PROVISIONING_REQUESTED: ClassVar[DomainEventType]
-    SANDBOX_PROVISIONED: ClassVar[DomainEventType]
-    SANDBOX_START_REQUESTED: ClassVar[DomainEventType]
-    SANDBOX_STARTED: ClassVar[DomainEventType]
-    SANDBOX_OUTPUT_CAPTURED: ClassVar[DomainEventType]
-    SANDBOX_ARTIFACT_CAPTURED: ClassVar[DomainEventType]
-    SANDBOX_COMPLETED: ClassVar[DomainEventType]
-    SANDBOX_FAILED: ClassVar[DomainEventType]
-    SANDBOX_TIMED_OUT: ClassVar[DomainEventType]
-    SANDBOX_OOM_KILLED: ClassVar[DomainEventType]
-    SANDBOX_POLICY_VIOLATION: ClassVar[DomainEventType]
-    SANDBOX_CANCELLATION_REQUESTED: ClassVar[DomainEventType]
-    SANDBOX_CANCELLED: ClassVar[DomainEventType]
-    SANDBOX_ATTESTED: ClassVar[DomainEventType]
-    SANDBOX_CLEANUP_REQUESTED: ClassVar[DomainEventType]
-    SANDBOX_CLEANUP_COMPLETED: ClassVar[DomainEventType]
-    SANDBOX_CLEANUP_FAILED: ClassVar[DomainEventType]
-    SANDBOX_QUARANTINED: ClassVar[DomainEventType]
-    SANDBOX_RECONCILIATION_REQUESTED: ClassVar[DomainEventType]
-    SANDBOX_RECONCILED: ClassVar[DomainEventType]
-
-
-DomainEventType.MEMORY_CANDIDATE_PROPOSED = DomainEventType._define(
-    "memory.candidate_proposed.v1"
-)
-DomainEventType.MEMORY_CANDIDATE_ACCEPTED = DomainEventType._define(
-    "memory.candidate_accepted.v1"
-)
-DomainEventType.MEMORY_CANDIDATE_REJECTED = DomainEventType._define(
-    "memory.candidate_rejected.v1"
-)
-DomainEventType.MEMORY_SOURCE_SNAPSHOT_RECORDED = DomainEventType._define(
-    "memory.source_snapshot_recorded.v1"
-)
-DomainEventType.MEMORY_SCAN_REQUESTED = DomainEventType._define(
-    "memory.scan_requested.v1"
-)
-DomainEventType.MEMORY_REDACTION_COMPLETED = DomainEventType._define(
-    "memory.redaction_completed.v1"
-)
-DomainEventType.MEMORY_CLASSIFICATION_COMPLETED = DomainEventType._define(
-    "memory.classification_completed.v1"
-)
-DomainEventType.MEMORY_SCAN_COMPLETED = DomainEventType._define(
-    "memory.scan_completed.v1"
-)
-DomainEventType.MEMORY_SCAN_FAILED = DomainEventType._define("memory.scan_failed.v1")
-DomainEventType.MEMORY_QUARANTINED = DomainEventType._define("memory.quarantined.v1")
-DomainEventType.MEMORY_CHUNKING_REQUESTED = DomainEventType._define(
-    "memory.chunking_requested.v1"
-)
-DomainEventType.MEMORY_CHUNKING_COMPLETED = DomainEventType._define(
-    "memory.chunking_completed.v1"
-)
-DomainEventType.MEMORY_EMBEDDING_REQUESTED = DomainEventType._define(
-    "memory.embedding_requested.v1"
-)
-DomainEventType.MEMORY_EMBEDDING_COMPLETED = DomainEventType._define(
-    "memory.embedding_completed.v1"
-)
-DomainEventType.MEMORY_EMBEDDING_FAILED = DomainEventType._define(
-    "memory.embedding_failed.v1"
-)
-DomainEventType.MEMORY_INDEXING_REQUESTED = DomainEventType._define(
-    "memory.indexing_requested.v1"
-)
-DomainEventType.MEMORY_INDEXING_COMPLETED = DomainEventType._define(
-    "memory.indexing_completed.v1"
-)
-DomainEventType.MEMORY_INDEXING_FAILED = DomainEventType._define(
-    "memory.indexing_failed.v1"
-)
-DomainEventType.MEMORY_RETRIEVAL_REQUESTED = DomainEventType._define(
-    "memory.retrieval_requested.v1"
-)
-DomainEventType.MEMORY_RETRIEVAL_COMPLETED = DomainEventType._define(
-    "memory.retrieval_completed.v1"
-)
-DomainEventType.MEMORY_RETRIEVAL_FAILED = DomainEventType._define(
-    "memory.retrieval_failed.v1"
-)
-DomainEventType.MEMORY_CONTEXT_SELECTED = DomainEventType._define(
-    "memory.context_selected.v1"
-)
-DomainEventType.MEMORY_CONTEXT_COMPACTED = DomainEventType._define(
-    "memory.context_compacted.v1"
-)
-DomainEventType.MEMORY_SUMMARY_REQUESTED = DomainEventType._define(
-    "memory.summary_requested.v1"
-)
-DomainEventType.MEMORY_SUMMARY_COMPLETED = DomainEventType._define(
-    "memory.summary_completed.v1"
-)
-DomainEventType.MEMORY_SUMMARY_REJECTED = DomainEventType._define(
-    "memory.summary_rejected.v1"
-)
-DomainEventType.MEMORY_FEEDBACK_RECORDED = DomainEventType._define(
-    "memory.feedback_recorded.v1"
-)
-DomainEventType.MEMORY_QUALITY_UPDATED = DomainEventType._define(
-    "memory.quality_updated.v1"
-)
-DomainEventType.MEMORY_SUPERSESSION_REQUESTED = DomainEventType._define(
-    "memory.supersession_requested.v1"
-)
-DomainEventType.MEMORY_SUPERSEDED = DomainEventType._define("memory.superseded.v1")
-DomainEventType.MEMORY_TOMBSTONE_REQUESTED = DomainEventType._define(
-    "memory.tombstone_requested.v1"
-)
-DomainEventType.MEMORY_TOMBSTONED = DomainEventType._define("memory.tombstoned.v1")
-DomainEventType.MEMORY_RETENTION_UPDATE_REQUESTED = DomainEventType._define(
-    "memory.retention_update_requested.v1"
-)
-DomainEventType.MEMORY_RETENTION_UPDATED = DomainEventType._define(
-    "memory.retention_updated.v1"
-)
-DomainEventType.MEMORY_LEGAL_HOLD_UPDATE_REQUESTED = DomainEventType._define(
-    "memory.legal_hold_update_requested.v1"
-)
-DomainEventType.MEMORY_LEGAL_HOLD_PLACED = DomainEventType._define(
-    "memory.legal_hold_placed.v1"
-)
-DomainEventType.MEMORY_LEGAL_HOLD_RELEASED = DomainEventType._define(
-    "memory.legal_hold_released.v1"
-)
-DomainEventType.MEMORY_DELETION_REQUESTED = DomainEventType._define(
-    "memory.deletion_requested.v1"
-)
-DomainEventType.MEMORY_DELETION_COMPLETED = DomainEventType._define(
-    "memory.deletion_completed.v1"
-)
-DomainEventType.MEMORY_CRYPTO_ERASURE_REQUESTED = DomainEventType._define(
-    "memory.crypto_erasure_requested.v1"
-)
-DomainEventType.MEMORY_CRYPTO_ERASURE_COMPLETED = DomainEventType._define(
-    "memory.crypto_erasure_completed.v1"
-)
-DomainEventType.MEMORY_REBUILD_REQUESTED = DomainEventType._define(
-    "memory.rebuild_requested.v1"
-)
-DomainEventType.MEMORY_REBUILD_COMPLETED = DomainEventType._define(
-    "memory.rebuild_completed.v1"
-)
-DomainEventType.MEMORY_CHECKPOINT_RECORDED = DomainEventType._define(
-    "memory.checkpoint_recorded.v1"
-)
-
-
-DomainEventType.INVESTIGATION_REQUESTED = DomainEventType._define(
-    "investigation.requested.v1"
-)
-DomainEventType.RUN_STARTED = DomainEventType._define("run.started.v1")
-DomainEventType.RUN_STATUS_CHANGED = DomainEventType._define("run.status_changed.v1")
-DomainEventType.RUN_COMPLETED = DomainEventType._define("run.completed.v1")
-DomainEventType.RUN_FAILED = DomainEventType._define("run.failed.v1")
-DomainEventType.ARTIFACT_RECORDED = DomainEventType._define("artifact.recorded.v1")
-DomainEventType.APPROVAL_REQUESTED = DomainEventType._define("approval.requested.v1")
-DomainEventType.APPROVAL_DECIDED = DomainEventType._define("approval.decided.v1")
-DomainEventType.USAGE_RECORDED = DomainEventType._define("usage.recorded.v1")
-DomainEventType.SIDE_EFFECT_INTENT_RECORDED = DomainEventType._define(
-    "effect.intent_recorded.v1"
-)
-DomainEventType.SIDE_EFFECT_COMPLETED = DomainEventType._define("effect.completed.v1")
-DomainEventType.SIDE_EFFECT_FAILED = DomainEventType._define("effect.failed.v1")
-DomainEventType.OUTBOX_DEAD_LETTERED = DomainEventType._define(
-    "delivery.outbox_dead_lettered.v1"
-)
-DomainEventType.TENANT_REGISTERED = DomainEventType._define("tenant.registered.v1")
-DomainEventType.WORK_REQUESTED = DomainEventType._define("work.requested.v1")
-DomainEventType.WORK_PUBLISHED = DomainEventType._define("work.published.v1")
-DomainEventType.WORK_CLAIMED = DomainEventType._define("work.claimed.v1")
-DomainEventType.WORK_STARTED = DomainEventType._define("work.started.v1")
-DomainEventType.WORK_HEARTBEAT = DomainEventType._define("work.heartbeat.v1")
-DomainEventType.WORK_LEASE_EXPIRED = DomainEventType._define("work.lease_expired.v1")
-DomainEventType.WORK_SUCCEEDED = DomainEventType._define("work.succeeded.v1")
-DomainEventType.WORK_FAILED = DomainEventType._define("work.failed.v1")
-DomainEventType.WORK_RETRY_SCHEDULED = DomainEventType._define(
-    "work.retry_scheduled.v1"
-)
-DomainEventType.WORK_CANCEL_REQUESTED = DomainEventType._define(
-    "work.cancel_requested.v1"
-)
-DomainEventType.WORK_CANCELLED = DomainEventType._define("work.cancelled.v1")
-DomainEventType.WORK_DEAD_LETTERED = DomainEventType._define("work.dead_lettered.v1")
-DomainEventType.WORK_RECONCILED = DomainEventType._define("work.reconciled.v1")
-DomainEventType.MODEL_CALL_REQUESTED = DomainEventType._define(
-    "model.call_requested.v1"
-)
-DomainEventType.MODEL_CALL_STARTED = DomainEventType._define("model.call_started.v1")
-DomainEventType.MODEL_CALL_ATTEMPTED = DomainEventType._define(
-    "model.call_attempted.v1"
-)
-DomainEventType.MODEL_CALL_SUCCEEDED = DomainEventType._define(
-    "model.call_succeeded.v1"
-)
-DomainEventType.MODEL_CALL_FAILED = DomainEventType._define("model.call_failed.v1")
-DomainEventType.MODEL_CALL_TIMED_OUT = DomainEventType._define(
-    "model.call_timed_out.v1"
-)
-DomainEventType.MODEL_CALL_RATE_LIMITED = DomainEventType._define(
-    "model.call_rate_limited.v1"
-)
-DomainEventType.MODEL_CALL_CANCELLED = DomainEventType._define(
-    "model.call_cancelled.v1"
-)
-DomainEventType.MODEL_USAGE_RECORDED = DomainEventType._define(
-    "model.usage_recorded.v1"
-)
-DomainEventType.MODEL_ROUTE_DECIDED = DomainEventType._define("model.route_decided.v1")
-DomainEventType.MODEL_FALLBACK_SELECTED = DomainEventType._define(
-    "model.fallback_selected.v1"
-)
-DomainEventType.MODEL_BUDGET_RESERVED = DomainEventType._define(
-    "model.budget_reserved.v1"
-)
-DomainEventType.MODEL_BUDGET_RELEASED = DomainEventType._define(
-    "model.budget_released.v1"
-)
-DomainEventType.MODEL_BUDGET_CHARGED = DomainEventType._define(
-    "model.budget_charged.v1"
-)
-DomainEventType.EVIDENCE_QUERY_REQUESTED = DomainEventType._define(
-    "evidence.query_requested.v1"
-)
-DomainEventType.EVIDENCE_QUERY_STARTED = DomainEventType._define(
-    "evidence.query_started.v1"
-)
-DomainEventType.EVIDENCE_QUERY_SUCCEEDED = DomainEventType._define(
-    "evidence.query_succeeded.v1"
-)
-DomainEventType.EVIDENCE_QUERY_PARTIALLY_SUCCEEDED = DomainEventType._define(
-    "evidence.query_partially_succeeded.v1"
-)
-DomainEventType.EVIDENCE_QUERY_FAILED = DomainEventType._define(
-    "evidence.query_failed.v1"
-)
-DomainEventType.EVIDENCE_QUERY_TIMED_OUT = DomainEventType._define(
-    "evidence.query_timed_out.v1"
-)
-DomainEventType.EVIDENCE_QUERY_RATE_LIMITED = DomainEventType._define(
-    "evidence.query_rate_limited.v1"
-)
-DomainEventType.EVIDENCE_QUERY_CANCELLED = DomainEventType._define(
-    "evidence.query_cancelled.v1"
-)
-DomainEventType.EVIDENCE_INGESTED = DomainEventType._define("evidence.ingested.v1")
-DomainEventType.EVIDENCE_DEDUPLICATED = DomainEventType._define(
-    "evidence.deduplicated.v1"
-)
-DomainEventType.EVIDENCE_REDACTED = DomainEventType._define("evidence.redacted.v1")
-DomainEventType.EVIDENCE_QUARANTINED = DomainEventType._define(
-    "evidence.quarantined.v1"
-)
-DomainEventType.CORRELATION_STARTED = DomainEventType._define(
-    "evidence.correlation_started.v1"
-)
-DomainEventType.CORRELATION_COMPLETED = DomainEventType._define(
-    "evidence.correlation_completed.v1"
-)
-DomainEventType.CORRELATION_FAILED = DomainEventType._define(
-    "evidence.correlation_failed.v1"
-)
-DomainEventType.SOURCE_CURSOR_ADVANCED = DomainEventType._define(
-    "evidence.source_cursor_advanced.v1"
-)
-DomainEventType.INVESTIGATION_PLAN_RECORDED = DomainEventType._define(
-    "investigation.plan_recorded.v1"
-)
-DomainEventType.INVESTIGATION_CANCEL_REQUESTED = DomainEventType._define(
-    "investigation.cancel_requested.v1"
-)
-DomainEventType.INVESTIGATION_BUDGET_EXHAUSTED = DomainEventType._define(
-    "investigation.budget_exhausted.v1"
-)
-DomainEventType.SPECIALIST_TASK_DISPATCH_REQUESTED = DomainEventType._define(
-    "specialist.dispatch_requested.v1"
-)
-DomainEventType.SPECIALIST_TASK_STARTED = DomainEventType._define(
-    "specialist.started.v1"
-)
-DomainEventType.SPECIALIST_TASK_SUCCEEDED = DomainEventType._define(
-    "specialist.succeeded.v1"
-)
-DomainEventType.SPECIALIST_TASK_FAILED = DomainEventType._define("specialist.failed.v1")
-DomainEventType.SPECIALIST_TASK_TIMED_OUT = DomainEventType._define(
-    "specialist.timed_out.v1"
-)
-DomainEventType.SPECIALIST_TASK_CANCELLED = DomainEventType._define(
-    "specialist.cancelled.v1"
-)
-DomainEventType.REASONING_ARTIFACT_RECORDED = DomainEventType._define(
-    "reasoning.artifact_recorded.v1"
-)
-DomainEventType.COORDINATOR_DECISION_RECORDED = DomainEventType._define(
-    "coordinator.decision_recorded.v1"
-)
-DomainEventType.INVESTIGATION_FINALIZED = DomainEventType._define(
-    "investigation.finalized.v1"
-)
-DomainEventType.REMEDIATION_PROPOSED = DomainEventType._define(
-    "remediation.proposed.v1"
-)
-DomainEventType.REMEDIATION_PLAN_REVISED = DomainEventType._define(
-    "remediation.plan_revised.v1"
-)
-DomainEventType.REMEDIATION_POLICY_EVALUATED = DomainEventType._define(
-    "remediation.policy_evaluated.v1"
-)
-DomainEventType.REMEDIATION_APPROVAL_REQUESTED = DomainEventType._define(
-    "remediation.approval_requested.v1"
-)
-DomainEventType.REMEDIATION_APPROVAL_GRANTED = DomainEventType._define(
-    "remediation.approval_granted.v1"
-)
-DomainEventType.REMEDIATION_APPROVAL_DENIED = DomainEventType._define(
-    "remediation.approval_denied.v1"
-)
-DomainEventType.REMEDIATION_APPROVAL_EXPIRED = DomainEventType._define(
-    "remediation.approval_expired.v1"
-)
-DomainEventType.REMEDIATION_APPROVAL_REVOKED = DomainEventType._define(
-    "remediation.approval_revoked.v1"
-)
-DomainEventType.ACTION_DISPATCH_CLAIMED = DomainEventType._define(
-    "action.dispatch_claimed.v1"
-)
-DomainEventType.ACTION_PREFLIGHT_REQUESTED = DomainEventType._define(
-    "action.preflight_requested.v1"
-)
-DomainEventType.ACTION_PREFLIGHT_COMPLETED = DomainEventType._define(
-    "action.preflight_completed.v1"
-)
-DomainEventType.ACTION_PREFLIGHT_FAILED = DomainEventType._define(
-    "action.preflight_failed.v1"
-)
-DomainEventType.ACTION_DRY_RUN_REQUESTED = DomainEventType._define(
-    "action.dry_run_requested.v1"
-)
-DomainEventType.ACTION_DRY_RUN_COMPLETED = DomainEventType._define(
-    "action.dry_run_completed.v1"
-)
-DomainEventType.ACTION_DRY_RUN_FAILED = DomainEventType._define(
-    "action.dry_run_failed.v1"
-)
-DomainEventType.ACTION_EXECUTION_REQUESTED = DomainEventType._define(
-    "action.execution_requested.v1"
-)
-DomainEventType.ACTION_EXECUTION_STARTED = DomainEventType._define(
-    "action.execution_started.v1"
-)
-DomainEventType.ACTION_EXECUTION_SUCCEEDED = DomainEventType._define(
-    "action.execution_succeeded.v1"
-)
-DomainEventType.ACTION_EXECUTION_FAILED = DomainEventType._define(
-    "action.execution_failed.v1"
-)
-DomainEventType.ACTION_EXECUTION_AMBIGUOUS = DomainEventType._define(
-    "action.execution_ambiguous.v1"
-)
-DomainEventType.ACTION_RECONCILIATION_REQUESTED = DomainEventType._define(
-    "action.reconciliation_requested.v1"
-)
-DomainEventType.ACTION_RECONCILIATION_COMPLETED = DomainEventType._define(
-    "action.reconciliation_completed.v1"
-)
-DomainEventType.ACTION_ROLLBACK_REQUESTED = DomainEventType._define(
-    "action.rollback_requested.v1"
-)
-DomainEventType.ACTION_ROLLBACK_COMPLETED = DomainEventType._define(
-    "action.rollback_completed.v1"
-)
-DomainEventType.ACTION_ROLLBACK_FAILED = DomainEventType._define(
-    "action.rollback_failed.v1"
-)
-DomainEventType.ACTION_COMPENSATION_REQUESTED = DomainEventType._define(
-    "action.compensation_requested.v1"
-)
-DomainEventType.ACTION_COMPENSATION_COMPLETED = DomainEventType._define(
-    "action.compensation_completed.v1"
-)
-DomainEventType.ACTION_COMPENSATION_FAILED = DomainEventType._define(
-    "action.compensation_failed.v1"
-)
-DomainEventType.ACTION_CANCELLATION_REQUESTED = DomainEventType._define(
-    "action.cancellation_requested.v1"
-)
-DomainEventType.ACTION_CANCELLED = DomainEventType._define("action.cancelled.v1")
-DomainEventType.ACTION_VERIFICATION_REQUESTED = DomainEventType._define(
-    "action.verification_requested.v1"
-)
-DomainEventType.ACTION_VERIFICATION_COMPLETED = DomainEventType._define(
-    "action.verification_completed.v1"
-)
-DomainEventType.SANDBOX_REQUESTED = DomainEventType._define("sandbox.requested.v1")
-DomainEventType.SANDBOX_POLICY_EVALUATED = DomainEventType._define(
-    "sandbox.policy_evaluated.v1"
-)
-DomainEventType.SANDBOX_APPROVAL_BOUND = DomainEventType._define(
-    "sandbox.approval_bound.v1"
-)
-DomainEventType.SANDBOX_EGRESS_DECIDED = DomainEventType._define(
-    "sandbox.egress_decided.v1"
-)
-DomainEventType.SANDBOX_DISPATCH_CLAIMED = DomainEventType._define(
-    "sandbox.dispatch_claimed.v1"
-)
-DomainEventType.SANDBOX_PROVISIONING_REQUESTED = DomainEventType._define(
-    "sandbox.provisioning_requested.v1"
-)
-DomainEventType.SANDBOX_PROVISIONED = DomainEventType._define("sandbox.provisioned.v1")
-DomainEventType.SANDBOX_START_REQUESTED = DomainEventType._define(
-    "sandbox.start_requested.v1"
-)
-DomainEventType.SANDBOX_STARTED = DomainEventType._define("sandbox.started.v1")
-DomainEventType.SANDBOX_OUTPUT_CAPTURED = DomainEventType._define(
-    "sandbox.output_captured.v1"
-)
-DomainEventType.SANDBOX_ARTIFACT_CAPTURED = DomainEventType._define(
-    "sandbox.artifact_captured.v1"
-)
-DomainEventType.SANDBOX_COMPLETED = DomainEventType._define("sandbox.completed.v1")
-DomainEventType.SANDBOX_FAILED = DomainEventType._define("sandbox.failed.v1")
-DomainEventType.SANDBOX_TIMED_OUT = DomainEventType._define("sandbox.timed_out.v1")
-DomainEventType.SANDBOX_OOM_KILLED = DomainEventType._define("sandbox.oom_killed.v1")
-DomainEventType.SANDBOX_POLICY_VIOLATION = DomainEventType._define(
-    "sandbox.policy_violation.v1"
-)
-DomainEventType.SANDBOX_CANCELLATION_REQUESTED = DomainEventType._define(
-    "sandbox.cancellation_requested.v1"
-)
-DomainEventType.SANDBOX_CANCELLED = DomainEventType._define("sandbox.cancelled.v1")
-DomainEventType.SANDBOX_ATTESTED = DomainEventType._define("sandbox.attested.v1")
-DomainEventType.SANDBOX_CLEANUP_REQUESTED = DomainEventType._define(
-    "sandbox.cleanup_requested.v1"
-)
-DomainEventType.SANDBOX_CLEANUP_COMPLETED = DomainEventType._define(
-    "sandbox.cleanup_completed.v1"
-)
-DomainEventType.SANDBOX_CLEANUP_FAILED = DomainEventType._define(
-    "sandbox.cleanup_failed.v1"
-)
-DomainEventType.SANDBOX_QUARANTINED = DomainEventType._define("sandbox.quarantined.v1")
-DomainEventType.SANDBOX_RECONCILIATION_REQUESTED = DomainEventType._define(
-    "sandbox.reconciliation_requested.v1"
-)
-DomainEventType.SANDBOX_RECONCILED = DomainEventType._define("sandbox.reconciled.v1")
+    INVESTIGATION_REQUESTED = "investigation.requested.v1"
+    RUN_STARTED = "run.started.v1"
+    RUN_STATUS_CHANGED = "run.status_changed.v1"
+    RUN_COMPLETED = "run.completed.v1"
+    RUN_FAILED = "run.failed.v1"
+    ARTIFACT_RECORDED = "artifact.recorded.v1"
+    APPROVAL_REQUESTED = "approval.requested.v1"
+    APPROVAL_DECIDED = "approval.decided.v1"
+    USAGE_RECORDED = "usage.recorded.v1"
+    SIDE_EFFECT_INTENT_RECORDED = "effect.intent_recorded.v1"
+    SIDE_EFFECT_COMPLETED = "effect.completed.v1"
+    SIDE_EFFECT_FAILED = "effect.failed.v1"
+    OUTBOX_DEAD_LETTERED = "delivery.outbox_dead_lettered.v1"
+    TENANT_REGISTERED = "tenant.registered.v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -702,7 +91,6 @@ class EventEnvelope:
     audit_reference: UUID | None = None
     idempotency_key: str | None = None
     trace_context: TraceContext | None = None
-    previous_aggregate_sequence: int | None = None
     metadata: Mapping[str, JsonValue] = field(
         default_factory=lambda: MappingProxyType({})
     )
@@ -711,24 +99,16 @@ class EventEnvelope:
         """Enforce universal envelope invariants."""
         if self.schema_version < 1:
             raise ValueError("schema_version must be positive")
-        if (
-            not self.tenant_id.strip()
-            or not self.aggregate_id.strip()
-            or not self.event_type.strip()
-        ):
+        if not self.tenant_id or not self.aggregate_id or not self.event_type:
             raise ValueError("tenant, aggregate, and event type are required")
-        require_aware_datetime(self.occurred_at, field_name="occurred_at")
-        if self.recorded_at is not None:
-            require_aware_datetime(self.recorded_at, field_name="recorded_at")
+        if self.occurred_at.tzinfo is None:
+            raise ValueError("occurred_at must be timezone-aware")
+        if self.recorded_at is not None and self.recorded_at.tzinfo is None:
+            raise ValueError("recorded_at must be timezone-aware")
         if self.aggregate_sequence < 0:
             raise ValueError("aggregate_sequence cannot be negative")
         if self.global_position is not None and self.global_position < 1:
             raise ValueError("global_position must be positive")
-        if (
-            self.previous_aggregate_sequence is not None
-            and self.previous_aggregate_sequence < 0
-        ):
-            raise ValueError("previous_aggregate_sequence cannot be negative")
         if self.idempotency_key is not None and not self.idempotency_key:
             raise ValueError("idempotency_key cannot be empty")
         object.__setattr__(self, "payload", freeze_json_mapping(self.payload))
@@ -792,59 +172,31 @@ class EventEnvelope:
             audit_reference=_optional_uuid(audit_reference),
             idempotency_key=_optional_string(value.get("idempotency_key")),
             trace_context=trace_context,
-            previous_aggregate_sequence=(
-                int(str(value["previous_aggregate_sequence"]))
-                if value.get("previous_aggregate_sequence") is not None
-                else None
-            ),
             metadata=cast(Mapping[str, JsonValue], metadata),
         )
 
 
-def require_aware_datetime(value: datetime, *, field_name: str) -> None:
-    """Reject timestamps that cannot participate in deterministic ordering."""
-    if value.tzinfo is None or value.utcoffset() is None:
-        raise ValueError(f"{field_name} must be timezone-aware")
-
-
 def freeze_json_mapping(value: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
     """Snapshot a JSON mapping so committed values cannot be aliased."""
-    frozen: dict[str, JsonValue] = {}
-    for key, item in value.items():
-        if not isinstance(key, str):
-            raise ValueError("JSON object keys must be strings")
-        frozen[key] = freeze_json(item)
-    return MappingProxyType(frozen)
+    return MappingProxyType({key: freeze_json(item) for key, item in value.items()})
 
 
 def freeze_json(value: JsonValue) -> JsonValue:
     """Recursively convert mutable JSON containers to immutable values."""
-    if value is None or isinstance(value, str | bool | int):
-        return value
-    if isinstance(value, float):
-        if not isfinite(value):
-            raise ValueError("JSON numbers must be finite")
-        return value
     if isinstance(value, Mapping):
         return freeze_json_mapping(value)
-    if isinstance(value, Sequence) and not isinstance(
-        value,
-        bytes | bytearray | memoryview | str,
-    ):
+    if isinstance(value, Sequence) and not isinstance(value, str):
         return tuple(freeze_json(item) for item in value)
-    raise ValueError(f"unsupported JSON value type: {type(value).__name__}")
+    return value
 
 
 def thaw_json(value: JsonValue) -> JsonScalar | list[object] | dict[str, object]:
     """Return JSON-serializable containers at an infrastructure boundary."""
     if isinstance(value, Mapping):
         return {key: thaw_json(item) for key, item in value.items()}
-    if isinstance(value, Sequence) and not isinstance(
-        value,
-        bytes | bytearray | memoryview | str,
-    ):
+    if isinstance(value, Sequence) and not isinstance(value, str):
         return [thaw_json(item) for item in value]
-    return cast(JsonScalar, value)
+    return value
 
 
 def _optional_uuid(value: object) -> UUID | None:

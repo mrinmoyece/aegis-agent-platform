@@ -47,20 +47,18 @@ behavior — all against deterministic fixtures, not a live network. The
 Postgres migration `0001_identity_governance.sql` defines tenant-isolated,
 row-level-secured tables and an append-only audit trigger, and
 `tests/test_migrations.py` asserts the schema contains those constraints
-statically; no adapter connects the in-memory ports above to a running
-Postgres yet, and the row-level-security policies have not been exercised
-against a live database.
+statically. Layer 3 now supplies PostgreSQL adapters and exercises the
+row-level-security policies against PostgreSQL 16.
 
 **Acceptance gate:** cross-tenant negative tests cover the API — done; the
-same coverage against a live, row-level-secured Postgres instance remains
-open. Issuer, audience, expiry, and unsupported-algorithm rejection are
+same coverage against a live, row-level-secured Postgres instance is now done
+in Layer 3. Issuer, audience, expiry, and unsupported-algorithm rejection are
 tested — done; live Keycloak key rotation against a running IdP is a
 deployment-time check, not yet exercised by these tests. No operation
 defaults to an implicit tenant — done. Quota and policy decisions have
 deterministic tests covering allow/deny/require-approval and limit-exceeded
 cases — done. Audit events are proven redacted and append-only at the
-application layer — done; proving the database trigger against a live
-Postgres instance remains open.
+application layer and database trigger — done.
 
 ## Layer 3 — Events and durable orchestration
 
@@ -69,8 +67,20 @@ evolution, projections, deterministic incident transitions, evidence references,
 fixture-backed checkout-failure investigation state, and ledger persistence for
 typed specialist artifacts.
 
-**Acceptance gate:** crash-point tests prove replay; committed historical events
-remain readable; every external effect path requires a committed intent.
+**Status:** the persistence slice is implemented: immutable additive envelopes,
+atomic expected-version append, transactional inbox/outbox, global cursor,
+gapless aggregate sequence, deterministic replay, idempotent projections and
+rebuild checkpoints, forced RLS, PostgreSQL identity/governance repositories,
+authorized ledger/timeline reads, storage error classification, and bounded
+telemetry interfaces. Historical Layer 1 fixtures replay. Live PostgreSQL tests
+cover rollback, concurrent races, duplicate delivery, outbox claim/dead-letter,
+RLS, immutable rows, audit redaction, replay, and projection rebuild.
+
+**Acceptance gate:** persistence and replay mechanics are done. No external effect
+path is implemented yet; later layers must consume
+`effect.intent_recorded.v1` before adding any effect. Deterministic incident state
+transitions, fixture-backed investigation behavior, Redis workers, and agent
+execution remain Layer 4+ work rather than being falsely claimed here.
 
 ## Layer 4 — Workers, leases, and providers
 

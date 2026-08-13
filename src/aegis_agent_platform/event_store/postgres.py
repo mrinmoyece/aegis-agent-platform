@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
-from contextlib import asynccontextmanager, suppress
-from datetime import datetime, timedelta
-from decimal import Decimal, InvalidOperation
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
+from contextlib import asynccontextmanager
+from datetime import datetime
+from decimal import Decimal
 from threading import Lock
 from time import monotonic
 from typing import Any, ClassVar, Protocol
@@ -31,7 +31,6 @@ from aegis_agent_platform.event_store import (
     ClaimedOutboxMessage,
     ConcurrencyError,
     EventPage,
-    FencingError,
     OutboxMessage,
     PermanentStorageError,
     ReplayCorruptionError,
@@ -50,83 +49,6 @@ WHERE tenant_id = %s AND aggregate_id = %s
   AND aggregate_sequence > %s
 ORDER BY aggregate_sequence
 LIMIT %s
-"""
-_CLAIM_OUTBOX_ALL_DESTINATIONS = """
-WITH candidates AS (
-    SELECT tenant_id, message_id
-    FROM outbox_messages
-    WHERE tenant_id = %s
-      AND status IN ('pending', 'leased')
-      AND (
-          attempt_count < max_attempts
-          OR (
-              status = 'leased'
-              AND last_error_code IS NULL
-          )
-      )
-      AND available_at <= clock_timestamp()
-      AND (
-          lease_expires_at IS NULL
-          OR lease_expires_at <= clock_timestamp()
-      )
-    ORDER BY available_at, message_id
-    FOR UPDATE SKIP LOCKED
-    LIMIT %s
-)
-UPDATE outbox_messages AS outbox
-SET status = 'leased',
-    lease_owner = %s,
-    lease_expires_at = clock_timestamp()
-        + (%s * interval '1 second'),
-    attempt_count = attempt_count + 1,
-    last_error_code = NULL
-FROM candidates
-WHERE outbox.tenant_id = candidates.tenant_id
-  AND outbox.message_id = candidates.message_id
-RETURNING outbox.message_id, outbox.event_id,
-    outbox.destination, outbox.payload, outbox.headers,
-    outbox.available_at, outbox.max_attempts,
-    outbox.attempt_count, outbox.lease_owner,
-    outbox.lease_expires_at
-"""
-_CLAIM_OUTBOX_ONE_DESTINATION = """
-WITH candidates AS (
-    SELECT tenant_id, message_id
-    FROM outbox_messages
-    WHERE tenant_id = %s
-      AND destination = %s
-      AND status IN ('pending', 'leased')
-      AND (
-          attempt_count < max_attempts
-          OR (
-              status = 'leased'
-              AND last_error_code IS NULL
-          )
-      )
-      AND available_at <= clock_timestamp()
-      AND (
-          lease_expires_at IS NULL
-          OR lease_expires_at <= clock_timestamp()
-      )
-    ORDER BY available_at, message_id
-    FOR UPDATE SKIP LOCKED
-    LIMIT %s
-)
-UPDATE outbox_messages AS outbox
-SET status = 'leased',
-    lease_owner = %s,
-    lease_expires_at = clock_timestamp()
-        + (%s * interval '1 second'),
-    attempt_count = attempt_count + 1,
-    last_error_code = NULL
-FROM candidates
-WHERE outbox.tenant_id = candidates.tenant_id
-  AND outbox.message_id = candidates.message_id
-RETURNING outbox.message_id, outbox.event_id,
-    outbox.destination, outbox.payload, outbox.headers,
-    outbox.available_at, outbox.max_attempts,
-    outbox.attempt_count, outbox.lease_owner,
-    outbox.lease_expires_at
 """
 _CONNECTION_LOCKS: WeakKeyDictionary[psycopg.AsyncConnection[Any], asyncio.Lock] = (
     WeakKeyDictionary()
@@ -193,11 +115,6 @@ class NullStorageTelemetry:
         del lag_events
 
 
-def _observe_telemetry(callback: Callable[..., None], *args: object) -> None:
-    with suppress(Exception):
-        callback(*args)
-
-
 class PostgresEventStore:
     """Tenant-isolated append-only ledger using PostgreSQL transactions."""
 
@@ -211,7 +128,7 @@ class PostgresEventStore:
         self._connection = connection
         self._telemetry = telemetry or NullStorageTelemetry()
         self._monotonic = monotonic_clock
-        self._lock = postgres_connection_lock(connection)
+        self._lock = _connection_lock(connection)
 
     async def append(
         self,
@@ -231,41 +148,10 @@ class PostgresEventStore:
                     expected_version=expected_version,
                     outbox=outbox,
                 )
-            _observe_telemetry(
-                self._telemetry.append_completed,
-                len(events),
-                self._monotonic() - started_at,
+            self._telemetry.append_completed(
+                len(events), self._monotonic() - started_at
             )
             return version
-        except ConcurrencyError:
-            _observe_telemetry(self._telemetry.append_conflicted)
-            raise
-        except psycopg.Error as error:
-            raise classify_storage_error(error) from error
-
-    async def append_atomic(
-        self,
-        context: TenantContext,
-        events: Sequence[EventEnvelope],
-        *,
-        expected_version: int,
-        mutation: Callable[
-            [psycopg.AsyncConnection[Any]],
-            Awaitable[None],
-        ],
-        outbox: Sequence[OutboxMessage] = (),
-    ) -> int:
-        """Append ledger truth and one adapter projection mutation atomically."""
-        _validate_append(context, events, expected_version)
-        try:
-            async with _tenant_transaction(self._connection, self._lock, context):
-                version = await self._append_in_transaction(
-                    events,
-                    expected_version=expected_version,
-                    outbox=outbox,
-                )
-                await mutation(self._connection)
-                return version
         except ConcurrencyError:
             self._telemetry.append_conflicted()
             raise
@@ -281,9 +167,6 @@ class PostgresEventStore:
         events: Sequence[EventEnvelope],
         expected_version: int,
         outbox: Sequence[OutboxMessage] = (),
-        mutation: (
-            Callable[[psycopg.AsyncConnection[Any]], Awaitable[None]] | None
-        ) = None,
     ) -> AppendResult:
         """Deduplicate delivery and append all consequences in one transaction."""
         if not source or not message_id:
@@ -329,93 +212,7 @@ class PostgresEventStore:
                     """,
                     (version, str(context.tenant_id), source, message_id),
                 )
-                if mutation is not None:
-                    await mutation(self._connection)
                 return AppendResult(aggregate_version=version)
-        except ConcurrencyError:
-            _observe_telemetry(self._telemetry.append_conflicted)
-            raise
-        except psycopg.Error as error:
-            raise classify_storage_error(error) from error
-
-    async def append_fenced(
-        self,
-        context: TenantContext,
-        events: Sequence[EventEnvelope],
-        *,
-        expected_version: int,
-        work_id: UUID,
-        lease_token: UUID,
-        lease_generation: int,
-        at: datetime,
-        outbox: Sequence[OutboxMessage] = (),
-        mutation: (
-            Callable[[psycopg.AsyncConnection[Any]], Awaitable[None]] | None
-        ) = None,
-        prepare: (
-            Callable[
-                [psycopg.AsyncConnection[Any], Sequence[EventEnvelope]],
-                Awaitable[Sequence[EventEnvelope]],
-            ]
-            | None
-        ) = None,
-    ) -> int:
-        """Append worker effects only while its PostgreSQL fence is current."""
-        _validate_append(context, events, expected_version)
-        if at.tzinfo is None or lease_generation < 1:
-            raise ValueError("valid fence generation and timestamp are required")
-        if any(event.aggregate_id != str(work_id) for event in events):
-            raise ValueError("fenced events must belong to the leased work")
-        for event in events:
-            if (
-                event.payload.get("lease_token") != str(lease_token)
-                or event.payload.get("lease_generation") != lease_generation
-            ):
-                raise ValueError("fenced event payload does not match lease")
-        try:
-            async with _tenant_transaction(self._connection, self._lock, context):
-                cursor = await self._connection.execute(
-                    """
-                    SELECT generation
-                    FROM work_leases
-                    WHERE tenant_id = %s AND work_id = %s
-                      AND lease_token = %s AND generation = %s
-                      AND released_at IS NULL
-                      AND expires_at > clock_timestamp()
-                    FOR UPDATE
-                    """,
-                    (
-                        str(context.tenant_id),
-                        work_id,
-                        lease_token,
-                        lease_generation,
-                    ),
-                )
-                if await cursor.fetchone() is None:
-                    raise FencingError(lease_generation, 0)
-                if prepare is not None:
-                    events = await prepare(self._connection, events)
-                    _validate_append(context, events, expected_version)
-                    if any(event.aggregate_id != str(work_id) for event in events):
-                        raise ValueError("prepared events must belong to leased work")
-                    if any(
-                        event.payload.get("lease_token") != str(lease_token)
-                        or event.payload.get("lease_generation") != lease_generation
-                        for event in events
-                    ):
-                        raise ValueError(
-                            "prepared events must preserve the worker fence"
-                        )
-                version = await self._append_in_transaction(
-                    events,
-                    expected_version=expected_version,
-                    outbox=outbox,
-                )
-                if mutation is not None:
-                    await mutation(self._connection)
-                return version
-        except FencingError:
-            raise
         except ConcurrencyError:
             self._telemetry.append_conflicted()
             raise
@@ -554,29 +351,6 @@ class PostgresEventStore:
                 )
             yield event
 
-    async def current_version(
-        self,
-        context: TenantContext,
-        aggregate_id: str,
-    ) -> int:
-        """Read the current aggregate head for a subsequent guarded append."""
-        if not aggregate_id:
-            raise ValueError("aggregate_id is required")
-        try:
-            async with _tenant_transaction(self._connection, self._lock, context):
-                cursor = await self._connection.execute(
-                    """
-                    SELECT current_version
-                    FROM event_stream_heads
-                    WHERE tenant_id = %s AND aggregate_id = %s
-                    """,
-                    (str(context.tenant_id), aggregate_id),
-                )
-                row = await cursor.fetchone()
-                return int(row[0]) if row is not None else 0
-        except psycopg.Error as error:
-            raise classify_storage_error(error) from error
-
     async def read_all(
         self,
         context: TenantContext,
@@ -617,44 +391,68 @@ class PostgresEventStore:
         lease_expires_at: datetime,
         now: datetime,
         limit: int,
-        destination: str | None = None,
     ) -> tuple[ClaimedOutboxMessage, ...]:
-        """Lease publishable work using skip-locked race-safe claiming.
-
-        Pass ``destination`` to restrict claiming to a specific outbox queue
-        (e.g. ``"aegis.work"`` for the worker publisher). Omit it to claim
-        from all destinations, which is useful for integration tests and
-        general-purpose outbox consumers.
-        """
-        lease_duration = lease_expires_at - now
-        if (
-            not lease_owner
-            or now.tzinfo is None
-            or not timedelta(seconds=1) <= lease_duration <= timedelta(hours=1)
-        ):
+        """Lease publishable work using skip-locked race-safe claiming."""
+        if not lease_owner or lease_expires_at <= now:
             raise ValueError("valid lease owner and future expiry are required")
         if not 1 <= limit <= 100:
             raise ValueError("outbox claim limit must be between 1 and 100")
         try:
             async with _tenant_transaction(self._connection, self._lock, context):
-                if destination is not None:
-                    statement = _CLAIM_OUTBOX_ONE_DESTINATION
-                    params: tuple[object, ...] = (
+                await self._connection.execute(
+                    """
+                    UPDATE outbox_messages
+                    SET status = 'dead_letter',
+                        last_error_code = COALESCE(
+                            last_error_code,
+                            'lease_expired_after_max_attempts'
+                        ),
+                        lease_owner = NULL,
+                        lease_expires_at = NULL
+                    WHERE tenant_id = %s
+                      AND status = 'leased'
+                      AND lease_expires_at <= %s
+                      AND attempt_count >= max_attempts
+                    """,
+                    (str(context.tenant_id), now),
+                )
+                cursor = await self._connection.execute(
+                    """
+                    WITH candidates AS (
+                        SELECT tenant_id, message_id
+                        FROM outbox_messages
+                        WHERE tenant_id = %s
+                          AND status IN ('pending', 'leased')
+                          AND attempt_count < max_attempts
+                          AND available_at <= %s
+                          AND (lease_expires_at IS NULL OR lease_expires_at <= %s)
+                        ORDER BY available_at, message_id
+                        FOR UPDATE SKIP LOCKED
+                        LIMIT %s
+                    )
+                    UPDATE outbox_messages AS outbox
+                    SET status = 'leased',
+                        lease_owner = %s,
+                        lease_expires_at = %s,
+                        attempt_count = attempt_count + 1
+                    FROM candidates
+                    WHERE outbox.tenant_id = candidates.tenant_id
+                      AND outbox.message_id = candidates.message_id
+                    RETURNING outbox.message_id, outbox.event_id,
+                        outbox.destination, outbox.payload, outbox.headers,
+                        outbox.available_at, outbox.max_attempts,
+                        outbox.attempt_count, outbox.lease_owner,
+                        outbox.lease_expires_at
+                    """,
+                    (
                         str(context.tenant_id),
-                        destination,
+                        now,
+                        now,
                         limit,
                         lease_owner,
-                        lease_duration.total_seconds(),
-                    )
-                else:
-                    statement = _CLAIM_OUTBOX_ALL_DESTINATIONS
-                    params = (
-                        str(context.tenant_id),
-                        limit,
-                        lease_owner,
-                        lease_duration.total_seconds(),
-                    )
-                cursor = await self._connection.execute(statement, params)
+                        lease_expires_at,
+                    ),
+                )
                 rows = await cursor.fetchall()
         except psycopg.Error as error:
             raise classify_storage_error(error) from error
@@ -682,16 +480,9 @@ class PostgresEventStore:
         message_id: UUID,
         *,
         lease_owner: str,
-        lease_expires_at: datetime,
         published_at: datetime,
     ) -> None:
-        """Mark only the exact current lease as delivered.
-
-        ``lease_expires_at`` acts as a fencing token: if the lease has expired
-        and been reclaimed by another attempt (even with the same owner name),
-        the expiry timestamp will differ and the stale completion will be a
-        no-op that raises ``ConcurrencyError`` instead of silently succeeding.
-        """
+        """Mark only the current lease as delivered."""
         await self._update_outbox_state(
             context,
             """
@@ -700,15 +491,8 @@ class PostgresEventStore:
                 lease_owner = NULL, lease_expires_at = NULL
             WHERE tenant_id = %s AND message_id = %s
               AND status = 'leased' AND lease_owner = %s
-              AND lease_expires_at = %s
             """,
-            (
-                published_at,
-                str(context.tenant_id),
-                message_id,
-                lease_owner,
-                lease_expires_at,
-            ),
+            (published_at, str(context.tenant_id), message_id, lease_owner),
         )
 
     async def mark_outbox_failed(
@@ -717,14 +501,10 @@ class PostgresEventStore:
         message_id: UUID,
         *,
         lease_owner: str,
-        lease_expires_at: datetime,
         retry_at: datetime,
         error_code: str,
     ) -> None:
-        """Release the exact current lease or dead-letter exhausted work.
-
-        ``lease_expires_at`` acts as a fencing token — see ``mark_outbox_published``.
-        """
+        """Release a failed lease or place exhausted work in the DLQ projection."""
         if not error_code or len(error_code) > 128:
             raise ValueError("bounded error_code is required")
         await self._update_outbox_state(
@@ -738,7 +518,6 @@ class PostgresEventStore:
                 lease_owner = NULL, lease_expires_at = NULL
             WHERE tenant_id = %s AND message_id = %s
               AND status = 'leased' AND lease_owner = %s
-              AND lease_expires_at = %s
             """,
             (
                 retry_at,
@@ -746,7 +525,6 @@ class PostgresEventStore:
                 str(context.tenant_id),
                 message_id,
                 lease_owner,
-                lease_expires_at,
             ),
         )
 
@@ -773,7 +551,6 @@ class PostgresProjectionRepository:
     _TABLES: ClassVar[Mapping[str, str]] = {
         "run-status": "run_status_projection",
         "artifact-index": "artifact_index_projection",
-        "model-usage": "model_usage_projection",
         "pending-approvals": "pending_approvals_projection",
         "tenant-listing": "tenant_listing_projection",
         "usage-quota": "usage_quota_projection",
@@ -781,7 +558,7 @@ class PostgresProjectionRepository:
 
     def __init__(self, connection: psycopg.AsyncConnection[Any]) -> None:
         self._connection = connection
-        self._lock = postgres_connection_lock(connection)
+        self._lock = _connection_lock(connection)
 
     async def checkpoint(
         self, context: TenantContext, projection_name: str
@@ -859,14 +636,6 @@ class PostgresProjectionRepository:
                     (final_position, str(context.tenant_id), projection_name),
                 )
                 return final_position
-        except InvalidOperation as error:
-            raise PermanentStorageError(
-                "projection event payload is invalid"
-            ) from error
-        except ValueError as error:
-            raise PermanentStorageError(
-                "projection event payload is invalid"
-            ) from error
         except ConcurrencyError:
             raise
         except psycopg.Error as error:
@@ -899,8 +668,6 @@ class PostgresProjectionRepository:
             await self._apply_artifact(event)
         elif projection_name == "pending-approvals":
             await self._apply_approval(event)
-        elif projection_name == "model-usage":
-            await self._apply_model_usage(event)
         elif projection_name == "usage-quota":
             await self._apply_usage(event)
         elif projection_name == "tenant-listing":
@@ -960,7 +727,7 @@ class PostgresProjectionRepository:
             """,
             (
                 event.tenant_id,
-                _required_uuid(event.payload, "artifact_id"),
+                UUID(_required_string(event.payload, "artifact_id")),
                 event.aggregate_id,
                 _required_string(event.payload, "artifact_kind"),
                 _required_string(event.payload, "source_reference"),
@@ -983,7 +750,7 @@ class PostgresProjectionRepository:
                 """,
                 (
                     event.tenant_id,
-                    _required_uuid(event.payload, "approval_id"),
+                    UUID(_required_string(event.payload, "approval_id")),
                     event.aggregate_id,
                     _required_string(event.payload, "proposal_reference"),
                     event.occurred_at,
@@ -991,7 +758,6 @@ class PostgresProjectionRepository:
                     event.global_position,
                 ),
             )
-
         elif event_type is DomainEventType.APPROVAL_DECIDED:
             await self._connection.execute(
                 """
@@ -1000,76 +766,16 @@ class PostgresProjectionRepository:
                 """,
                 (
                     event.tenant_id,
-                    _required_uuid(event.payload, "approval_id"),
+                    UUID(_required_string(event.payload, "approval_id")),
                 ),
             )
-
-    async def _apply_model_usage(self, event: EventEnvelope) -> None:
-        if (
-            _domain_event_type(event.event_type)
-            is not DomainEventType.MODEL_USAGE_RECORDED
-        ):
-            return
-        recorded_at = event.recorded_at or event.occurred_at
-        input_tokens = _required_int(event.payload, "input_tokens")
-        output_tokens = _required_int(event.payload, "output_tokens")
-        cache_read_tokens = _required_int(event.payload, "cache_read_tokens")
-        cache_write_tokens = _required_int(event.payload, "cache_write_tokens")
-        reasoning_tokens = _required_int(event.payload, "reasoning_tokens")
-        await self._connection.execute(
-            """
-            INSERT INTO model_usage_projection (
-                tenant_id, request_id, run_id, provider, model, price_version,
-                input_tokens, output_tokens, cache_read_tokens,
-                cache_write_tokens, reasoning_tokens, total_tokens, cost_usd,
-                recorded_at
-            ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-            )
-            ON CONFLICT (tenant_id, request_id) DO UPDATE
-            SET run_id = EXCLUDED.run_id,
-                provider = EXCLUDED.provider,
-                model = EXCLUDED.model,
-                price_version = EXCLUDED.price_version,
-                input_tokens = EXCLUDED.input_tokens,
-                output_tokens = EXCLUDED.output_tokens,
-                cache_read_tokens = EXCLUDED.cache_read_tokens,
-                cache_write_tokens = EXCLUDED.cache_write_tokens,
-                reasoning_tokens = EXCLUDED.reasoning_tokens,
-                total_tokens = EXCLUDED.total_tokens,
-                cost_usd = EXCLUDED.cost_usd,
-                recorded_at = EXCLUDED.recorded_at
-            """,
-            (
-                event.tenant_id,
-                UUID(_required_string(event.payload, "request_id")),
-                UUID(event.aggregate_id),
-                _required_string(event.payload, "provider"),
-                _required_string(event.payload, "model"),
-                _required_string(event.payload, "price_version"),
-                input_tokens,
-                output_tokens,
-                cache_read_tokens,
-                cache_write_tokens,
-                reasoning_tokens,
-                (
-                    input_tokens
-                    + output_tokens
-                    + cache_read_tokens
-                    + cache_write_tokens
-                    + reasoning_tokens
-                ),
-                Decimal(_required_string(event.payload, "cost_usd")),
-                recorded_at,
-            ),
-        )
 
     async def _apply_usage(self, event: EventEnvelope) -> None:
         if _domain_event_type(event.event_type) is not DomainEventType.USAGE_RECORDED:
             return
         period = _required_string(event.payload, "period")
         tokens = _required_int(event.payload, "tokens")
-        cost = _required_decimal(event.payload, "cost_usd")
+        cost = Decimal(_required_string(event.payload, "cost_usd"))
         await self._connection.execute(
             """
             INSERT INTO usage_quota_projection (
@@ -1152,10 +858,7 @@ class PostgresProjectionRepository:
         )
 
 
-def postgres_connection_lock(
-    connection: psycopg.AsyncConnection[Any],
-) -> asyncio.Lock:
-    """Return the process-local lock shared by adapters using one connection."""
+def _connection_lock(connection: psycopg.AsyncConnection[Any]) -> asyncio.Lock:
     with _CONNECTION_LOCKS_GUARD:
         lock = _CONNECTION_LOCKS.get(connection)
         if lock is None:
@@ -1200,7 +903,7 @@ def _event_insert_values(
         event.correlation_id,
         event.causation_id,
         event.actor.actor_id if event.actor else None,
-        str(event.actor.kind) if event.actor else None,
+        event.actor.kind.value if event.actor else None,
         event.identity_reference,
         event.policy_reference,
         event.audit_reference,
@@ -1241,9 +944,6 @@ def _event_from_row(row: Sequence[Any]) -> EventEnvelope:
         audit_reference=row[17],
         idempotency_key=row[18],
         trace_context=trace_context,
-        previous_aggregate_sequence=(
-            int(row[21]) if len(row) > 21 and row[21] is not None else None
-        ),
     )
 
 
@@ -1316,31 +1016,6 @@ def _required_int(payload: Mapping[str, JsonValue], field: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise PermanentStorageError(f"projection event requires non-negative {field}")
     return value
-
-
-def _required_uuid(payload: Mapping[str, JsonValue], field: str) -> UUID:
-    value = _required_string(payload, field)
-    try:
-        return UUID(value)
-    except ValueError as error:
-        raise PermanentStorageError(
-            f"projection event requires uuid {field}"
-        ) from error
-
-
-def _required_decimal(payload: Mapping[str, JsonValue], field: str) -> Decimal:
-    value = _required_string(payload, field)
-    try:
-        decimal_value = Decimal(value)
-    except InvalidOperation as error:
-        raise PermanentStorageError(
-            f"projection event requires finite non-negative {field}"
-        ) from error
-    if not decimal_value.is_finite() or decimal_value < 0:
-        raise PermanentStorageError(
-            f"projection event requires finite non-negative {field}"
-        )
-    return decimal_value
 
 
 __all__ = [
