@@ -2,7 +2,7 @@
 
 ## Current implementation
 
-Layers 1–5 can demonstrate architecture contracts, local
+Layers 1–6 can demonstrate architecture contracts, local
 infrastructure, tests, and an authenticated control-plane vertical slice for
 identity, tenancy, and governance (JWT verification, deny-by-default
 authorization, policy/quota decisions, redacted audit events), plus live
@@ -11,8 +11,9 @@ delivery, lease races, stale fencing, cancellation/retry/DLQ, forced RLS,
 projection rebuild, and redacted ledger/timeline APIs. Layer 5 also demonstrates
 the mock model diagnostic, route/request/reservation event ordering, strict
 structured output, bounded retry/fallback/circuits, normalized usage, versioned
-cost, and authorized model/usage/health views. The demo cannot yet query
-Dynatrace or GitHub, run
+cost, and authorized model/usage/health views. Layer 6 adds mocked connector
+queries, redaction/dedup/quarantine, citations, and deterministic timelines. The
+demo does not use real Dynatrace, GitHub, or Kubernetes credentials and cannot run
 specialists, approve actions, roll back a deployment, or update a real
 incident, and the identity/tenancy slice runs against deterministic fixtures
 rather than a live-network Keycloak realm. Future steps below are the
@@ -37,15 +38,15 @@ acceptance narrative for later layers.
 
 ## 15-minute foundation demo
 
-- **0–2:** Give the elevator pitch and state current Layer 5 limitations.
+- **0–2:** Give the elevator pitch and state current Layer 6 limitations.
 - **2–5:** Walk the package map and pure-domain dependency test.
 - **5–8:** Show typed evidence adapters and fixed agent artifacts.
-- **8–11:** Run the PostgreSQL/Redis race tests; show stale-fence rejection and
+- **8–10:** Run the PostgreSQL/Redis race tests; show stale-fence rejection and
   explain why Redis, outbox state, and acknowledgements are not truth.
-- **11–13:** Run `python -m aegis_agent_platform.gateway`, inspect model events
+- **10–12:** Run `python -m aegis_agent_platform.gateway`, inspect model events
   and show that the prompt itself was not persisted.
-- **13–15:** Present a signed
-  JWT fixture to `/v1/me` and `/v1/tenants/{tenant_id}/policy`.
+- **12–15:** Submit a fixture-backed evidence query, inspect its citation and
+  timeline, then show explicit partial/conflict metadata and no causal claim.
 
 ## 30-minute architecture interview demo
 

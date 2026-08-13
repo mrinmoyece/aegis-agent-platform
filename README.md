@@ -14,15 +14,18 @@ deployments, Kubernetes/runtime changes, and runbooks. This narrow story makes
 durability, evidence provenance, authorization, and safe effects testable end
 to end.
 
-> **Current status: Layer 5 — Provider-neutral model gateway.** Layers 1–4 add
+> **Current status: Layer 6 — Evidence connectors and correlation.** Layers 1–4 add
 > tenant-bound work events, a crash-reconcilable PostgreSQL outbox publisher,
 > Redis Streams consumer groups, inbox deduplication, PostgreSQL renewable
 > leases and fencing, fair bounded supervision, quota enforcement, cancellation,
 > timeout/retry/DLQ handling, authorized operations, and live PostgreSQL/Redis
 > race tests. Layer 5 adds OpenAI/Anthropic adapters, a deterministic mock,
 > capability/policy routing, versioned pricing, fenced budget accounting,
-> structured validation, and resilience controls. Specialist reasoning, live
-> connectors, memory, remediation, and tested HA remain planned. See
+> structured validation, and resilience controls. Layer 6 adds bounded
+> Dynatrace, GitHub, Kubernetes, and runbook adapters, immutable cited ingestion,
+> durable query intent, and deterministic timeline correlation. External
+> environments are unconfigured and unverified; specialist reasoning, memory,
+> remediation, and tested HA remain planned. See
 > [Limitations and production gaps](docs/limitations.md) for the complete,
 > honest gap list.
 
@@ -46,12 +49,14 @@ to end.
    replay, and PostgreSQL tenant controls.
 4. **Workers and leases:** reliable delivery, fencing, retries,
    cancellation, DLQ, and recovery.
-5. **Model gateway (current):** provider abstraction, routing, budgets, metering,
+5. **Model gateway:** provider abstraction, routing, budgets, metering,
    retry/failover, and structured outputs.
-6. **Tools and sandboxing:** policy-gated effects and isolation.
-7. **Memory and retrieval:** tenant-safe context with provenance.
-8. **Evaluation and observability:** quality gates and production signals.
-9. **Enterprise operations:** resilience, governance, and deployment evidence.
+6. **Evidence connectors (current):** bounded acquisition, immutable provenance,
+   redaction, and deterministic correlation.
+7. **Tools and sandboxing:** policy-gated effects and isolation.
+8. **Memory and retrieval:** tenant-safe context with provenance.
+9. **Evaluation and observability:** quality gates and production signals.
+10. **Enterprise operations:** resilience, governance, and deployment evidence.
 
 Across these layers the checkout-failure demo grows from fixture-backed evidence
 to durable investigation, approval-gated rollback, recovery verification, and
@@ -112,12 +117,16 @@ into a structured learning path.
 [Provider-neutral model gateway](docs/model-gateway.md) covers provider
 translation, routing, fenced budgets, structured output, failover, and billing
 ambiguity.
+[Evidence connectors and deterministic correlation](docs/evidence-connectors.md)
+covers live-adapter configuration, bounded ingestion, provenance/redaction,
+timeline correlation, webhook security requirements, and connector extension.
 
 ## Repository map
 
 ```text
 src/aegis_agent_platform/  Importable platform boundaries
-  integrations/            Typed future integration ports; no connectors yet
+  integrations/            Dynatrace, GitHub, Kubernetes, and runbook adapters
+  evidence/                Ingestion, persistence, operations, and correlation
   agents/                  Fixed roles and typed coordination artifacts
   event_store/             PostgreSQL ledger, inbox/outbox, and projections
   queueing/                Redis Streams and outbox publication
@@ -125,7 +134,7 @@ src/aegis_agent_platform/  Importable platform boundaries
   gateway/                 Catalog, routing, budgets, resilience, and metering
   providers/               Neutral protocol plus OpenAI/Anthropic/mock adapters
   persistence/             PostgreSQL identity/governance repositories
-tests/                     Fast foundation and architecture tests
+tests/                     Deterministic unit, adapter, API, and architecture tests
 docs/                      Architecture, threat model, roadmap, and ADRs
 deploy/                    Local observability configuration
 docker/                    Container initialization assets

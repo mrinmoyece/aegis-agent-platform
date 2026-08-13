@@ -2,9 +2,12 @@
 
 ## Remaining platform gaps
 
-- Dynatrace and GitHub packages are interfaces, not working connectors.
-- Kubernetes, runbook, incident-management, and remediation adapters do not
-  exist.
+- Dynatrace, GitHub, Kubernetes, and runbook adapters exist, but are disabled by
+  default and have only mocked/hermetic verification. No external account,
+  cluster, private endpoint, certificate chain, permission set, quota, or SLA is
+  certified by this repository.
+- GitHub/Dynatrace webhook intake, Kubernetes watches, incident-management, and
+  remediation adapters do not exist.
 - Agent roles, artifacts, and plans are types only. There is no specialist
   scheduler, deterministic aggregation, critic enforcement, approval workflow,
   or specialist execution. Model invocation and model-call budgets are
@@ -51,6 +54,34 @@
   completion is deliberately not an HTTP shortcut; production invocation must
   enter through durable worker execution. The CLI diagnostic uses only the
   scripted mock.
+
+## Current Layer 6 implementation (evidence connectors)
+
+- Frozen provider-neutral contracts cover source/resource identities, UTC
+  timestamps, query windows, structured content, severity/source confidence,
+  provenance/digests, redaction/classification/retention, typed references,
+  cursors, explicit partial metadata, correlation links, timelines, and bundles.
+- Durable query intent precedes network I/O. Query/results/cursors are
+  tenant-scoped and fenced; stale lease generations cannot append or advance a
+  source cursor.
+- Dynatrace supports OAuth2 client credentials and bounded logs, spans, metrics,
+  problems/events, topology/entities, and deployment/change reads. GitHub uses
+  GitHub App installation authentication and repository allowlists for delivery
+  metadata. Kubernetes isolates the official client and performs read-only
+  workload/event/status and policy-gated bounded-log reads. Runbooks are
+  schema/trust validated retrieval-only knowledge.
+- Canonical SHA-256 addressing, tenant deduplication, redaction hooks,
+  quarantine, immutable PostgreSQL projections, citations, retention metadata,
+  and deterministic correlation are implemented and tested without external
+  network access.
+- Correlation orders UTC evidence and links exact IDs plus bounded
+  time/resource/runbook heuristics. It preserves ambiguity and conflict and
+  makes no causal claim.
+- Connector configuration is disabled by default. No live credentials are in CI
+  and no production environment has been verified. GitHub/Dynatrace webhooks,
+  Kubernetes watch continuity, encrypted object storage, deletion/legal hold,
+  external capability probes, dashboards/alerts, and credential rotation drills
+  remain gaps.
 
 ## Current Layer 2 implementation (identity, tenancy, and governance)
 

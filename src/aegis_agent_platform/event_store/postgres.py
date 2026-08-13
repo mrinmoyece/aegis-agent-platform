@@ -268,6 +268,13 @@ class PostgresEventStore:
         mutation: (
             Callable[[psycopg.AsyncConnection[Any]], Awaitable[None]] | None
         ) = None,
+        prepare: (
+            Callable[
+                [psycopg.AsyncConnection[Any], Sequence[EventEnvelope]],
+                Awaitable[Sequence[EventEnvelope]],
+            ]
+            | None
+        ) = None,
     ) -> int:
         """Append worker effects only while its PostgreSQL fence is current."""
         _validate_append(context, events, expected_version)
@@ -302,6 +309,19 @@ class PostgresEventStore:
                 )
                 if await cursor.fetchone() is None:
                     raise FencingError(lease_generation, 0)
+                if prepare is not None:
+                    events = await prepare(self._connection, events)
+                    _validate_append(context, events, expected_version)
+                    if any(event.aggregate_id != str(work_id) for event in events):
+                        raise ValueError("prepared events must belong to leased work")
+                    if any(
+                        event.payload.get("lease_token") != str(lease_token)
+                        or event.payload.get("lease_generation") != lease_generation
+                        for event in events
+                    ):
+                        raise ValueError(
+                            "prepared events must preserve the worker fence"
+                        )
                 version = await self._append_in_transaction(
                     events,
                     expected_version=expected_version,

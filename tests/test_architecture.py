@@ -56,3 +56,21 @@ def test_vendor_sdks_are_isolated_to_provider_adapters() -> None:
     ]
 
     assert not violations
+
+
+def test_kubernetes_sdk_is_isolated_to_official_adapter() -> None:
+    allowed = (
+        ROOT
+        / "src"
+        / "aegis_agent_platform"
+        / "integrations"
+        / "kubernetes"
+        / "official.py"
+    )
+    violations = [
+        str(path.relative_to(ROOT))
+        for path in (ROOT / "src").rglob("*.py")
+        if path != allowed and "kubernetes" in imported_modules(path)
+    ]
+
+    assert not violations

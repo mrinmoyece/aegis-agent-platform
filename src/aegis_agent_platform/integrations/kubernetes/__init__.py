@@ -1,4 +1,4 @@
-"""Kubernetes evidence and controlled-action adapters over the official client."""
+"""Read-only Kubernetes evidence adapter over the official Python client."""
 
 from __future__ import annotations
 
@@ -31,12 +31,7 @@ from aegis_agent_platform.evidence import (
 from aegis_agent_platform.integrations._pagination import decode_cursor, encode_cursor
 from aegis_agent_platform.integrations.config import KubernetesConnectorConfig
 from aegis_agent_platform.integrations.kubernetes.official import (
-    KubernetesArtifactCollector,
-    KubernetesSandboxControls,
-    OfficialKubernetesActionAdapter,
     OfficialKubernetesClient,
-    OfficialKubernetesSandboxBackend,
-    kubernetes_sandbox_workload,
 )
 from aegis_agent_platform.tenancy import TenantContext
 
@@ -261,13 +256,7 @@ def _normalize(
             "kubernetes_identity_missing",
             retryable=False,
         )
-    observed = _time(
-        _first_timestamp(
-            item.get("lastTimestamp"),
-            item.get("eventTime"),
-            timestamp,
-        )
-    )
+    observed = _time(item.get("lastTimestamp", item.get("eventTime", timestamp)))
     status = item.get("status")
     status_mapping = status if isinstance(status, Mapping) else {}
     spec = item.get("spec")
@@ -335,13 +324,6 @@ def _time(value: object) -> datetime:
     )
 
 
-def _first_timestamp(*values: object) -> object:
-    for value in values:
-        if isinstance(value, str) and value:
-            return value
-    return None
-
-
 def _selector(value: str) -> bool:
     return len(value) <= 253 and bool(_DNS.fullmatch(value))
 
@@ -401,13 +383,4 @@ def _container_images(
     return tuple(sorted(images)), tuple(sorted(digests))
 
 
-__all__ = [
-    "KubernetesAdapter",
-    "KubernetesArtifactCollector",
-    "KubernetesClient",
-    "KubernetesSandboxControls",
-    "OfficialKubernetesActionAdapter",
-    "OfficialKubernetesClient",
-    "OfficialKubernetesSandboxBackend",
-    "kubernetes_sandbox_workload",
-]
+__all__ = ["KubernetesAdapter", "KubernetesClient", "OfficialKubernetesClient"]

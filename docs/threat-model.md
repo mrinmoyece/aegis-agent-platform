@@ -6,6 +6,8 @@ This model covers the intended platform and marks control status honestly.
 Layer 1 established contracts; Layers 2–3 added governance and the ledger.
 Layer 4 adds Redis delivery plus PostgreSQL leases/fencing and live race evidence.
 Layer 5 adds the provider-neutral model gateway and fenced cost governance.
+Layer 6 adds read-only evidence adapters, bounded immutable ingestion, and
+deterministic correlation.
 The system assumes model output, tool output, retrieved
 content, and tenant input can be hostile. Cloud, identity provider, model
 provider, and operator accounts can be compromised. Prompt instructions are
@@ -55,13 +57,13 @@ never trusted as controls.
 | Supply-chain compromise | Malicious build dependency/action | Pinned actions, review, scanning, attestations | Partial |
 | Telemetry leakage | Tenant data in labels or traces | Redaction and bounded-cardinality conventions | Runtime/model instruments use fixed names and catalog-bounded provider/model labels without tenant/run/request IDs; backend review remains planned |
 | Evaluation poisoning | Unsafe release passes gates | Dataset provenance, immutable results, approvals | Planned |
-| Evidence spoofing | Forged logs or change metadata drives a false hypothesis | Authenticated adapters, immutable references, timestamps, source labeling | Contracts only |
-| Stale correlation | Unrelated deployment is blamed for checkout failures | Explicit time windows, topology, counter-evidence, confidence | Planned |
-| Runbook injection | Hostile text asks the agent to bypass policy | Treat runbooks as untrusted evidence; runtime authorization | Planned |
+| Evidence spoofing | Forged logs or change metadata drives a false hypothesis | Authenticated adapters, immutable references, timestamps, source labeling | Bounded authenticated adapters, digests, trust status, and quarantine implemented; live source assurance remains deployment evidence |
+| Stale correlation | Unrelated deployment is blamed for checkout failures | Explicit time windows, topology, counter-evidence, confidence | Deterministic clock-skew bounds, rationale, ambiguity, and conflicts implemented; no causal inference |
+| Runbook injection | Hostile text asks the agent to bypass policy | Treat runbooks as untrusted evidence; runtime authorization | Trust/schema validation and retrieval-only knowledge implemented; execution remains absent |
 | Approval confusion | Approval for one incident authorizes another action | Bind approval to tenant, incident, exact action, version, and expiry | Planned |
 | Remediation escalation | Rollback tool mutates unrelated services | Capability-scoped tool input and target allowlist | Planned |
 | False recovery | Incident closes after a transient metric dip | Defined verification window and multi-signal checks | Planned |
-| Connector token theft | Dynatrace or GitHub authority is exfiltrated | Brokered read-only credentials, rotation, redaction | Planned |
+| Connector token theft | Dynatrace or GitHub authority is exfiltrated | Brokered read-only credentials, rotation, redaction | Typed secret references and redaction implemented; vault brokering/rotation drills planned |
 | Agent authority creep | Specialist spawns workers or obtains broader tools | Fixed roles, coordinator-owned DAG, capability allowlist | Contracts only |
 | Opaque collusion | Peer chat creates uncited consensus | Ledger-only typed artifacts and independent critic | Contracts only |
 | Runaway swarm | Recursive agents exhaust tokens or capacity | No specialist spawning, hard budgets, deadlines, global quota | Contracts only |
@@ -188,3 +190,20 @@ is no encrypted durable prompt/response store. A timeout can follow provider
 acceptance and billing; Aegis records ambiguity but cannot automatically
 reconcile a provider invoice. Provider egress, proxy, TLS trust roots, account
 rotation, and live regional failure drills remain deployment evidence.
+
+## Layer 6 residual risk
+
+Connector transports are verified with mocks and deterministic Kubernetes/
+runbook fixtures, not this repository's external accounts or clusters. A
+deployment must verify least-privilege scopes/RBAC, tenant endpoint and
+repository/namespace allowlists, private egress, proxy behavior, certificate
+trust, credential rotation, API versions, quotas, and residency. GitHub and
+Dynatrace webhook ingestion is absent; no endpoint should be exposed as one.
+
+Evidence remains hostile after authenticated retrieval. Redaction hooks reduce
+known credential/PII patterns but are not a complete DLP system. Full raw
+payload storage is absent; only bounded redacted ledger content or an encrypted
+external object reference is valid. Correlation preserves uncertainty and makes
+no diagnosis. Specialist reasoning, approval, remediation, sandboxing,
+memory/RAG, deletion/legal hold, and production alerting remain outside this
+layer.

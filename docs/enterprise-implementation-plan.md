@@ -137,10 +137,11 @@ work delivery: shared Redis Streams, deterministic message identity, PostgreSQL
 inbox/outbox, CAS leases with token/generation fencing, heartbeat/reclaim,
 bounded fair supervision, Layer 2 concurrency quotas, cancellation, timeout,
 retry/DLQ, authorized operations, reconciliation protocol, fixed telemetry, and
-live Redis/PostgreSQL races. EP-07 is implemented in Layer 5 with neutral contracts, OpenAI/Anthropic/mock
-adapters, tenant routing, fenced reservations, versioned charges, resilience,
-strict schemas, and deterministic evaluations. EP-08 connectors and EP-09
-specialist/coordinator execution remain planned.
+live Redis/PostgreSQL races. EP-07 is implemented in Layer 5 with neutral
+contracts, OpenAI/Anthropic/mock adapters, tenant routing, fenced reservations,
+versioned charges, resilience, strict schemas, and deterministic evaluations.
+EP-08 connectors are implemented in Layer 6; EP-09 specialist/coordinator
+execution remains planned.
 
 ### EP-07 implemented evidence
 
@@ -156,6 +157,30 @@ specialist/coordinator execution remain planned.
 - Raw prompts, tool values, images, keys, and SDK exception text are absent from
   events/telemetry. Billing ambiguity and missing encrypted response persistence
   remain explicit residual risks.
+
+### EP-08 implemented evidence
+
+**Layer 6 delivery status (2026-08):** provider-neutral evidence contracts,
+durable connector-query intent, fenced lifecycle/results/cursors, bounded
+Dynatrace/GitHub/Kubernetes/runbook adapters, content-addressed redacted
+ingestion, quarantine, citations, asynchronous tenant APIs, and deterministic
+timeline correlation are implemented. External environments remain unconfigured
+and unverified; EP-09 specialist/coordinator execution remains planned.
+
+- `evidence.query_requested.v1` commits with durable work before network I/O;
+  stale lease token/generation tests reject start, result, and cursor writes.
+- Migration `0005_evidence_connectors.sql` adds forced-RLS query, immutable
+  evidence/quarantine, fenced cursor, and bundle projections with bounded fields.
+- Mocked HTTP/Kubernetes and deterministic runbook tests cover authentication,
+  endpoint/repository/namespace allowlists, safe queries, pagination,
+  truncation, rate limits, cancellation/timeouts, malformed/oversized payloads,
+  diff/log caps, trust, redaction, deduplication, and partial results.
+- Correlation tests cover UTC/clock skew, exact typed identifiers, heuristic
+  rationale/confidence, ambiguity, runbook applicability, conflicts, provenance,
+  and stable digests without fabricating causality.
+- Production exit evidence remains open for account permissions, private egress,
+  certificate validation, proxy pools, secret rotation, data residency, live API
+  versions, Kubernetes RBAC, and operational dashboards/alerts.
 
 ### Storage model
 

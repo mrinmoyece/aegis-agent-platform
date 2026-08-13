@@ -35,10 +35,6 @@ from aegis_agent_platform.evidence.ports import (
     EvidenceQuery,
 )
 from aegis_agent_platform.evidence.telemetry import EvidenceMetrics, EvidenceTracer
-from aegis_agent_platform.observability.context import (
-    PropagationContext,
-    durable_trace_context,
-)
 from aegis_agent_platform.policy import TenantPolicy
 from aegis_agent_platform.tenancy import TenantContext
 
@@ -268,7 +264,6 @@ class EvidenceQueryService:
         policy: TenantPolicy,
         *,
         actor_id: str,
-        propagation: PropagationContext | None = None,
     ) -> EvidenceRequestResult:
         self._validate_request(context, query, policy)
         event = self._event(
@@ -286,7 +281,6 @@ class EvidenceQueryService:
             actor_id=actor_id,
             idempotency_suffix="requested",
         )
-        event = replace(event, trace_context=durable_trace_context(propagation))
         outbox = OutboxMessage(
             message_id=self._uuid_factory(),
             destination="aegis.work.evidence",
@@ -366,20 +360,6 @@ class EvidenceQueryService:
             if error.retry_after_seconds is not None:
                 details["retry_after_seconds"] = error.retry_after_seconds
             await self._terminal(context, query, lease, event_type, details)
-            raise
-        except PermissionError as error:
-            self._metrics.add("errors", query.source)
-            await self._terminal(
-                context,
-                query,
-                lease,
-                DomainEventType.EVIDENCE_QUERY_FAILED,
-                {
-                    "error_class": ConnectorErrorClass.AUTHORIZATION.value,
-                    "code": str(error) or "connector_authorization_failed",
-                    "retryable": False,
-                },
-            )
             raise
         except (TypeError, ValueError) as error:
             await self._terminal(

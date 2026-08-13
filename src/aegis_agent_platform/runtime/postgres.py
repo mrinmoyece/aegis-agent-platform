@@ -14,6 +14,7 @@ from psycopg.types.json import Jsonb
 
 from aegis_agent_platform.domain import (
     DomainEventType,
+    EventEnvelope,
     FailureClass,
     JsonValue,
     WorkLease,
@@ -63,6 +64,9 @@ class PostgresWorkRepository:
         *,
         requested_event_id: UUID,
         outbox_message_id: UUID,
+        additional_events: Sequence[EventEnvelope] = (),
+        additional_mutation: Callable[[psycopg.AsyncConnection[Any]], Awaitable[None]]
+        | None = None,
     ) -> int:
         """Persist request intent and publication outbox before any execution."""
         _validate_request_context(context, request)
@@ -118,14 +122,65 @@ class PostgresWorkRepository:
                     Jsonb(thaw_json(request.payload)),
                 ),
             )
+            if additional_mutation is not None:
+                await additional_mutation(connection)
 
         return await self._events.append_atomic(
             context,
-            (event,),
+            (event, *additional_events),
             expected_version=0,
             mutation=insert_work,
             outbox=(outbox,),
         )
+
+    async def work_id_for_idempotency(
+        self,
+        context: TenantContext,
+        idempotency_key: str,
+        *,
+        work_kind: str,
+        request_payload: Mapping[str, JsonValue],
+    ) -> UUID | None:
+        """Resolve the durable work identity for an accepted tenant request."""
+        if not idempotency_key or not work_kind:
+            raise ValueError("idempotency key and work kind are required")
+        async with _tenant_transaction(self._connection, self._lock, context):
+            cursor = await self._connection.execute(
+                """
+                SELECT work_id
+                FROM work_items
+                WHERE tenant_id = %s AND idempotency_key = %s
+                  AND work_kind = %s AND request_payload = %s
+                """,
+                (
+                    str(context.tenant_id),
+                    idempotency_key,
+                    work_kind,
+                    Jsonb(thaw_json(request_payload)),
+                ),
+            )
+            row = await cursor.fetchone()
+        return None if row is None else UUID(str(row[0]))
+
+    async def idempotency_key_in_use(
+        self,
+        context: TenantContext,
+        idempotency_key: str,
+    ) -> bool:
+        """Check whether a tenant key is already bound to any durable work item."""
+        if not idempotency_key:
+            raise ValueError("idempotency key is required")
+        async with _tenant_transaction(self._connection, self._lock, context):
+            cursor = await self._connection.execute(
+                """
+                SELECT 1
+                FROM work_items
+                WHERE tenant_id = %s AND idempotency_key = %s
+                """,
+                (str(context.tenant_id), idempotency_key),
+            )
+            row = await cursor.fetchone()
+        return row is not None
 
     async def mark_published(
         self,

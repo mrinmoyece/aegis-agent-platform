@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import re
-import time
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
-from enum import StrEnum
-from typing import Protocol, cast
+from typing import cast
 from urllib.parse import urlencode
 
 from aegis_agent_platform.domain import (
@@ -24,7 +20,6 @@ from aegis_agent_platform.domain import (
     SpanReference,
     TraceReference,
     TrustStatus,
-    require_aware_datetime,
 )
 from aegis_agent_platform.evidence import (
     CancellationSignal,
@@ -44,50 +39,6 @@ from aegis_agent_platform.secrets_boundary import SecretProvider
 from aegis_agent_platform.tenancy import TenantContext
 
 _SELECTOR = re.compile(r"^[A-Za-z0-9_.:/-]{1,256}$")
-
-
-class SignalKind(StrEnum):
-    """Dynatrace evidence classes used during incident correlation."""
-
-    LOG = "log"
-    TRACE = "trace"
-    METRIC = "metric"
-    TOPOLOGY = "topology"
-    PROBLEM = "problem"
-    EVENT = "event"
-
-
-@dataclass(frozen=True, slots=True)
-class TelemetryEvidence:
-    """Normalized evidence with an immutable vendor reference."""
-
-    reference: str
-    kind: SignalKind
-    observed_at: datetime
-    summary: str
-    attributes: Mapping[str, JsonValue]
-
-    def __post_init__(self) -> None:
-        """Require a timestamp safe for cross-source incident correlation."""
-        require_aware_datetime(self.observed_at, field_name="observed_at")
-
-
-class DynatraceEvidenceReader(Protocol):
-    """Tenant-scoped read port; implementations arrive in a later layer."""
-
-    async def collect(
-        self,
-        *,
-        tenant: TenantContext,
-        query: str,
-        start: datetime,
-        end: datetime,
-        kinds: Sequence[SignalKind],
-    ) -> Sequence[TelemetryEvidence]:
-        """Collect normalized incident evidence for a bounded time window."""
-        ...
-
-
 _SUPPORTED = (
     EvidenceKind.LOG,
     EvidenceKind.METRIC,
@@ -100,8 +51,6 @@ _SUPPORTED = (
     EvidenceKind.CHANGE,
     EvidenceKind.DEPLOYMENT,
 )
-_GRAIL_POLL_INITIAL_DELAY_SECONDS = 0.25
-_GRAIL_POLL_MAX_DELAY_SECONDS = 5.0
 
 
 class DynatraceAdapter:
@@ -228,21 +177,12 @@ class DynatraceAdapter:
         partial: bool,
     ) -> Mapping[str, JsonValue]:
         base = self._config.environment_url.rstrip("/")
-        deadline = time.monotonic() + self._config.limits.timeout_seconds
-        delay_seconds = _GRAIL_POLL_INITIAL_DELAY_SECONDS
-        for attempt in range(self._config.limits.max_pages):
+        for _ in range(self._config.limits.max_pages):
             if cancellation is not None and cancellation.cancelled:
                 raise ConnectorError(
                     ConnectorErrorClass.CANCELLED,
                     "query_cancelled",
                     retryable=False,
-                    partial=partial,
-                )
-            if time.monotonic() >= deadline:
-                raise ConnectorError(
-                    ConnectorErrorClass.TIMEOUT,
-                    "dynatrace_query_poll_timed_out",
-                    retryable=True,
                     partial=partial,
                 )
             response = await self._transport.send(
@@ -272,25 +212,6 @@ class DynatraceAdapter:
                     retryable=state == "FAILED",
                     partial=partial,
                 )
-            if attempt == self._config.limits.max_pages - 1:
-                break
-            sleep_seconds = _grail_poll_delay(
-                response.headers.get("retry-after"),
-                delay_seconds,
-                deadline,
-            )
-            if sleep_seconds is None:
-                raise ConnectorError(
-                    ConnectorErrorClass.TIMEOUT,
-                    "dynatrace_query_poll_timed_out",
-                    retryable=True,
-                    partial=partial,
-                )
-            await asyncio.sleep(sleep_seconds)
-            delay_seconds = min(
-                delay_seconds * 2,
-                _GRAIL_POLL_MAX_DELAY_SECONDS,
-            )
         raise ConnectorError(
             ConnectorErrorClass.TIMEOUT,
             "dynatrace_query_poll_exhausted",
@@ -454,25 +375,6 @@ def _grail_query(kind: EvidenceKind, selectors: Mapping[str, str]) -> str:
     else:
         clauses.append("fields timestamp, content, loglevel, trace.id, span.id")
     return " | ".join(clauses)
-
-
-def _grail_poll_delay(
-    retry_after: str | None,
-    fallback_seconds: float,
-    deadline: float,
-) -> float | None:
-    try:
-        hinted_seconds = None if retry_after is None else max(0.0, float(retry_after))
-    except ValueError:
-        hinted_seconds = None
-    remaining = max(0.0, deadline - time.monotonic())
-    if remaining <= 0:
-        return None
-    return min(
-        hinted_seconds if hinted_seconds is not None else fallback_seconds,
-        _GRAIL_POLL_MAX_DELAY_SECONDS,
-        remaining,
-    )
 
 
 def _items(
@@ -746,9 +648,4 @@ def _seconds(value: int) -> timedelta:
     return timedelta(seconds=value)
 
 
-__all__ = [
-    "DynatraceAdapter",
-    "DynatraceEvidenceReader",
-    "SignalKind",
-    "TelemetryEvidence",
-]
+__all__ = ["DynatraceAdapter"]

@@ -312,7 +312,6 @@ class PostgresEvidenceRepository(EvidenceRepository):
                 "limit": query.limit,
                 "cursor": query.cursor.value if query.cursor else None,
             },
-            trace_context=event.trace_context,
             timeout_seconds=300,
         )
 

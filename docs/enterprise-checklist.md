@@ -16,15 +16,21 @@ Status meanings:
 | Local Redis transport | Implemented | Redis Streams adapter, Compose, live tests |
 | Local OIDC realm | Scaffolded | Keycloak import |
 | OTLP, Prometheus, and Grafana topology | Scaffolded | `deploy/` |
-| Dynatrace evidence read contract | Scaffolded | `integrations.dynatrace` |
-| GitHub delivery evidence read contract | Scaffolded | `integrations.github` |
-| Live Dynatrace and GitHub connectors | Planned | Future connector layer |
+| Dynatrace evidence adapter | Implemented | OAuth2 bounded adapter plus mocked transport tests; live environment unverified |
+| GitHub delivery evidence adapter | Implemented | GitHub App bounded adapter plus mocked transport tests; live installation unverified |
+| Kubernetes read-only evidence adapter | Implemented | neutral boundary and mocked official-client transport; live cluster unverified |
+| Versioned runbook adapter | Implemented | schema/trust fixtures; remote repository unverified |
+| Durable evidence query intent and fenced cursors | Implemented | `evidence.service`, migration `0005`, stale-generation tests |
+| Immutable redacted evidence ingestion and quarantine | Implemented | canonical digest/dedup/citation tests and forced-RLS projections |
+| Deterministic evidence timeline and conflict preservation | Implemented | `evidence.correlation`; no causal inference or specialist reasoning |
+| Live connector environment certification | Planned | account/cluster scopes, egress, TLS, rotation, residency drills |
+| Verified connector webhooks and replay protection | Planned | no webhook routes in Layer 6 |
 | Checkout-failure incident investigation | Planned | Layers 3–7 |
 | Approval-gated rollback and recovery verification | Planned | Layers 5–7 |
 | Fixed incident specialist roles and typed artifacts | Scaffolded | `agents` |
 | Ledger-only specialist communication | Scaffolded | `ArtifactLedger` port |
 | Coordinator DAG, capability, budget, and timeout enforcement | Planned | Layers 3–4 |
-| Deterministic aggregation and conflict resolution | Planned | Layers 4–7 |
+| Deterministic evidence correlation and conflict representation | Implemented | Layer 6 evidence bundles; coordinator aggregation remains planned |
 | Recursive spawning and peer chat prohibited | Scaffolded | `AGENTS.md`, ADR 0008 |
 | Staff-level curriculum index | Implemented | `docs/curriculum.md` |
 | Canonical 15/30/60-minute demo scripts | Implemented | `docs/demo-script.md` |

@@ -8,8 +8,10 @@ an enterprise incident-response agent. Layer 1 established package and trust
 boundaries. Layers 2–3 add identity/governance and the PostgreSQL ledger.
 Layer 4 adds Redis Streams delivery, PostgreSQL-authoritative leases/fencing,
 bounded fair workers, cancellation, retry/DLQ, and reconciliation protocols.
-Layer 5 adds the provider-neutral model gateway and cost governance. Connectors,
-investigation execution, tools, and remediation arrive later.
+Layer 5 adds the provider-neutral model gateway and cost governance. Layer 6
+adds durable read-only evidence acquisition, immutable ingestion, and
+deterministic correlation. Specialist execution, tools, and remediation arrive
+later.
 
 ```mermaid
 flowchart LR
@@ -33,8 +35,8 @@ flowchart LR
 
 Dashed paths are diagnostic, never authoritative. PostgreSQL is truth; Redis is
 only at-least-once transport. Queue/lease and model gateway execution are
-implemented. Specialist, connector, tool, and remediation execution remain
-planned.
+implemented. Connector acquisition and deterministic correlation are also
+implemented; specialist, tool, and remediation execution remain planned.
 
 ## Model gateway data flow
 
@@ -45,6 +47,37 @@ current worker fence before an OpenAI/Anthropic network call. Result, normalized
 usage, versioned charge, and released capacity commit under the same fence
 before a response is surfaced. PostgreSQL migration `0004_model_gateway.sql`
 adds RLS-protected reservation and usage projections; events remain truth.
+
+## Evidence acquisition and correlation data flow
+
+The Layer 6 flow is documented in
+[Evidence connectors and deterministic correlation](evidence-connectors.md).
+`evidence.query_requested.v1` and durable work/outbox state commit before any
+external read. The worker validates its lease token and generation before
+querying and again before recording results or advancing a cursor. Connector
+responses pass through bounded canonicalization, redaction, SHA-256 addressing,
+tenant deduplication, classification, and quarantine.
+
+```mermaid
+flowchart LR
+  API[Authorized evidence API] --> L[(Ledger + outbox)]
+  L --> W[Fenced evidence worker]
+  W --> C[Neutral connector port]
+  C --> DT[Dynatrace]
+  C --> GH[GitHub]
+  C --> K[Kubernetes]
+  C --> R[Runbook source]
+  W --> I[Canonicalize / redact / digest]
+  I --> S[(Immutable evidence store)]
+  S --> E[Deterministic correlation]
+  E --> B[EvidenceBundle + timeline artifact]
+```
+
+Only bounded redacted metadata enters events. Complete logs, traces, diffs, and
+runbooks do not. Retained raw payloads require encrypted external
+`aegis-object://` references. Correlation uses typed IDs and bounded
+clock-skew/resource heuristics; ambiguity and source conflicts remain visible
+and temporal proximity is never labeled causality.
 
 ## Distributed delivery and worker data flow
 
@@ -95,9 +128,11 @@ depend inward on domain types. PostgreSQL adapters live under `event_store` and
 `persistence`; model SDKs are isolated to `providers/openai.py` and
 `providers/anthropic.py`; database/vendor types never enter domain contracts.
 
-`integrations.dynatrace` and `integrations.github` expose provider-neutral,
-tenant-scoped evidence contracts. Future adapters will translate vendor APIs at
-those edges. Investigation logic cannot import vendor SDK objects or credentials.
+`integrations.dynatrace`, `integrations.github`, `integrations.kubernetes`, and
+`integrations.runbooks` translate external APIs or documents into
+provider-neutral tenant-scoped evidence. The official Kubernetes client is
+isolated in `integrations.kubernetes.official`. Investigation logic cannot
+import vendor SDK objects or credentials.
 
 ## Identity, tenancy, and governance boundary
 

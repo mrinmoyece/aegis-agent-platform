@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import base64
 import json
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
-from enum import StrEnum
-from typing import Protocol
 from urllib.parse import quote, urlencode
 
 from cryptography.hazmat.primitives import hashes, serialization
@@ -24,7 +21,6 @@ from aegis_agent_platform.domain import (
     PartialResult,
     ServiceIdentity,
     TrustStatus,
-    require_aware_datetime,
 )
 from aegis_agent_platform.evidence import (
     CancellationSignal,
@@ -46,46 +42,6 @@ from aegis_agent_platform.integrations._pagination import decode_cursor, encode_
 from aegis_agent_platform.integrations.config import GitHubConnectorConfig
 from aegis_agent_platform.secrets_boundary import SecretProvider
 from aegis_agent_platform.tenancy import TenantContext
-
-
-class ChangeKind(StrEnum):
-    """Source and delivery changes relevant to incident correlation."""
-
-    COMMIT = "commit"
-    PULL_REQUEST = "pull_request"
-    DEPLOYMENT = "deployment"
-
-
-@dataclass(frozen=True, slots=True)
-class ChangeEvidence:
-    """Normalized GitHub evidence with a stable source reference."""
-
-    reference: str
-    repository: str
-    revision: str
-    kind: ChangeKind
-    observed_at: datetime
-    summary: str
-
-    def __post_init__(self) -> None:
-        """Require a timestamp safe for cross-source incident correlation."""
-        require_aware_datetime(self.observed_at, field_name="observed_at")
-
-
-class GitHubEvidenceReader(Protocol):
-    """Tenant-scoped read port; implementations arrive in a later layer."""
-
-    async def changes_between(
-        self,
-        *,
-        tenant: TenantContext,
-        repository: str,
-        start: datetime,
-        end: datetime,
-    ) -> Sequence[ChangeEvidence]:
-        """Read normalized delivery changes within an incident window."""
-        ...
-
 
 _SUPPORTED = (
     EvidenceKind.COMMIT,
@@ -735,4 +691,4 @@ def _window(seconds: int) -> timedelta:
     return timedelta(seconds=seconds)
 
 
-__all__ = ["ChangeEvidence", "ChangeKind", "GitHubAdapter", "GitHubEvidenceReader"]
+__all__ = ["GitHubAdapter"]

@@ -66,6 +66,22 @@ class DomainEventType(StrEnum):
     MODEL_BUDGET_RESERVED = "model.budget_reserved.v1"
     MODEL_BUDGET_RELEASED = "model.budget_released.v1"
     MODEL_BUDGET_CHARGED = "model.budget_charged.v1"
+    EVIDENCE_QUERY_REQUESTED = "evidence.query_requested.v1"
+    EVIDENCE_QUERY_STARTED = "evidence.query_started.v1"
+    EVIDENCE_QUERY_SUCCEEDED = "evidence.query_succeeded.v1"
+    EVIDENCE_QUERY_PARTIALLY_SUCCEEDED = "evidence.query_partially_succeeded.v1"
+    EVIDENCE_QUERY_FAILED = "evidence.query_failed.v1"
+    EVIDENCE_QUERY_TIMED_OUT = "evidence.query_timed_out.v1"
+    EVIDENCE_QUERY_RATE_LIMITED = "evidence.query_rate_limited.v1"
+    EVIDENCE_QUERY_CANCELLED = "evidence.query_cancelled.v1"
+    EVIDENCE_INGESTED = "evidence.ingested.v1"
+    EVIDENCE_DEDUPLICATED = "evidence.deduplicated.v1"
+    EVIDENCE_REDACTED = "evidence.redacted.v1"
+    EVIDENCE_QUARANTINED = "evidence.quarantined.v1"
+    CORRELATION_STARTED = "evidence.correlation_started.v1"
+    CORRELATION_COMPLETED = "evidence.correlation_completed.v1"
+    CORRELATION_FAILED = "evidence.correlation_failed.v1"
+    SOURCE_CURSOR_ADVANCED = "evidence.source_cursor_advanced.v1"
 
 
 @dataclass(frozen=True, slots=True)

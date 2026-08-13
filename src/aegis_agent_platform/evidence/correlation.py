@@ -40,8 +40,6 @@ class CorrelationEngine:
             raise TypeError("invalid correlation inputs")
         if any(record.tenant_id != tenant_id for record in evidence):
             raise PermissionError("cross_tenant_correlation")
-        if any(record.environment != environment for record in evidence):
-            raise PermissionError("cross_environment_correlation")
         links: dict[
             tuple[EvidenceId, EvidenceId, CorrelationLinkKind], CorrelationLink
         ] = {}

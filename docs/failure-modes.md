@@ -37,6 +37,15 @@
 | Usage exceeds reservation | Provider-bug classification | Do not surface response; preserve active evidence for reconciliation |
 | Stale worker after provider response | Result fence rejects append | Do not emit response or charge from stale worker; reconcile ambiguity |
 | Invalid structured output/tool arguments | Strict JSON Schema failure | No parser fallback; a repair would be a new budgeted durable call |
+| Evidence intent committed but connector never starts | Requested query age and outbox/work state | Recover through durable delivery; never issue an unrecorded synchronous read |
+| Stale evidence worker | Lease token/generation rejection before query/result/cursor | Stop; a current worker may retry from durable intent |
+| Connector rate limit | Classified rate-limited event plus bounded retry-after | Record explicit outcome; retry only within policy and deadline |
+| Connector returns some pages then fails | Partial/truncated metadata and cursor | Persist `partially_succeeded`; never label it success |
+| Malformed or oversized source response | Adapter/ingestion containment | Quarantine bounded metadata; never store the unbounded raw body |
+| Duplicate evidence | Tenant/content-digest uniqueness | Emit deduplicated metadata and reuse the immutable tenant record |
+| Source cursor race | Fenced compare-and-advance fails | Preserve the winner; stale generation cannot overwrite progress |
+| Runbook trust/schema failure | Digest/signature/front-matter validation | Reject or quarantine; never execute retrieved instructions |
+| Correlation tie or contradiction | Ambiguous or source-conflict link | Preserve every candidate/conflict; do not fabricate causality |
 
 Global event positions order commits but may contain numbers unused after a
 rolled-back PostgreSQL identity allocation. That is not corruption. A per-
@@ -46,3 +55,6 @@ The unresolved window is an external target accepting a future effect after its
 intent but before Aegis records the result. Target idempotency or explicit
 reconciliation is mandatory; Redis/inbox deduplication alone cannot solve it.
 Provider idempotency headers also do not guarantee exactly-once billing.
+Read-only connectors avoid mutation effects, but network reads still require
+durable intent because they consume quota, expose credentials, and advance
+authoritative ingestion cursors.

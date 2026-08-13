@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
@@ -19,8 +20,19 @@ from aegis_agent_platform.audit import (
     redact_details,
 )
 from aegis_agent_platform.config import ConfigurationError, Settings
-from aegis_agent_platform.domain import EventEnvelope, JsonValue
+from aegis_agent_platform.domain import (
+    EnvironmentIdentity,
+    EventEnvelope,
+    EvidenceKind,
+    EvidenceSourceKind,
+    JsonValue,
+    PaginationCursor,
+    QueryWindow,
+)
 from aegis_agent_platform.event_store import EventStore
+from aegis_agent_platform.evidence import EvidenceQuery
+from aegis_agent_platform.evidence.operations import EvidenceOperations
+from aegis_agent_platform.evidence.service import EvidenceIdempotencyConflictError
 from aegis_agent_platform.gateway.operations import GatewayOperations
 from aegis_agent_platform.identity import (
     PLATFORM_TENANT_ID,
@@ -76,6 +88,7 @@ class ControlPlaneApp:
         projections: RunStatusReader | None = None,
         storage_ready: Callable[[], Awaitable[bool]] | None = None,
         gateway_operations: GatewayOperations | None = None,
+        evidence_operations: EvidenceOperations | None = None,
     ) -> None:
         self._authentication = authentication
         self._authorization = authorization or AuthorizationService()
@@ -86,6 +99,7 @@ class ControlPlaneApp:
         self._projections = projections
         self._storage_ready = storage_ready
         self._gateway_operations = gateway_operations
+        self._evidence_operations = evidence_operations
 
     async def __call__(
         self,
@@ -93,12 +107,11 @@ class ControlPlaneApp:
         receive: Receive,
         send: Send,
     ) -> None:
-        del receive
         if scope.get("type") != "http":
             return
         path = scope.get("path")
         method = scope.get("method", "GET")
-        if method != "GET":
+        if method not in {"GET", "POST"}:
             await _respond(send, 405, {"error": {"code": "method_not_allowed"}})
             return
         if path in {"/healthz", "/health/live"}:
@@ -110,6 +123,15 @@ class ControlPlaneApp:
         if not isinstance(path, str) or not path.startswith("/v1/"):
             await _respond(send, 404, {"status": "not-found"})
             return
+        if method == "POST":
+            post_segments = [segment for segment in path.split("/") if segment]
+            if not (
+                len(post_segments) == 5
+                and post_segments[:2] == ["v1", "tenants"]
+                and post_segments[3:] == ["evidence", "queries"]
+            ):
+                await _respond(send, 405, {"error": {"code": "method_not_allowed"}})
+                return
         principal = await self._authenticate(scope, send)
         if principal is None:
             return
@@ -145,6 +167,61 @@ class ControlPlaneApp:
                 principal,
                 tenant_id,
                 view=segments[3],
+            )
+            return
+        if (
+            method == "POST"
+            and len(segments) == 5
+            and segments[3:] == ["evidence", "queries"]
+        ):
+            await self._request_evidence(
+                send,
+                receive,
+                principal,
+                tenant_id,
+            )
+            return
+        if (
+            method == "GET"
+            and len(segments) == 5
+            and segments[3] == "evidence"
+            and segments[4] in {"records", "citations", "capabilities"}
+        ):
+            try:
+                cursor = _evidence_cursor_parameter(scope)
+            except ValueError:
+                await _respond(send, 400, {"error": {"code": "invalid_cursor"}})
+                return
+            await self._get_evidence_view(
+                send,
+                principal,
+                tenant_id,
+                segments[4],
+                cursor=cursor,
+            )
+            return
+        if (
+            method == "GET"
+            and len(segments) == 6
+            and segments[3:5] == ["evidence", "queries"]
+        ):
+            await self._get_evidence_status(
+                send,
+                principal,
+                tenant_id,
+                segments[5],
+            )
+            return
+        if (
+            method == "GET"
+            and len(segments) == 6
+            and segments[3:5] == ["evidence", "bundles"]
+        ):
+            await self._get_evidence_bundle(
+                send,
+                principal,
+                tenant_id,
+                segments[5],
             )
             return
         if len(segments) == 4 and segments[3] == "ledger":
@@ -190,6 +267,199 @@ class ControlPlaneApp:
             await self._get_run_status(send, principal, tenant_id)
             return
         await _respond(send, 404, {"status": "not-found"})
+
+    async def _request_evidence(
+        self,
+        send: Send,
+        receive: Receive,
+        principal: Principal,
+        tenant_id: TenantId,
+    ) -> None:
+        if not await self._authorize(
+            send,
+            principal,
+            tenant_id,
+            Permission.EVIDENCE_QUERY,
+            resource=f"tenant/{tenant_id}/evidence/queries",
+        ):
+            return
+        if self._evidence_operations is None:
+            await _respond(send, 503, {"error": {"code": "evidence_not_configured"}})
+            return
+        policy = self._policies.get(TenantContext(tenant_id))
+        if policy is None:
+            await _respond(send, 503, {"error": {"code": "policy_not_configured"}})
+            return
+        try:
+            body = await _request_json(receive)
+            query = _evidence_query(body, tenant_id)
+            result = await self._evidence_operations.request(
+                principal,
+                TenantContext(tenant_id),
+                query,
+                policy,
+                at=datetime.now(UTC),
+            )
+        except EvidenceIdempotencyConflictError:
+            await _respond(
+                send,
+                409,
+                {"error": {"code": "evidence_idempotency_key_reused"}},
+            )
+            return
+        except (KeyError, TypeError, ValueError):
+            await _respond(send, 400, {"error": {"code": "invalid_evidence_query"}})
+            return
+        except PermissionError as error:
+            await _respond(
+                send,
+                403,
+                {"error": {"code": "evidence_query_denied", "reason": str(error)}},
+            )
+            return
+        await _respond(
+            send,
+            202 if result.created else 200,
+            {
+                "query_id": str(result.query_id),
+                "accepted": result.created,
+                "status": "requested" if result.created else "duplicate",
+            },
+        )
+
+    async def _get_evidence_view(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+        view: str,
+        *,
+        cursor: tuple[int, int] | None,
+    ) -> None:
+        if not await self._authorize(
+            send,
+            principal,
+            tenant_id,
+            Permission.EVIDENCE_READ,
+            resource=f"tenant/{tenant_id}/evidence/{view}",
+        ):
+            return
+        if self._evidence_operations is None:
+            await _respond(send, 503, {"error": {"code": "evidence_not_configured"}})
+            return
+        context = TenantContext(tenant_id)
+        at = datetime.now(UTC)
+        next_cursor: str | None = None
+        if view == "records":
+            record_page, page_cursor = self._evidence_operations.evidence_page(
+                principal,
+                context,
+                at=at,
+                cursor=cursor,
+                limit=100,
+            )
+            items: object = record_page
+            next_cursor = (
+                _encode_evidence_cursor(page_cursor)
+                if page_cursor is not None
+                else None
+            )
+        elif view == "citations":
+            citation_page, page_cursor = self._evidence_operations.citation_page(
+                principal,
+                context,
+                at=at,
+                cursor=cursor,
+                limit=100,
+            )
+            items = citation_page
+            next_cursor = (
+                _encode_evidence_cursor(page_cursor)
+                if page_cursor is not None
+                else None
+            )
+        else:
+            policy = self._policies.get(context)
+            if policy is None:
+                await _respond(send, 503, {"error": {"code": "policy_not_configured"}})
+                return
+            items = self._evidence_operations.capabilities(
+                principal, context, policy, at=at
+            )
+        await _respond(send, 200, {view: items, "next_cursor": next_cursor})
+
+    async def _get_evidence_status(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+        query_id: str,
+    ) -> None:
+        if not await self._authorize(
+            send,
+            principal,
+            tenant_id,
+            Permission.EVIDENCE_READ,
+            resource=f"tenant/{tenant_id}/evidence/query",
+        ):
+            return
+        if self._evidence_operations is None:
+            await _respond(send, 503, {"error": {"code": "evidence_not_configured"}})
+            return
+        try:
+            identifier = UUID(query_id)
+        except ValueError:
+            await _respond(send, 400, {"error": {"code": "invalid_query_id"}})
+            return
+        result = await self._evidence_operations.status(
+            principal,
+            TenantContext(tenant_id),
+            identifier,
+            at=datetime.now(UTC),
+        )
+        await _respond(
+            send,
+            200 if result is not None else 404,
+            (
+                dict(result)
+                if result is not None
+                else {"error": {"code": "query_not_found"}}
+            ),
+        )
+
+    async def _get_evidence_bundle(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+        bundle_id: str,
+    ) -> None:
+        if not await self._authorize(
+            send,
+            principal,
+            tenant_id,
+            Permission.EVIDENCE_READ,
+            resource=f"tenant/{tenant_id}/evidence/bundle",
+        ):
+            return
+        if self._evidence_operations is None:
+            await _respond(send, 503, {"error": {"code": "evidence_not_configured"}})
+            return
+        result = self._evidence_operations.bundle(
+            principal,
+            TenantContext(tenant_id),
+            bundle_id,
+            at=datetime.now(UTC),
+        )
+        await _respond(
+            send,
+            200 if result is not None else 404,
+            (
+                dict(result)
+                if result is not None
+                else {"error": {"code": "bundle_not_found"}}
+            ),
+        )
 
     async def _readiness(self, send: Send) -> None:
         try:
@@ -577,6 +847,109 @@ def _cursor_parameter(scope: AsgiMessage) -> int:
     if len(values) != 1 or not values[0].isdigit():
         raise ValueError("cursor must be one non-negative integer")
     return int(values[0])
+
+
+def _evidence_cursor_parameter(
+    scope: AsgiMessage,
+) -> tuple[int, int] | None:
+    raw_query = scope.get("query_string", b"")
+    if not isinstance(raw_query, bytes):
+        raise ValueError("query string must be bytes")
+    try:
+        parameters = parse_qs(
+            raw_query.decode("ascii"),
+            keep_blank_values=True,
+        )
+    except UnicodeDecodeError as error:
+        raise ValueError("query string must be ASCII") from error
+    values = parameters.get("cursor")
+    if values is None:
+        return None
+    if len(values) != 1:
+        raise ValueError("cursor must occur once")
+    try:
+        encoded = values[0].encode("ascii")
+        encoded += b"=" * (-len(encoded) % 4)
+        value = json.loads(base64.urlsafe_b64decode(encoded))
+        if (
+            not isinstance(value, list)
+            or len(value) != 2
+            or not isinstance(value[0], int)
+            or isinstance(value[0], bool)
+            or value[0] < 0
+            or not isinstance(value[1], int)
+            or isinstance(value[1], bool)
+            or value[1] < 0
+            or value[1] > value[0]
+        ):
+            raise ValueError("cursor payload is invalid")
+    except (UnicodeEncodeError, ValueError, json.JSONDecodeError) as error:
+        raise ValueError("cursor is invalid") from error
+    return value[0], value[1]
+
+
+def _encode_evidence_cursor(cursor: tuple[int, int]) -> str:
+    value = json.dumps(cursor, separators=(",", ":")).encode()
+    return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+
+
+async def _request_json(receive: Receive) -> Mapping[str, object]:
+    chunks: list[bytes] = []
+    size = 0
+    while True:
+        message = await receive()
+        body = message.get("body", b"")
+        if message.get("type") != "http.request" or not isinstance(body, bytes):
+            raise ValueError("request body is invalid")
+        size += len(body)
+        if size > 65_536:
+            raise ValueError("request body is too large")
+        chunks.append(body)
+        if not message.get("more_body", False):
+            break
+    value = json.loads(b"".join(chunks))
+    if not isinstance(value, dict):
+        raise ValueError("request JSON must be an object")
+    return value
+
+
+def _evidence_query(
+    body: Mapping[str, object],
+    tenant_id: TenantId,
+) -> EvidenceQuery:
+    raw_kinds = body["kinds"]
+    raw_selectors = body.get("selectors", {})
+    if not isinstance(raw_kinds, list) or not all(
+        isinstance(value, str) for value in raw_kinds
+    ):
+        raise ValueError("kinds must be strings")
+    if not isinstance(raw_selectors, dict) or not all(
+        isinstance(key, str) and isinstance(value, str)
+        for key, value in raw_selectors.items()
+    ):
+        raise ValueError("selectors must be strings")
+    idempotency_key = body["idempotency_key"]
+    if not isinstance(idempotency_key, str):
+        raise ValueError("idempotency key must be a string")
+    return EvidenceQuery(
+        query_id=UUID(str(body.get("query_id", uuid4()))),
+        tenant_id=str(tenant_id),
+        source=EvidenceSourceKind(str(body["source"])),
+        environment=EnvironmentIdentity(str(body["environment"])),
+        window=QueryWindow(
+            datetime.fromisoformat(str(body["start"])),
+            datetime.fromisoformat(str(body["end"])),
+        ),
+        kinds=tuple(EvidenceKind(value) for value in raw_kinds),
+        selectors=raw_selectors,
+        limit=int(str(body.get("limit", 100))),
+        idempotency_key=idempotency_key,
+        cursor=(
+            PaginationCursor(str(body["cursor"]))
+            if body.get("cursor") is not None
+            else None
+        ),
+    )
 
 
 def _matching_header(item: object, name: bytes) -> str | None:
