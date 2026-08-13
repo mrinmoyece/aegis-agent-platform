@@ -155,6 +155,31 @@ class DomainEventType(_StringConstant):
     ACTION_CANCELLED: ClassVar[DomainEventType]
     ACTION_VERIFICATION_REQUESTED: ClassVar[DomainEventType]
     ACTION_VERIFICATION_COMPLETED: ClassVar[DomainEventType]
+    SANDBOX_REQUESTED: ClassVar[DomainEventType]
+    SANDBOX_POLICY_EVALUATED: ClassVar[DomainEventType]
+    SANDBOX_APPROVAL_BOUND: ClassVar[DomainEventType]
+    SANDBOX_EGRESS_DECIDED: ClassVar[DomainEventType]
+    SANDBOX_DISPATCH_CLAIMED: ClassVar[DomainEventType]
+    SANDBOX_PROVISIONING_REQUESTED: ClassVar[DomainEventType]
+    SANDBOX_PROVISIONED: ClassVar[DomainEventType]
+    SANDBOX_START_REQUESTED: ClassVar[DomainEventType]
+    SANDBOX_STARTED: ClassVar[DomainEventType]
+    SANDBOX_OUTPUT_CAPTURED: ClassVar[DomainEventType]
+    SANDBOX_ARTIFACT_CAPTURED: ClassVar[DomainEventType]
+    SANDBOX_COMPLETED: ClassVar[DomainEventType]
+    SANDBOX_FAILED: ClassVar[DomainEventType]
+    SANDBOX_TIMED_OUT: ClassVar[DomainEventType]
+    SANDBOX_OOM_KILLED: ClassVar[DomainEventType]
+    SANDBOX_POLICY_VIOLATION: ClassVar[DomainEventType]
+    SANDBOX_CANCELLATION_REQUESTED: ClassVar[DomainEventType]
+    SANDBOX_CANCELLED: ClassVar[DomainEventType]
+    SANDBOX_ATTESTED: ClassVar[DomainEventType]
+    SANDBOX_CLEANUP_REQUESTED: ClassVar[DomainEventType]
+    SANDBOX_CLEANUP_COMPLETED: ClassVar[DomainEventType]
+    SANDBOX_CLEANUP_FAILED: ClassVar[DomainEventType]
+    SANDBOX_QUARANTINED: ClassVar[DomainEventType]
+    SANDBOX_RECONCILIATION_REQUESTED: ClassVar[DomainEventType]
+    SANDBOX_RECONCILED: ClassVar[DomainEventType]
 
 
 DomainEventType.INVESTIGATION_REQUESTED = DomainEventType._define(
@@ -402,7 +427,31 @@ DomainEventType.ACTION_VERIFICATION_REQUESTED = DomainEventType._define(
 DomainEventType.ACTION_VERIFICATION_COMPLETED = DomainEventType._define(
     "action.verification_completed.v1"
 )
-
+DomainEventType.SANDBOX_REQUESTED = DomainEventType._define("sandbox.requested.v1")
+DomainEventType.SANDBOX_POLICY_EVALUATED = DomainEventType._define("sandbox.policy_evaluated.v1")
+DomainEventType.SANDBOX_APPROVAL_BOUND = DomainEventType._define("sandbox.approval_bound.v1")
+DomainEventType.SANDBOX_EGRESS_DECIDED = DomainEventType._define("sandbox.egress_decided.v1")
+DomainEventType.SANDBOX_DISPATCH_CLAIMED = DomainEventType._define("sandbox.dispatch_claimed.v1")
+DomainEventType.SANDBOX_PROVISIONING_REQUESTED = DomainEventType._define("sandbox.provisioning_requested.v1")
+DomainEventType.SANDBOX_PROVISIONED = DomainEventType._define("sandbox.provisioned.v1")
+DomainEventType.SANDBOX_START_REQUESTED = DomainEventType._define("sandbox.start_requested.v1")
+DomainEventType.SANDBOX_STARTED = DomainEventType._define("sandbox.started.v1")
+DomainEventType.SANDBOX_OUTPUT_CAPTURED = DomainEventType._define("sandbox.output_captured.v1")
+DomainEventType.SANDBOX_ARTIFACT_CAPTURED = DomainEventType._define("sandbox.artifact_captured.v1")
+DomainEventType.SANDBOX_COMPLETED = DomainEventType._define("sandbox.completed.v1")
+DomainEventType.SANDBOX_FAILED = DomainEventType._define("sandbox.failed.v1")
+DomainEventType.SANDBOX_TIMED_OUT = DomainEventType._define("sandbox.timed_out.v1")
+DomainEventType.SANDBOX_OOM_KILLED = DomainEventType._define("sandbox.oom_killed.v1")
+DomainEventType.SANDBOX_POLICY_VIOLATION = DomainEventType._define("sandbox.policy_violation.v1")
+DomainEventType.SANDBOX_CANCELLATION_REQUESTED = DomainEventType._define("sandbox.cancellation_requested.v1")
+DomainEventType.SANDBOX_CANCELLED = DomainEventType._define("sandbox.cancelled.v1")
+DomainEventType.SANDBOX_ATTESTED = DomainEventType._define("sandbox.attested.v1")
+DomainEventType.SANDBOX_CLEANUP_REQUESTED = DomainEventType._define("sandbox.cleanup_requested.v1")
+DomainEventType.SANDBOX_CLEANUP_COMPLETED = DomainEventType._define("sandbox.cleanup_completed.v1")
+DomainEventType.SANDBOX_CLEANUP_FAILED = DomainEventType._define("sandbox.cleanup_failed.v1")
+DomainEventType.SANDBOX_QUARANTINED = DomainEventType._define("sandbox.quarantined.v1")
+DomainEventType.SANDBOX_RECONCILIATION_REQUESTED = DomainEventType._define("sandbox.reconciliation_requested.v1")
+DomainEventType.SANDBOX_RECONCILED = DomainEventType._define("sandbox.reconciled.v1")
 
 @dataclass(frozen=True, slots=True)
 class ActorReference:

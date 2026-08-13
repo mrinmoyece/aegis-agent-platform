@@ -86,7 +86,13 @@ Status meanings:
 | Forced-RLS remediation projections and immutable decisions | Implemented | migration `0007`, environment-gated PostgreSQL race/RLS/rebuild tests |
 | Remediation metrics/traces without sensitive content | Implemented | fixed operation/outcome labels; no prompt/evidence/tenant/target labels |
 | General tool schema registry and arbitrary tool execution | Planned | broad tool authority is not exposed by Layer 8 |
-| Isolated sandbox with egress policy and quotas | Planned | Layer 9; no general code execution exists |
+| Immutable provider-neutral sandbox contracts and strict validation | Implemented | `domain.sandbox`; argv-only, digest-pinned image, canonical path/env/network/resource contracts |
+| Isolated sandbox with egress policy and quotas | Implemented | `sandbox`, migration `0008`, deterministic fake; production enforcement readiness remains false until verified |
+| Intent-before-sandbox lifecycle effects and reconciliation | Implemented | fenced provision/start/terminate/cleanup events, stable names, observe-before-create, ambiguity tests |
+| Safe content-addressed workspace and artifacts | Implemented | atomic ZIP/TAR extraction, traversal/link/device/bomb denial, scanner/redactor/quarantine hooks |
+| Hardened Kubernetes sandbox Job adapter | Implemented | official client boundary and locked-down suspended manifest; no live cluster certification |
+| Production sandbox admission/runtime/network verification | Planned | cluster policy, runtime class, PID limit, default-deny network and egress proxy deployment evidence |
+| Authenticated bounded sandbox APIs and fake CLI/evals | Implemented | request/status/artifact/cleanup cursor routes and deterministic scenarios |
 | Tenant-safe memory and retrieval provenance | Planned | Layer 6 |
 | Three-tier working/episodic/semantic memory | Planned | Layer 6, `docs/protocols.md` |
 | PII-safe compaction, retention, and deletion | Planned | Layer 6 |

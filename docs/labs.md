@@ -108,6 +108,32 @@ This lab uses no live action endpoint or credential. It does not prove
 production Kubernetes RBAC/identity, egress, API compatibility, read-after-write
 semantics, sandbox isolation, HA/DR, or operator escalation.
 
+## Layer 9 lab: hardened ephemeral sandbox
+
+**Implemented with deterministic fakes and a mocked official client.**
+
+1. Run the `approved-analysis`, `policy-denied`, and `prompt-injection` CLI
+   scenarios. Confirm exact approval/spec/policy binding and no backend call on
+   denial.
+2. Run `malicious-archive`; inspect traversal/link/device/bomb validation and
+   atomic publication tests in `tests/test_sandbox_workspace.py`.
+3. Run `timeout`, `oom`, and `cancellation`; confirm explicit terminal state,
+   cleanup intent, and no late result transition.
+4. Run `ambiguous-provisioning` and `cleanup-recovery`; confirm stable identity,
+   observe-before-create/delete, reconciliation events, and bounded recovery.
+5. Run `output-quarantine`; verify only bounded redacted digest/size/media
+   metadata is exposed.
+6. Inspect `tests/test_kubernetes_sandbox_adapter.py`; assert the suspended Job
+   security context and fail-closed readiness without verified external
+   controls.
+7. With disposable PostgreSQL/Redis URLs, run
+   `tests/integration/test_sandbox_postgres.py` for canonical Layer 7/8 linkage,
+   current approval, RLS, fencing, lifecycle persistence, and projection rebuild.
+
+This lab launches no untrusted process, contacts no cluster, and does not prove
+production admission/runtime/network isolation, malware scanning, secret
+brokering, image signing, or supply-chain policy.
+
 ## Planned labs by layer
 
 | Layer | Lab | Failure injection and evidence |
@@ -115,9 +141,8 @@ semantics, sandbox isolation, HA/DR, or operator escalation.
 | 2 | Live-database and live-Keycloak drill | Run the row-level-security policies and the append-only trigger against a running Postgres instance, and exercise `RemoteJwksProvider` against a real Keycloak realm with rotated keys — both are currently only asserted statically or against mocked transports |
 | 3 | Schema evolution | Replay old checkout fixtures through additive upcasters |
 | 4 | Connector ambiguity | Rate-limit and truncate Dynatrace/GitHub responses; preserve provenance and partial status |
-| 9 | Sandbox escape | Attempt filesystem, process, privilege, and egress violations |
 | 6 | Retrieval isolation | Poison a runbook and attempt cross-tenant vector retrieval |
-| 10 | Production adversarial evaluation | Add versioned datasets, semantic graders, and release baselines beyond the deterministic Layers 7–8 matrices |
+| 10 | Production adversarial evaluation | Add versioned datasets, semantic graders, and release baselines beyond the deterministic Layers 7–9 matrices |
 | 10 | Telemetry privacy | Send sensitive/high-cardinality content; prove collector/backend redaction and rejection |
 | 11 | Capacity | Load hot and broad tenants while measuring queue lag and projection delay |
 | 11 | Regional failure | Lose a region and restore authoritative state within documented objectives |

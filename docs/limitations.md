@@ -12,10 +12,10 @@
 - Fixed agent roles, typed artifacts, deterministic DAG scheduling, critic gates,
   and fake specialist execution are implemented. Agents cannot approve actions
   or create dynamic peers.
-- Exact-scope human approval, fenced controlled effects, reconciliation, and
-  post-action verification are implemented. General sandbox/code execution,
-  arbitrary tools, memory, and production evaluation packages remain planned.
-  Layers 7–8 include deterministic behavioral regression evals.
+- Exact-scope human approval, fenced controlled effects, reconciliation,
+  post-action verification, and bounded Layer 9 analysis sandbox execution are
+  implemented. Arbitrary tools, memory, and production evaluation packages
+  remain planned. Layers 7–9 include deterministic behavioral regression evals.
 - Runtime spans and bounded metric instruments exist, but no production
   collector dashboards, alert rules, or SLO evidence are claimed.
 - Three-tier memory is a documented design only. No pgvector retrieval,
@@ -115,7 +115,7 @@
   live network or credentials.
 - These controls do not prove that a model's semantic conclusion is correct.
   Layer 8 supplies the separate human approval and execution boundary. There is
-  no live connector/model/action verification, sandbox, memory/RAG, operator UI,
+  no live connector/model/action verification, memory/RAG, operator UI,
   MCP/A2A adapter, broad autonomous remediation, production deployment, HA,
   backup/restore, or operational SLO evidence.
 
@@ -146,10 +146,50 @@
   deterministic fake. The official Kubernetes adapter accepts no arbitrary
   patch, command, shell input, code, or credential and is tested with a fake
   official client.
-- General sandbox/code execution, capability credential brokering, arbitrary or
-  destructive actions, live external verification, memory/RAG, operator UI,
-  MCP/A2A, production Kubernetes deployment, HA/DR, multi-region, and broad
-  autonomous remediation remain deferred.
+- Unrestricted interactive sandboxing, capability credential brokering,
+  arbitrary or destructive actions, live external verification, memory/RAG,
+  operator UI, MCP/A2A, production Kubernetes deployment, HA/DR, multi-region,
+  and broad autonomous remediation remain deferred.
+
+## Current Layer 9 implementation (hardened ephemeral sandbox)
+
+- Immutable contracts bind tenant/run/task/remediation/approval, approved
+  purpose, canonical spec/policy digests, digest-pinned image, argv, workspace,
+  content-addressed inputs/mounts, secret references, environment, egress,
+  resources, isolation, outputs, retries, cleanup, result, and attestation.
+- Validation rejects shell construction, unsafe Unicode/control characters,
+  traversal/device/host paths, sockets/namespaces, privilege/capabilities,
+  mutable images, secret literals, oversized/conflicting inputs, unsafe archives,
+  special/private egress, and weakened runtime controls. No host process, shell,
+  Docker socket, `eval`, or unrestricted exec path exists.
+- The sandbox fold covers request through cleanup/reconciliation and rejects
+  corrupt transitions. PostgreSQL is authoritative; every external lifecycle
+  operation requires durable intent and the current fence. Redis is delivery
+  only and exactly-once execution is not claimed.
+- Tenant policy defaults deny and binds exact images, commands, purposes, mounts,
+  output types, secrets, egress, limits, risks, lifetime, concurrency, and
+  budgets. PostgreSQL rechecks the current granted Layer 8 approval. A changed
+  policy, spec, purpose, or risk invalidates the approval.
+- Safe ZIP/TAR extraction and artifact scanner/redactor/quarantine hooks are
+  implemented. These hooks do not constitute a certified malware engine or
+  production object store.
+- The deterministic fake never runs code. The Kubernetes adapter generates a
+  suspended, digest-pinned, non-root Job with a read-only root, dropped
+  capabilities, no privilege escalation, RuntimeDefault seccomp, no service
+  account token/host namespaces, explicit resources/deadline, and ephemeral
+  storage. It carries hashed lease-fence annotations and observes Job absence
+  before cleanup completion. It is tested only through a fake official client.
+- Production admission policy, authoritative PostgreSQL fence validation,
+  runtime class, PID enforcement, node hardening, default-deny networking, egress
+  proxy/DNS rebinding defense, CSI content
+  driver, artifact collector, scanner, secret broker, copy-on-write staging,
+  image signature/SBOM enforcement, and remote attestation are not deployed or
+  certified. Readiness must remain false without those controls.
+- APIs expose only authenticated bounded redacted request/status/artifact/
+  cleanup views. There is no attach, interactive exec, log streaming, raw
+  artifact download, or production mutation endpoint.
+- Memory/RAG, operator UI, MCP/A2A, live external verification, HA/DR,
+  multi-region, and broad autonomous production mutation remain deferred.
 
 ## Current Layer 2 implementation (identity, tenancy, and governance)
 

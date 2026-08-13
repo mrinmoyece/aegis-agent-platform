@@ -105,6 +105,8 @@ class Permission(StrEnum):
     ACTION_EXECUTE = "action:execute"
     ACTION_RECONCILE = "action:reconcile"
     ACTION_ROLLBACK = "action:rollback"
+    SANDBOX_EXECUTE = "sandbox:execute"
+    SANDBOX_READ = "sandbox:read"
 
 
 @dataclass(frozen=True, slots=True)

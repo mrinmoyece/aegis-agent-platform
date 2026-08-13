@@ -19,6 +19,7 @@ ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyTy
                 Permission.EVIDENCE_READ,
                 Permission.INVESTIGATION_READ,
                 Permission.REMEDIATION_READ,
+                Permission.SANDBOX_READ,
             }
         ),
         Role.INVESTIGATOR: frozenset(
@@ -33,6 +34,7 @@ ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyTy
                 Permission.EVIDENCE_QUERY,
                 Permission.INVESTIGATION_READ,
                 Permission.REMEDIATION_READ,
+                Permission.SANDBOX_READ,
             }
         ),
         Role.APPROVER: frozenset(
@@ -45,6 +47,7 @@ ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyTy
                 Permission.EVIDENCE_READ,
                 Permission.INVESTIGATION_READ,
                 Permission.REMEDIATION_READ,
+                Permission.SANDBOX_READ,
             }
         ),
         Role.OPERATOR: frozenset(
@@ -64,6 +67,8 @@ ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyTy
                 Permission.ACTION_EXECUTE,
                 Permission.ACTION_RECONCILE,
                 Permission.ACTION_ROLLBACK,
+                Permission.SANDBOX_EXECUTE,
+                Permission.SANDBOX_READ,
             }
         ),
         Role.TENANT_ADMIN: frozenset(
@@ -92,6 +97,8 @@ ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyTy
                 Permission.ACTION_EXECUTE,
                 Permission.ACTION_RECONCILE,
                 Permission.ACTION_ROLLBACK,
+                Permission.SANDBOX_EXECUTE,
+                Permission.SANDBOX_READ,
             }
         ),
         Role.PLATFORM_ADMIN: frozenset(

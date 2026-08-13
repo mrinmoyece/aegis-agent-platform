@@ -53,6 +53,7 @@ class ActionKind(StrEnum):
     """Provider-neutral controlled actions implemented by Layer 8."""
 
     KUBERNETES_ROLLOUT_RESTART = "kubernetes.rollout_restart.v1"
+    SANDBOX_CHANGE_PREPARATION = "sandbox.change_preparation.v1"
 
 
 class ConditionOperator(StrEnum):
@@ -438,6 +439,42 @@ class ActionSpecification:
                 raise ValueError("rollout restart requires a deployment target")
             if parameters:
                 raise ValueError("rollout restart accepts no free-form parameters")
+        elif self.kind is ActionKind.SANDBOX_CHANGE_PREPARATION:
+            if self.target.provider != "aegis":
+                raise ValueError("sandbox preparation requires the Aegis provider")
+            if self.target.resource_type != "sandbox":
+                raise ValueError("sandbox preparation requires a sandbox target")
+            required = {
+                "sandbox_policy_digest",
+                "sandbox_purpose",
+                "sandbox_risk",
+                "sandbox_spec_digest",
+            }
+            if set(parameters) != required:
+                raise ValueError("sandbox preparation requires an exact reviewed scope")
+            for key in ("sandbox_policy_digest", "sandbox_spec_digest"):
+                value = parameters[key]
+                if not isinstance(value, str):
+                    raise ValueError("sandbox preparation digests must be strings")
+                _digest(value, key)
+            purpose = parameters["sandbox_purpose"]
+            if purpose not in {
+                "code_analysis",
+                "config_analysis",
+                "test_execution",
+                "patch_preparation",
+                "evidence_production",
+            }:
+                raise ValueError("sandbox preparation purpose is invalid")
+            risk = parameters["sandbox_risk"]
+            if (
+                not isinstance(risk, int)
+                or isinstance(risk, bool)
+                or risk not in {1, 2, 3, 4}
+            ):
+                raise ValueError("sandbox preparation risk is invalid")
+            if risk != int(self.risk):
+                raise ValueError("sandbox preparation risk must match action risk")
         for reference, name in (
             (self.rollback_reference, "rollback"),
             (self.compensation_reference, "compensation"),

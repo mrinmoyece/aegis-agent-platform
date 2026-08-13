@@ -380,14 +380,16 @@ certification.
 
 ## EP-10–EP-11: Remediation, approval, tools, and sandbox
 
-**Layer 8 delivery status (2026-08): EP-10 implemented; EP-11 planned.**
+**Layer 9 delivery status (2026-08): EP-10 and the repository-scoped EP-11
+boundary are implemented. Production environment certification remains open.**
 Immutable plans and exact policy snapshots, authenticated expiring approvals,
 separation of duties, quorum, fenced intent-before-effect execution,
 at-least-once reconciliation, and explicit postcondition verification are
 implemented. The deterministic fake and fixed-shape Kubernetes deployment
-rollout-restart adapter are the only action adapters. General sandbox/code
-execution, arbitrary commands, capability credential brokering, and production
-connectivity remain planned.
+rollout-restart adapter are the only action adapters. A separate bounded sandbox
+supports analysis, tests, patch preparation, and evidence artifacts; it is not a
+remediation adapter. Arbitrary interactive commands, capability credential
+brokering, and production connectivity remain planned.
 
 ### Approval model
 
@@ -413,15 +415,26 @@ connectivity remain planned.
 - Short-lived action-scoped credential brokering remains planned; standing
   credentials must never be exposed to a model or sandbox.
 
-### Sandbox (planned)
+### Sandbox (implemented boundary)
 
-- Run untrusted code outside the worker identity using a replaceable isolation
-  backend.
-- Enforce non-root execution, read-only base image, ephemeral filesystem,
-  seccomp/AppArmor or equivalent, CPU/memory/PID/time/output quotas,
-  deny-by-default egress, destination allowlists, and no host socket.
-- Destroy the environment after use and audit image digest, policy, limits,
-  network decisions, and result.
+- Immutable contracts and canonical digests bind Layer 7 task and Layer 8
+  approval to a digest-pinned OCI image, argv tokens, content-addressed inputs,
+  mounts, secret references, egress, limits, expected outputs, retries, and
+  cleanup.
+- The event fold covers request, policy/approval, dispatch, provisioning/start,
+  outputs/artifacts, terminal outcomes, attestation, cleanup, quarantine, and
+  reconciliation. PostgreSQL forced-RLS projections are rebuildable.
+- Safe archives deny traversal, links, devices, conflicting paths, and expansion
+  bombs before atomic publication. Scanner/redactor/quarantine hooks treat all
+  output as untrusted data.
+- The official Kubernetes adapter emits a suspended non-root Job with a
+  read-only root filesystem, dropped capabilities, no privilege escalation,
+  RuntimeDefault seccomp, disabled service account token, no host namespaces,
+  explicit resources/deadline, immutable image, and ephemeral storage.
+- Default network is none. Brokered egress is an explicit port; without verified
+  deployment enforcement readiness remains false. The code does not claim
+  cluster-level isolation, a production malware scanner, secret broker, or
+  copy-on-write input staging.
 
 ### Exit gate
 
@@ -429,8 +442,11 @@ EP-10 tests make prompt/runbook injection, malformed proposal, forged/replayed
 decision, stale approval/policy/role/fence, target substitution, duplicate
 delivery, ambiguous outcome, and adapter failure explicit and fail closed. A
 successful action API response does not establish recovery; fresh verification
-must pass. Sandbox escape, forbidden egress, resource exhaustion, and sandbox
-secret-access tests remain EP-11 exit evidence.
+must pass. EP-11 deterministic tests cover malicious command/path/archive,
+mutable images, privilege/host access, approval drift, fencing, timeout/OOM,
+cancellation, output quarantine, ambiguous create/delete, cleanup, and replay.
+Live admission/runtime/network controls, supply-chain verification, and
+credential/scanner integrations remain deployment exit evidence.
 
 ## EP-12: Three-tier memory and retrieval
 

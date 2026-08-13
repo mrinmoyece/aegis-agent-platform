@@ -36,6 +36,7 @@ dependencies = [
 dev = [
   "mypy>=1.17,<2",
   "pytest>=8.4,<9",
+  "pytest-asyncio>=1.1,<2",
   "pytest-cov>=6.2,<7",
   "ruff>=0.12,<1",
   "types-pyyaml>=6.0.12,<7",
@@ -98,6 +99,7 @@ omit = [
   "src/aegis_agent_platform/evidence/postgres.py",
   "src/aegis_agent_platform/agents/postgres.py",
   "src/aegis_agent_platform/remediation/postgres.py",
+  "src/aegis_agent_platform/sandbox/postgres.py",
   "src/aegis_agent_platform/evidence/transport.py",
   "src/aegis_agent_platform/integrations/kubernetes/official.py",
   "src/aegis_agent_platform/control_plane/__main__.py",

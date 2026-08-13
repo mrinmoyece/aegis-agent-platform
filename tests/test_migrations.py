@@ -14,6 +14,7 @@ LEDGER_MIGRATION = ROOT / "migrations" / "0002_durable_ledger.sql"
 GATEWAY_MIGRATION = ROOT / "migrations" / "0004_model_gateway.sql"
 EVIDENCE_MIGRATION = ROOT / "migrations" / "0005_evidence_connectors.sql"
 AGENT_MIGRATION = ROOT / "migrations" / "0006_specialist_orchestration.sql"
+SANDBOX_MIGRATION = ROOT / "migrations" / "0008_hardened_sandbox_execution.sql"
 
 
 def test_identity_governance_schema_has_tenant_constraints_and_indexes() -> None:
@@ -187,3 +188,28 @@ def test_specialist_schema_is_tenant_scoped_fenced_and_rebuildable() -> None:
     assert "revoke delete, truncate on agent_run_projection" in schema
     assert "revoke update on reasoning_artifact_projection" in schema
     assert "grant usage on schema public to aegis_maintenance" in schema
+
+
+def test_sandbox_schema_is_tenant_scoped_fenced_and_rebuildable() -> None:
+    schema = SANDBOX_MIGRATION.read_text(encoding="utf-8").lower()
+    for table in (
+        "sandbox_projection",
+        "sandbox_artifact_projection",
+        "sandbox_execution_claims",
+        "sandbox_quota_projection",
+        "sandbox_cleanup_projection",
+        "sandbox_attestations",
+    ):
+        assert f"alter table {table} force row level security" in schema
+        assert f"{table}_tenant_isolation" in schema
+    assert "references remediation_action_projection" not in schema
+    assert "references remediation_approval_projection" not in schema
+    assert "references sandbox_projection" not in schema
+    assert "before update or delete on sandbox_attestations" in schema
+    assert "unique (tenant_id, sandbox_id, ledger_position)" in schema
+    assert "unique (tenant_id, sandbox_id, content_digest)" not in schema
+    assert "lease_generation bigint not null" in schema
+    assert "reserved_cpu_millis_seconds bigint not null" in schema
+    assert "quota_reserved boolean not null" in schema
+    assert "sandbox_cleanup_ready_idx" in schema
+    assert "revoke update, delete, truncate on sandbox_attestations" in schema

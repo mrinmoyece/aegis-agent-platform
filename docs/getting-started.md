@@ -1,4 +1,4 @@
-# Getting started with Layers 1–8
+# Getting started with Layers 1–9
 
 This repository teaches the less visible part of agent engineering: deciding
 where durability, security, and vendor boundaries live before writing
@@ -9,7 +9,8 @@ Layer 4 adds Redis Streams delivery and fenced worker execution. Layer 5 adds
 the model gateway and cost governance. Layer 6 adds bounded evidence connectors
 and deterministic correlation. Layer 7 adds the governed durable specialist DAG.
 Layer 8 adds exact-scope approval, fenced controlled effects, reconciliation,
-and explicit postcondition verification.
+and explicit postcondition verification. Layer 9 adds approval-bound hardened
+ephemeral analysis, safe artifacts, reconciliation, and cleanup.
 
 ## What you will inspect
 
@@ -30,7 +31,9 @@ and explicit postcondition verification.
   artifacts, coordinator, strict model/fake engines, and read operations.
 - `remediation` defines policy, authenticated approvals, controlled execution,
   reconciliation, verification, operations, and the deterministic fake demo.
-- migrations `0001`–`0007` define governance, ledger, work state, leases, DLQ,
+- `sandbox` defines strict contracts, policy, fenced lifecycle orchestration,
+  safe workspace/artifacts, fake/Kubernetes backends, and redacted operations.
+- migrations `0001`–`0008` define governance, ledger, work state, leases, DLQ,
   model budgets, evidence, specialist projections, roles, grants, triggers,
   forced RLS, inbox/outbox, and projections.
 - `compose.yaml` describes the local dependencies later layers will integrate.
@@ -58,9 +61,10 @@ migration validation. They do not require network services or a running
 identity provider — JWT verification is exercised against deterministic
 fixtures, not a live Keycloak realm.
 
-`make check` also runs `make evals`, which gates the fake checkout investigation
-and remediation matrices, including approval denial/expiry, policy attack,
-ambiguous reconciliation, verification failure, and crash recovery.
+`make check` also runs `make evals`, which gates the fake checkout
+investigation, remediation, and sandbox matrices, including approval
+denial/expiry, policy attack, malicious input, ambiguous reconciliation,
+verification failure, cleanup recovery, and crash recovery.
 
 Run the live PostgreSQL/Redis suite against disposable services:
 
@@ -98,9 +102,25 @@ python -m aegis_agent_platform.remediation --scenario crash-recovery
 
 Also try `expired`, `verification-failure`, and `policy-attack`. The output is a
 bounded event/status summary and explicitly reports fake capability. It uses no
-network or production credential. General sandbox/code execution and arbitrary
-commands do not exist; the only official action adapter is fixed-shape
+network or production credential. Arbitrary production commands do not exist;
+the only official action adapter is fixed-shape
 Kubernetes deployment rollout restart and is not invoked by this tutorial.
+
+## Run the fake-only hardened sandbox
+
+```bash
+python -m aegis_agent_platform.sandbox --scenario approved-analysis
+python -m aegis_agent_platform.sandbox --scenario policy-denied
+python -m aegis_agent_platform.sandbox --scenario prompt-injection
+python -m aegis_agent_platform.sandbox --scenario ambiguous-provisioning
+python -m aegis_agent_platform.sandbox --scenario output-quarantine
+```
+
+Also try `malicious-archive`, `timeout`, `oom`, `cancellation`, and
+`cleanup-recovery`. The fake launches no process and uses no network. Follow the
+event ordering and redacted result, then read the
+[sandbox tutorial and runbook](sandbox-execution.md). The official Kubernetes
+adapter is not invoked and no cluster isolation is claimed.
 
 ## Try the identity, tenancy, and governance slice
 

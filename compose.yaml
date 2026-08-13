@@ -67,6 +67,7 @@ services:
       - ./migrations/0005_evidence_connectors.sql:/docker-entrypoint-initdb.d/38-evidence-connectors.sql:ro
       - ./migrations/0006_specialist_orchestration.sql:/docker-entrypoint-initdb.d/39-specialist-orchestration.sql:ro
       - ./migrations/0007_remediation_approvals.sql:/docker-entrypoint-initdb.d/39z-remediation-approvals.sql:ro
+      - ./migrations/0008_hardened_sandbox_execution.sql:/docker-entrypoint-initdb.d/39zz-hardened-sandbox-execution.sql:ro
       - ./docker/postgres/40-create-app-user.sh:/docker-entrypoint-initdb.d/40-create-app-user.sh:ro
     healthcheck:
       test:

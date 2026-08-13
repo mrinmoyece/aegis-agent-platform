@@ -428,9 +428,12 @@ async def _replace_projection(
             INSERT INTO remediation_action_projection (
                 tenant_id, plan_id, action_id, action_kind, action_digest,
                 target_fingerprint, environment, resource_type, resource_id,
-                risk, blast_radius, status, aggregate_version, updated_at
+                risk, blast_radius, status, aggregate_version, updated_at,
+                sandbox_spec_digest, sandbox_policy_digest, sandbox_purpose,
+                sandbox_risk
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s
             )
             """,
             (
@@ -448,6 +451,10 @@ async def _replace_projection(
                 state.action_statuses[action.action_id].value,
                 state.version,
                 _state_time(state),
+                action.parameters.get("sandbox_spec_digest"),
+                action.parameters.get("sandbox_policy_digest"),
+                action.parameters.get("sandbox_purpose"),
+                action.parameters.get("sandbox_risk"),
             ),
         )
     action_ids = {action.action_id for action in plan.actions}

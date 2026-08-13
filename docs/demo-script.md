@@ -2,7 +2,7 @@
 
 ## Current implementation
 
-Layers 1–8 can demonstrate architecture contracts, local
+Layers 1–9 can demonstrate architecture contracts, local
 infrastructure, tests, and an authenticated control-plane vertical slice for
 identity, tenancy, and governance (JWT verification, deny-by-default
 authorization, policy/quota decisions, redacted audit events), plus live
@@ -17,8 +17,10 @@ Layer 7 CLI runs a fixed ten-node checkout DAG, durable typed artifacts,
 critic/finalization gates, abstention, budget exhaustion, and retry recovery.
 The Layer 8 CLI adds deny-by-default policy, exact two-person approval, fenced
 controlled effects, ambiguous reconciliation, and explicit verification. The
-demos use fake providers/connectors/actions only and cannot update a real
-incident.
+Layer 9 CLI adds approval-bound analysis, malicious input denial, bounded
+resource outcomes, artifact quarantine, ambiguous provisioning, and cleanup
+recovery. The demos use fake providers/connectors/actions/sandboxes only and
+cannot update a real incident.
 The identity/tenancy slice runs against deterministic fixtures rather than a
 live-network Keycloak realm. Those omissions are later-layer acceptance work.
 
@@ -69,15 +71,32 @@ reconciled, and provider acceptance does not establish verification.
 
 ## 15-minute implementation demo
 
-- **0–2:** Give the elevator pitch and state current Layer 8 limitations.
+- **0–2:** Give the elevator pitch and state current Layer 9 limitations.
 - **2–5:** Walk the package map and pure-domain dependency test.
 - **5–8:** Show the fixed DAG, role policies, typed artifacts, and replay fold.
 - **8–10:** Run the PostgreSQL/Redis race tests; show stale-fence rejection and
   explain why Redis, outbox state, and acknowledgements are not truth.
 - **10–12:** Run specialist success; inspect citations, critique, proposal-only
   authority, and deterministic ordering.
-- **12–15:** Run remediation success and ambiguity; show exact approval,
-  intent-before-effect, reconciliation, and fake-only capability.
+- **12–15:** Run remediation and sandbox success/ambiguity; show exact approval,
+  lifecycle intent, reconciliation, fake-only execution, and cleanup.
+
+## Run the Layer 9 fake sandbox demo
+
+```bash
+python -m aegis_agent_platform.sandbox --scenario approved-analysis
+python -m aegis_agent_platform.sandbox --scenario policy-denied
+python -m aegis_agent_platform.sandbox --scenario prompt-injection
+python -m aegis_agent_platform.sandbox --scenario malicious-archive
+python -m aegis_agent_platform.sandbox --scenario ambiguous-provisioning
+python -m aegis_agent_platform.sandbox --scenario output-quarantine
+python -m aegis_agent_platform.sandbox --scenario cleanup-recovery
+```
+
+Show exact Layer 7/8 linkage and digest approval, provisioning/start/cleanup
+intent ordering, stable reconciliation identity, bounded redacted outputs, and
+quarantine. State explicitly that the fake launches no process and that the
+Kubernetes manifest is not evidence of deployed cluster isolation.
 
 ## 30-minute architecture interview demo
 
@@ -100,6 +119,7 @@ reconciled, and provider acceptance does not establish verification.
 - **57–60:** Show event replay, cost/evaluation results, and unresolved gaps.
 
 Investigation, critique, proposal, approval, fake controlled execution,
-reconciliation, and postcondition verification are implemented. Live systems,
-production credentials, operator UI, sandbox/code execution, and incident update
-remain planned, so the full production narrative is not yet claimable.
+reconciliation, postcondition verification, and bounded fake sandbox analysis
+are implemented. Live systems, production credentials/cluster sandbox controls,
+operator UI, memory, and incident update remain planned, so the full production
+narrative is not yet claimable.

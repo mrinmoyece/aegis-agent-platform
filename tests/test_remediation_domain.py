@@ -226,6 +226,63 @@ def test_untrusted_and_prompt_injected_contracts_fail_closed(
         invalid()
 
 
+def test_sandbox_preparation_action_binds_exact_reviewed_scope() -> None:
+    sandbox_target = ActionTarget("aegis", "analysis", "sandbox", "scope-one", "tenant")
+    values: dict[str, JsonValue] = {
+        "sandbox_policy_digest": "a" * 64,
+        "sandbox_purpose": "code_analysis",
+        "sandbox_risk": 3,
+        "sandbox_spec_digest": "b" * 64,
+    }
+
+    def sandbox_action(
+        *,
+        selected_target: ActionTarget = sandbox_target,
+        parameters: dict[str, JsonValue] | None = None,
+    ) -> ActionSpecification:
+        return ActionSpecification(
+            uuid4(),
+            ActionKind.SANDBOX_CHANGE_PREPARATION,
+            selected_target,
+            RiskTier.HIGH,
+            BlastRadius.SINGLE_RESOURCE,
+            (Condition("scope.reviewed", ConditionOperator.EQUALS, True),),
+            (Condition("outputs.scanned", ConditionOperator.EQUALS, True),),
+            (),
+            "sandbox-scope-one",
+            30,
+            RetryPolicy(),
+            ReconciliationPolicy(),
+            True,
+            values if parameters is None else parameters,
+        )
+
+    approved = sandbox_action()
+    assert approved.parameters == values
+    with pytest.raises(ValueError, match="exact reviewed scope"):
+        sandbox_action(parameters={})
+    with pytest.raises(ValueError, match="digests must be strings"):
+        sandbox_action(parameters={**values, "sandbox_spec_digest": 1})
+    with pytest.raises(ValueError, match="lowercase sha256"):
+        sandbox_action(parameters={**values, "sandbox_spec_digest": "invalid"})
+    with pytest.raises(ValueError, match="purpose"):
+        sandbox_action(parameters={**values, "sandbox_purpose": "remote_shell"})
+    with pytest.raises(ValueError, match="risk is invalid"):
+        sandbox_action(parameters={**values, "sandbox_risk": 0})
+    with pytest.raises(ValueError, match="match action risk"):
+        sandbox_action(parameters={**values, "sandbox_risk": 2})
+    with pytest.raises(ValueError, match="Aegis provider"):
+        sandbox_action(
+            selected_target=ActionTarget(
+                "kubernetes",
+                "analysis",
+                "sandbox",
+                "scope-one",
+                "tenant",
+            )
+        )
+
+
 def test_plan_rejects_missing_evidence_and_stale_policy_tenant() -> None:
     item = action()
     with pytest.raises(ValueError, match="evidence"):
