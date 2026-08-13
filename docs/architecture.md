@@ -5,11 +5,10 @@
 Aegis separates decision-making from effects so an interrupted incident
 investigation can be explained, resumed, and audited. Its reference product is
 an enterprise incident-response agent. Layer 1 established package and trust
-boundaries. Layer 2 adds a real, test-suite-verified control-plane vertical
-slice for identity, tenancy, and governance: JWT authentication, deny-by-default
-tenant authorization, tenant policy/quota evaluation, and redacted audit
-evidence. Connectors, durable investigation, and orchestration arrive in later
-layers.
+boundaries. Layer 2 adds identity, tenancy, and governance. Layer 3 adds the
+production PostgreSQL event ledger, inbox/outbox, rebuildable projections,
+durable Layer 2 repositories, forced-RLS evidence, and authorized inspection.
+Connectors, workers, investigation execution, and models arrive later.
 
 ```mermaid
 flowchart LR
@@ -32,10 +31,8 @@ flowchart LR
 ```
 
 Dashed paths are diagnostic, never authoritative. The Dynatrace and GitHub
-packages currently define read ports only. The control plane now authenticates
-callers and enforces tenant policy (see "Identity, tenancy, and governance
-boundary" below); the event store, durable queue, worker runtime, providers,
-and connector adapters remain planned, not implemented.
+packages currently define read ports only. The event store is implemented; the
+durable queue worker, runtime, providers, and connector adapters remain planned.
 
 ## Package boundaries
 
@@ -56,9 +53,9 @@ flowchart TB
   Integrations[integrations] --> Domain
 ```
 
-`domain` imports no other platform package. Infrastructure-facing packages may
-depend inward on domain types. Adapters will live under their owning boundary
-and implement ports defined toward the core.
+`domain` imports no other platform package. Infrastructure-facing packages
+depend inward on domain types. PostgreSQL adapters live under `event_store` and
+`persistence`; database/vendor types never enter domain contracts.
 
 `integrations.dynatrace` and `integrations.github` expose provider-neutral,
 tenant-scoped evidence contracts. Future adapters will translate vendor APIs at
@@ -91,7 +88,7 @@ This is an implemented vertical slice, not a design sketch, proven by a
 committed automated negative-test suite (`tests/test_identity_security.py`,
 `tests/test_policy_security.py`, `tests/test_audit_secrets.py`,
 `tests/test_migrations.py`, and cross-tenant/authentication cases in
-`tests/test_api.py`; 99 tests passing as of this writing). `identity.models`
+`tests/test_api.py`, plus live PostgreSQL integration coverage). `identity.models`
 defines provider-neutral, normalized identifiers (`TenantId`, `UserId`,
 `ServiceIdentity`), a fixed `Role`/`Permission` set, time-bound `RoleBinding`s
 (`assigned_at`/`expires_at`/`revoked_at`), and a `Principal` that must resolve
@@ -148,10 +145,9 @@ consumes — is a durable-runtime concern and remains planned with the Layer
 new ones added. Every `AuditEvent` unconditionally redacts fields whose keys
 look like credentials, tokens, prompts, or secrets, and scrubs inline bearer
 values from any remaining string content, before the frozen dataclass is
-constructed — a caller cannot bypass redaction. `InMemoryAuditStore` is a
-deterministic, tenant-scoped, append-only store used by the current vertical
-slice; a durable Postgres-backed adapter is described by migration
-`0001_identity_governance.sql` (see below) but not yet wired up.
+constructed — a caller cannot bypass redaction. `InMemoryAuditStore` remains a
+test adapter; `PostgresAuditStore` persists the same contract behind forced RLS
+and an immutable-row trigger.
 
 **Secrets (`secrets_boundary`).** Tools and adapters carry a `SecretReference`
 (provider, name, optional version) rather than raw material. `SecretValue`
@@ -165,19 +161,20 @@ planned.
 **Durable persistence.** `migrations/0001_identity_governance.sql` creates
 `tenants`, `identities`, `role_bindings`, `tenant_policies`, `tenant_quotas`,
 and `security_audit_events` tables. Row-level security is enabled and forced
-on every tenant-scoped table, with a policy requiring `tenant_id` to equal the
-session's `aegis.tenant_id` setting, and an append-only trigger rejects
-`UPDATE`/`DELETE` on `security_audit_events`. The control plane's default
-repositories remain the in-memory adapters above; connecting them to this
-schema, and to the event store and worker runtime, is Layer 3/4 work.
+on every tenant-scoped table. `0002_durable_ledger.sql` adds events, aggregate
+heads, inbox/outbox, projection checkpoints/read models, application and
+maintenance roles, per-tenant commit-order locks, grants, and immutable-event
+triggers. PostgreSQL identity,
+tenant, policy, and audit repositories use transaction-local tenant context.
+Live tests exercise RLS and immutability. Deployment must explicitly compose
+these adapters; the demo application does not silently open a database.
 
 **Control-plane API surface.** `ControlPlaneApp` composes the pieces above
 behind a small route set: `/healthz` and `/health/live` for liveness,
 `/readyz` and `/health/ready` for configuration readiness (unauthenticated, as
 in Layer 1), `/v1/me` returning the authenticated principal's tenant and active
-roles, `/v1/tenants/{tenant_id}` returning the tenant record, and
-`/v1/tenants/{tenant_id}/policy` returning the tenant's governance policy and
-quotas. Every `/v1/*` route requires a valid bearer token and a passing
+roles, tenant and policy routes, plus bounded redacted ledger, run-timeline, and
+run-status projection reads. Every `/v1/*` route requires a valid bearer token and a passing
 authorization decision, and both authentication and authorization outcomes are
 recorded as audit events before a response is returned. No other `/v1/*`
 surface should be assumed until it appears in the code and its tests.
@@ -325,6 +322,11 @@ Crashes between steps are expected. Recovery reads the event stream and either
 retries safely or reconciles an ambiguous effect. A trace or queue message
 cannot replace the committed intent.
 
+Layer 3 implements the ledger and intent/result contracts, but no external
+effect caller. Events and outbox work commit atomically; inbox identity
+deduplicates delivery. Outbox leases and dead-letter status are delivery
+projections, not truth. See `durable-execution.md` and ADR 0010.
+
 ## Binding invariants
 
 1. **Event log as truth:** projections and caches are disposable views.
@@ -351,18 +353,17 @@ until `JwtVerifier` checks its signature, issuer, audience, and expiry; a
 verified token is still untrusted as tenant/role authority until
 `IdentityDirectory` resolves it against an authoritative local record.
 
-PostgreSQL will own the event log and durable projections; migration
-`0001_identity_governance.sql` already defines its tenant, identity,
-role-binding, policy, quota, and append-only audit tables with row-level
-security, ahead of the durable event store landing in Layer 3. Redis will be
+PostgreSQL owns the implemented event log and durable projections. Migrations
+`0001`/`0002` define identity, governance, ledger, delivery, and read models
+with forced row-level security. Redis will be
 used only where data loss cannot violate correctness. OpenTelemetry carries
 correlation metadata with tenant-safe cardinality; sensitive content is
 excluded by default, and audit-event redaction follows the same principle.
 
 ## Local topology
 
-Compose provides pgvector-enabled PostgreSQL (now initialized with the
-identity/governance migration), Redis, Keycloak, an OpenTelemetry Collector,
+Compose provides pgvector-enabled PostgreSQL (initialized with both forward
+migrations), Redis, Keycloak, an OpenTelemetry Collector,
 Prometheus, Grafana, and the control-plane API. Ports bind to loopback. The API
 runs as a non-root user with Linux capabilities dropped. The imported Keycloak
 realm has no users and self-registration disabled; it is a config-shape

@@ -19,6 +19,7 @@ classifiers = [
 ]
 dependencies = [
   "cryptography>=45,<49",
+  "psycopg[binary]>=3.2.9,<4",
   "pyjwt>=2.10,<3",
   "uvicorn>=0.35,<1",
 ]
@@ -67,10 +68,17 @@ pretty = true
 [tool.pytest.ini_options]
 addopts = "--strict-config --strict-markers -q"
 testpaths = ["tests"]
+markers = [
+  "integration: requires a live PostgreSQL test database",
+]
 
 [tool.coverage.run]
 branch = true
 source = ["aegis_agent_platform"]
+omit = [
+  "src/aegis_agent_platform/event_store/postgres.py",
+  "src/aegis_agent_platform/persistence/postgres.py",
+]
 
 [tool.coverage.report]
 fail_under = 90

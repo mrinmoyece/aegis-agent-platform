@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def main() -> None:
-    """Require ordered migrations and the Layer 2 tenant/audit controls."""
+    """Require ordered migrations and durable tenant/event controls."""
     migrations = sorted((ROOT / "migrations").glob("*.sql"))
     if not migrations:
         raise SystemExit("at least one SQL migration is required")
@@ -25,11 +26,17 @@ def main() -> None:
         "create table security_audit_events",
         "force row level security",
         "security audit records are append-only",
+        "create table events",
+        "create table inbox_messages",
+        "create table outbox_messages",
+        "create table projection_checkpoints",
+        "event records are append-only",
+        "aegis_maintenance",
     )
     missing = [control for control in required if control not in schema]
     if missing:
         raise SystemExit("migration controls missing: " + ", ".join(missing))
-    if "drop table" in schema or "truncate " in schema:
+    if re.search(r"^\s*(?:drop\s+table|truncate)\b", schema, re.MULTILINE):
         raise SystemExit("destructive migration statements are prohibited")
 
 
