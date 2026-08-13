@@ -124,6 +124,19 @@ def main() -> None:
         realm = json.load(handle)
     if realm["realm"] != "aegis" or realm.get("registrationAllowed") is not False:
         raise SystemExit("local Keycloak realm must disable self-registration")
+    client = next(
+        (
+            item
+            for item in realm["clients"]
+            if item.get("clientId") == "aegis-control-plane"
+        ),
+        None,
+    )
+    if client is None or client.get("directAccessGrantsEnabled") is not False:
+        raise SystemExit("Keycloak control-plane client must disable password grants")
+    mapper_names = {mapper.get("name") for mapper in client.get("protocolMappers", [])}
+    if not {"aegis-audience", "tenant-id"} <= mapper_names:
+        raise SystemExit("Keycloak client requires audience and tenant claim mappers")
 
 
 if __name__ == "__main__":

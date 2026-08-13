@@ -2,10 +2,14 @@
 
 ## Current implementation
 
-Layer 1 defines internal Python contracts for events, queues, agents, artifacts,
-providers, integrations, tools, policy, identity, and tenancy. It does not
-implement memory storage, MCP clients/servers, or A2A endpoints. PostgreSQL with
-pgvector is present only in the local Compose scaffold.
+Layer 1 defined internal Python contracts for events, queues, agents, artifacts,
+providers, integrations, tools, and policy. Layer 2 turns the identity and
+tenancy contracts into a real vertical slice — see `architecture.md`'s
+"Identity, tenancy, and governance boundary" section. Memory storage, MCP
+clients/servers, and A2A endpoints remain unimplemented. PostgreSQL with
+pgvector is present in the local Compose scaffold and now also initializes the
+identity/governance schema; the durable event store and memory retrieval
+integration remain planned.
 
 ## Three-tier agent memory
 

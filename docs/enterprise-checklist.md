@@ -31,11 +31,23 @@ Status meanings:
 | Staff interview question bank with answer outlines | Implemented | `docs/interview-question-bank.md` |
 | Hands-on and failure-injection lab plan | Implemented | `docs/labs.md` |
 | Terminology and production-gap register | Implemented | glossary and limitations docs |
-| Deep topic guides linked to code and tests | Planned | Per-layer curriculum gates |
+| Deep topic guides linked to code and tests | Implemented | `docs/identity-tenancy.md` |
 | Detailed enterprise delivery blueprint | Implemented | `docs/enterprise-implementation-plan.md` |
-| OIDC token verification and key rotation | Planned | Layer 2 |
-| Tenant membership authorization | Planned | Layer 2 |
-| Tenant-isolated persistence and negative tests | Planned | Layer 2 |
+| OIDC/JWT signature, issuer, audience, and expiry verification | Implemented | `identity.authentication.JwtVerifier`, deterministic RSA fixtures |
+| Keycloak-compatible JWKS configuration and bounded refresh | Implemented | `identity.authentication.RemoteJwksProvider`, rotation fixture |
+| Authoritative identity resolution (no client-asserted identity) | Implemented | `identity.authentication.AuthenticationService`, `IdentityDirectory` |
+| Deny-by-default tenant/role authorization | Implemented | `identity.authorization.AuthorizationService` |
+| Tenant governance policy and quota decisioning | Implemented | `policy.PolicyEvaluator` (pure; usage accounting planned) |
+| Redacted, additive, append-only security audit events | Implemented | `audit.AuditEvent`, `InMemoryAuditStore` |
+| Secret-reference abstraction (no raw material in logs/telemetry) | Implemented | `secrets_boundary.SecretReference`, `SecretValue` |
+| Authenticated `/v1/me`, tenant, and policy control-plane routes | Implemented | `control_plane.api.ControlPlaneApp` |
+| Live Keycloak network round-trip and key-rotation drills | Planned | Layer 2, deployment-dependent |
+| Cross-tenant, expired-token, revoked-role, and quota/policy negative-test suite | Implemented | `tests/test_identity_security.py`, `tests/test_policy_security.py`, `tests/test_audit_secrets.py`, `tests/test_api.py` |
+| EP-01 OIDC key-rotation and emergency-revocation drill | Planned | EP-01 operational exit evidence |
+| EP-02 durable Postgres RLS enforcement proven against a live database | Planned | EP-02 database exit evidence |
+| Durable Postgres-backed identity/tenant/policy/audit adapters | Planned | Layer 3–4; schema in `migrations/0001_identity_governance.sql` |
+| Vault-backed secret broker with rotation | Planned | Layer 5 |
+| Quota usage accounting from authoritative runtime state | Planned | Layer 3–4 |
 | Append-only event store | Planned | Layer 3 |
 | Additive event upcasting | Planned | Layer 3 |
 | Deterministic run state machine | Planned | Layer 3 |

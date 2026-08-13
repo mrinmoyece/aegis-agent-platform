@@ -8,6 +8,7 @@ from uuid import uuid4
 import pytest
 
 from aegis_agent_platform.domain import EventEnvelope, JsonValue
+from aegis_agent_platform.identity import TenantId
 from aegis_agent_platform.tenancy import TenantContext
 
 
@@ -72,9 +73,11 @@ def test_event_envelope_rejects_invalid_universal_fields(
 
 
 def test_tenant_context_is_explicit() -> None:
+    with pytest.raises(ValueError, match="tenant_id"):
+        TenantContext("")  # type: ignore[arg-type]
     for tenant_id in ("", "   "):
         with pytest.raises(ValueError, match="tenant_id"):
-            TenantContext(tenant_id)
+            TenantId(tenant_id)
 
 
 class NaiveTimezone(tzinfo):

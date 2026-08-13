@@ -13,10 +13,12 @@ The curriculum teaches the platform decisions behind that story: durable
 execution, multi-tenant authorization, evidence provenance, bounded multi-agent
 coordination, safe effects, evaluation, and operations.
 
-> **Current status:** Layer 1 implements only package contracts, health and
-> configuration checks, local infrastructure, tests, and governance. Curriculum
-> modules labeled Planned describe future acceptance evidence, not working
-> features.
+> **Current status:** Layer 1 provides package contracts, health and
+> configuration checks, local infrastructure, tests, and governance. Layer 2
+> adds a real identity/tenancy/governance vertical slice (JWT verification,
+> deny-by-default authorization, policy/quota evaluation, redacted audit
+> events, secret references). Curriculum modules labeled Planned describe
+> future acceptance evidence, not working features.
 
 The curriculum is backed by the concrete delivery slices and acceptance
 evidence in `enterprise-implementation-plan.md`; the roadmap is not merely a
@@ -38,7 +40,7 @@ Implemented only when its document links executable code and tests.
 | Leases, fencing, and idempotency (`reliable-work.md`) | Explain at-least-once delivery, fencing, reconciliation, and why exactly-once is not claimed | 4 | Planned; ADR 0003 and queue port |
 | Model/provider routing and cost governance (`provider-routing.md`) | Normalize providers, route by policy, meter cost, enforce budgets, and handle uncertain outcomes | 4 | Planned; provider types only |
 | Tool security and sandboxing (`safe-tools.md`) | Apply policy, approvals, scoped capabilities, intent events, isolation, egress, and quotas | 5 | Planned; policy/sandbox boundaries |
-| Identity, tenancy, and RBAC (`identity-tenancy.md`) | Separate authentication from tenant authorization and prove isolation | 2 | Planned; ADR 0004 and context types |
+| Identity, tenancy, and RBAC (`identity-tenancy.md`) | Separate authentication from tenant authorization and prove isolation | 2 | Implemented with a committed negative-test suite (`tests/test_identity_security.py`, `tests/test_policy_security.py`, `tests/test_audit_secrets.py`); durable Postgres wiring and live-Keycloak drills planned |
 | Memory, RAG, and compaction (`memory-and-rag.md`, `protocols.md`) | Design working, episodic, and semantic tiers with provenance, PII controls, retention, relevance/recency, and faithful compaction | 6 | Protocol documented; storage planned |
 | Connector design (`connector-design.md`) | Translate Dynatrace, GitHub, and Kubernetes APIs into stable evidence contracts | 4 | Dynatrace/GitHub ports scaffolded |
 | Agent and tool protocols (`protocols.md`) | Distinguish internal correctness ports, MCP adapters, and external A2A interoperability | 6–8 | Position documented; MCP/A2A planned |
@@ -49,9 +51,9 @@ Implemented only when its document links executable code and tests.
 | Scaling and multi-region (`scaling-and-multi-region.md`) | Estimate capacity, partition tenants, preserve ordering, and choose recovery objectives | 8 | Planned |
 | Privacy, retention, and compliance (`privacy-and-compliance.md`) | Classify data, minimize collection, enforce deletion/legal hold, and produce evidence | 6–8 | Planned |
 | Deployment and supply chain (`deployment-and-supply-chain.md`) | Build least-privilege releases with SBOM, provenance, signing, promotion, and rollback | 8 | CI/container baseline only |
-| Alternatives and ADR index (`adr/README.md`) | Compare orchestration, queues, identity, sandbox, provider, and evaluation choices | 1–8 | Planned index; eight ADRs exist |
+| Alternatives and ADR index (`adr/README.md`) | Compare orchestration, queues, identity, sandbox, provider, and evaluation choices | 1–8 | Planned index; nine ADRs exist |
 | Interview question bank (`interview-question-bank.md`) | Communicate tradeoffs and defend design under follow-up pressure | 1–8 | Foundation edition documented |
-| Hands-on labs (`labs.md`) | Turn each invariant into executable evidence and inject realistic failures | 1–8 | Layer 1 lab runnable |
+| Hands-on labs (`labs.md`) | Turn each invariant into executable evidence and inject realistic failures | 1–8 | Layer 1 and Layer 2 labs runnable |
 | Terminology (`glossary.md`) | Use durability, evidence, tenancy, evaluation, and operations terms precisely | 1 | Documented |
 | Limitations and production gaps (`limitations.md`) | State what is absent, unsafe, local-only, or not yet proven | Every layer | Documented and maintained |
 
