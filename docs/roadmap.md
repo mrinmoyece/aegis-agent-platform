@@ -1,6 +1,9 @@
 # Layered roadmap
 
 Each layer must pass its gate before the next layer claims completion.
+The detailed delivery design is in `enterprise-implementation-plan.md`, including
+16 reviewable implementation slices, storage and security contracts, failure
+tests, operational evidence, and production-readiness review criteria.
 The complete document curriculum, interview track, demo scripts, and labs are
 indexed in `curriculum.md`. Topic documents may be planned before they exist,
 but must link code and tests before their status changes to Implemented.

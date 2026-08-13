@@ -37,4 +37,6 @@ compliance framework, meet an SLO, or support multi-region recovery.
 `roadmap.md` defines the acceptance gate for each layer and
 `enterprise-checklist.md` tracks capability status. A gap moves to Implemented
 only with code, tests, and operational evidence linked from its curriculum
-document.
+document. `enterprise-implementation-plan.md` specifies the implementation
+sequence, data and security contracts, failure tests, SLO hypotheses, deployment
+evidence, and production-readiness review needed to close every gap.

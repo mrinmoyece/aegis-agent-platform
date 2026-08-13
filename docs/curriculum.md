@@ -18,6 +18,10 @@ coordination, safe effects, evaluation, and operations.
 > modules labeled Planned describe future acceptance evidence, not working
 > features.
 
+The curriculum is backed by the concrete delivery slices and acceptance
+evidence in `enterprise-implementation-plan.md`; the roadmap is not merely a
+topic list.
+
 ## How to study
 
 For each module, explain the invariant, trace the relevant contract, identify

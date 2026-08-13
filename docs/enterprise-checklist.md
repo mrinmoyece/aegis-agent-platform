@@ -32,6 +32,7 @@ Status meanings:
 | Hands-on and failure-injection lab plan | Implemented | `docs/labs.md` |
 | Terminology and production-gap register | Implemented | glossary and limitations docs |
 | Deep topic guides linked to code and tests | Planned | Per-layer curriculum gates |
+| Detailed enterprise delivery blueprint | Implemented | `docs/enterprise-implementation-plan.md` |
 | OIDC token verification and key rotation | Planned | Layer 2 |
 | Tenant membership authorization | Planned | Layer 2 |
 | Tenant-isolated persistence and negative tests | Planned | Layer 2 |
@@ -62,4 +63,5 @@ Status meanings:
 | A2A conformance, tenant, and malicious-peer tests | Planned | Layer 8 |
 
 Changing a row to Implemented requires tests or operational evidence in the
-same pull request.
+same pull request. Planned capabilities map to concrete EP-01 through EP-16
+delivery slices and exit gates in the enterprise implementation blueprint.

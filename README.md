@@ -63,7 +63,11 @@ does not execute the workflow.
 
 Each layer has an acceptance gate in [the roadmap](docs/roadmap.md). The
 [enterprise checklist](docs/enterprise-checklist.md) distinguishes implemented
-capabilities from planned work.
+capabilities from planned work. The
+[enterprise implementation blueprint](docs/enterprise-implementation-plan.md)
+defines the concrete contracts, dependencies, failure tests, rollout slices,
+SLO hypotheses, and production-readiness evidence required to close every
+current gap.
 
 ## Quick start
 

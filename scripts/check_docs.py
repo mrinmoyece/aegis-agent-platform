@@ -23,6 +23,7 @@ REQUIRED_DOCUMENTS = {
     ROOT / "docs" / "glossary.md",
     ROOT / "docs" / "limitations.md",
     ROOT / "docs" / "protocols.md",
+    ROOT / "docs" / "enterprise-implementation-plan.md",
 }
 LINK_PATTERN = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
 
