@@ -41,11 +41,12 @@ delivery, durable outcomes, and reconciliation for ambiguous completion.
 the task. Time alone does not revoke authority. Authoritative writes reject the
 older monotonic fence.
 
-### What happens if the worker crashes after rollback succeeds?
+### What happens if the worker crashes after a controlled action succeeds?
 
 **Answer outline:** replay finds a committed intent without a completion.
 Reconcile using the idempotency key and target state; do not blindly infer
-failure or issue an unkeyed second rollback.
+failure or issue an unkeyed second action. Layer 8 redelivery detects the
+in-flight attempt and reconciles before retry.
 
 ## Security and tenancy
 
@@ -55,11 +56,13 @@ failure or issue an unkeyed second rollback.
 a selected tenant. Bind principal, tenant, action, and resource explicitly and
 enforce again at persistence and tool boundaries.
 
-### How do you stop prompt injection from executing rollback?
+### How do you stop prompt injection from executing remediation?
 
 **Answer outline:** treat all content as untrusted. The model cannot grant
-capabilities. A typed proposal passes runtime policy, exact scoped approval,
-intent persistence, controlled tool validation, and sandbox/egress controls.
+capabilities. A typed immutable proposal passes deny-by-default runtime policy,
+exact human approval, current-fence checks, intent persistence, fixed-shape
+adapter validation, reconciliation, and explicit verification. Layer 8 exposes
+no general sandbox, arbitrary command, or model-selected credential.
 
 ### How can specialists communicate safely?
 
@@ -88,10 +91,12 @@ unresolved questions. A fluent model response cannot override this runtime gate.
 ### Why is a remediation recommendation not permission to remediate?
 
 **Answer outline:** Layer 7's artifact constructor requires `proposal_only=true`
-and binds the recommendation to an upstream hypothesis. No write-capable tool
-exists. A later layer must authorize an exact tenant/action/version/expiry,
-persist effect intent, invoke a controlled idempotent tool, record/reconcile the
-outcome, and execute a separate verification plan.
+and binds the recommendation to an upstream hypothesis. Layer 8 is a separate
+boundary: authenticated humans authorize the exact tenant, immutable
+plan/action/policy digests, target, risk, quorum, and expiry. The executor
+rechecks that scope and its PostgreSQL fence before intent, invokes only a
+controlled idempotent adapter, reconciles ambiguity, and records fresh
+verification. Agents cannot approve their own proposals.
 
 ## Identity and tenancy deep dive
 

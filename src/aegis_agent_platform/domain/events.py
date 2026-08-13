@@ -276,6 +276,102 @@ DomainEventType.COORDINATOR_DECISION_RECORDED = DomainEventType._define(
 DomainEventType.INVESTIGATION_FINALIZED = DomainEventType._define(
     "investigation.finalized.v1"
 )
+DomainEventType.REMEDIATION_PROPOSED = DomainEventType._define(
+    "remediation.proposed.v1"
+)
+DomainEventType.REMEDIATION_PLAN_REVISED = DomainEventType._define(
+    "remediation.plan_revised.v1"
+)
+DomainEventType.REMEDIATION_POLICY_EVALUATED = DomainEventType._define(
+    "remediation.policy_evaluated.v1"
+)
+DomainEventType.REMEDIATION_APPROVAL_REQUESTED = DomainEventType._define(
+    "remediation.approval_requested.v1"
+)
+DomainEventType.REMEDIATION_APPROVAL_GRANTED = DomainEventType._define(
+    "remediation.approval_granted.v1"
+)
+DomainEventType.REMEDIATION_APPROVAL_DENIED = DomainEventType._define(
+    "remediation.approval_denied.v1"
+)
+DomainEventType.REMEDIATION_APPROVAL_EXPIRED = DomainEventType._define(
+    "remediation.approval_expired.v1"
+)
+DomainEventType.REMEDIATION_APPROVAL_REVOKED = DomainEventType._define(
+    "remediation.approval_revoked.v1"
+)
+DomainEventType.ACTION_DISPATCH_CLAIMED = DomainEventType._define(
+    "action.dispatch_claimed.v1"
+)
+DomainEventType.ACTION_PREFLIGHT_REQUESTED = DomainEventType._define(
+    "action.preflight_requested.v1"
+)
+DomainEventType.ACTION_PREFLIGHT_COMPLETED = DomainEventType._define(
+    "action.preflight_completed.v1"
+)
+DomainEventType.ACTION_PREFLIGHT_FAILED = DomainEventType._define(
+    "action.preflight_failed.v1"
+)
+DomainEventType.ACTION_DRY_RUN_REQUESTED = DomainEventType._define(
+    "action.dry_run_requested.v1"
+)
+DomainEventType.ACTION_DRY_RUN_COMPLETED = DomainEventType._define(
+    "action.dry_run_completed.v1"
+)
+DomainEventType.ACTION_DRY_RUN_FAILED = DomainEventType._define(
+    "action.dry_run_failed.v1"
+)
+DomainEventType.ACTION_EXECUTION_REQUESTED = DomainEventType._define(
+    "action.execution_requested.v1"
+)
+DomainEventType.ACTION_EXECUTION_STARTED = DomainEventType._define(
+    "action.execution_started.v1"
+)
+DomainEventType.ACTION_EXECUTION_SUCCEEDED = DomainEventType._define(
+    "action.execution_succeeded.v1"
+)
+DomainEventType.ACTION_EXECUTION_FAILED = DomainEventType._define(
+    "action.execution_failed.v1"
+)
+DomainEventType.ACTION_EXECUTION_AMBIGUOUS = DomainEventType._define(
+    "action.execution_ambiguous.v1"
+)
+DomainEventType.ACTION_RECONCILIATION_REQUESTED = DomainEventType._define(
+    "action.reconciliation_requested.v1"
+)
+DomainEventType.ACTION_RECONCILIATION_COMPLETED = DomainEventType._define(
+    "action.reconciliation_completed.v1"
+)
+DomainEventType.ACTION_ROLLBACK_REQUESTED = DomainEventType._define(
+    "action.rollback_requested.v1"
+)
+DomainEventType.ACTION_ROLLBACK_COMPLETED = DomainEventType._define(
+    "action.rollback_completed.v1"
+)
+DomainEventType.ACTION_ROLLBACK_FAILED = DomainEventType._define(
+    "action.rollback_failed.v1"
+)
+DomainEventType.ACTION_COMPENSATION_REQUESTED = DomainEventType._define(
+    "action.compensation_requested.v1"
+)
+DomainEventType.ACTION_COMPENSATION_COMPLETED = DomainEventType._define(
+    "action.compensation_completed.v1"
+)
+DomainEventType.ACTION_COMPENSATION_FAILED = DomainEventType._define(
+    "action.compensation_failed.v1"
+)
+DomainEventType.ACTION_CANCELLATION_REQUESTED = DomainEventType._define(
+    "action.cancellation_requested.v1"
+)
+DomainEventType.ACTION_CANCELLED = DomainEventType._define(
+    "action.cancelled.v1"
+)
+DomainEventType.ACTION_VERIFICATION_REQUESTED = DomainEventType._define(
+    "action.verification_requested.v1"
+)
+DomainEventType.ACTION_VERIFICATION_COMPLETED = DomainEventType._define(
+    "action.verification_completed.v1"
+)
 
 
 @dataclass(frozen=True, slots=True)

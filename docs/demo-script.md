@@ -2,7 +2,7 @@
 
 ## Current implementation
 
-Layers 1–7 can demonstrate architecture contracts, local
+Layers 1–8 can demonstrate architecture contracts, local
 infrastructure, tests, and an authenticated control-plane vertical slice for
 identity, tenancy, and governance (JWT verification, deny-by-default
 authorization, policy/quota decisions, redacted audit events), plus live
@@ -15,8 +15,10 @@ cost, and authorized model/usage/health views. Layer 6 adds mocked connector
 queries, redaction/dedup/quarantine, citations, and deterministic timelines. The
 Layer 7 CLI runs a fixed ten-node checkout DAG, durable typed artifacts,
 critic/finalization gates, abstention, budget exhaustion, and retry recovery.
-The demo uses fake providers/connectors only and cannot approve actions, roll
-back a deployment, verify a post-action recovery, or update a real incident.
+The Layer 8 CLI adds deny-by-default policy, exact two-person approval, fenced
+controlled effects, ambiguous reconciliation, and explicit verification. The
+demos use fake providers/connectors/actions only and cannot update a real
+incident.
 The identity/tenancy slice runs against deterministic fixtures rather than a
 live-network Keycloak realm. Those omissions are later-layer acceptance work.
 
@@ -29,10 +31,10 @@ live-network Keycloak realm. Those omissions are later-layer acceptance work.
    read-only evidence in parallel.
 5. A hypothesis links a specific deployed change to the failing trace path.
 6. The reviewer challenges timing, topology, counter-evidence, and confidence.
-7. The remediation planner proposes an exact rollback and expected recovery.
+7. The remediation planner proposes an exact controlled action and expected recovery.
 8. An operator approves that proposal for that tenant, incident, version, and
    expiry.
-9. The runtime records intent, invokes the controlled rollback idempotently, and
+9. The runtime records intent, invokes the controlled action idempotently, and
    records the outcome.
 10. The verification agent checks errors, latency, traces, and topology over a
     defined window, then the incident record is updated.
@@ -50,17 +52,32 @@ The JSON explicitly reports `uses_live_network: false` and
 `executes_remediation: false`. Inspect the redacted artifact list and terminal
 status; do not present the fixture conclusion as a live diagnosis.
 
+## Run the Layer 8 fake controlled-action demo
+
+```bash
+python -m aegis_agent_platform.remediation --scenario approved-success
+python -m aegis_agent_platform.remediation --scenario denied
+python -m aegis_agent_platform.remediation --scenario ambiguous-reconciled
+python -m aegis_agent_platform.remediation --scenario verification-failure
+python -m aegis_agent_platform.remediation --scenario policy-attack
+python -m aegis_agent_platform.remediation --scenario crash-recovery
+```
+
+This performs only deterministic fake effects. Show that two distinct approvers
+bind the exact digest/target, intent precedes effect, ambiguous completion is
+reconciled, and provider acceptance does not establish verification.
+
 ## 15-minute implementation demo
 
-- **0–2:** Give the elevator pitch and state current Layer 7 limitations.
+- **0–2:** Give the elevator pitch and state current Layer 8 limitations.
 - **2–5:** Walk the package map and pure-domain dependency test.
 - **5–8:** Show the fixed DAG, role policies, typed artifacts, and replay fold.
 - **8–10:** Run the PostgreSQL/Redis race tests; show stale-fence rejection and
   explain why Redis, outbox state, and acknowledgements are not truth.
-- **10–13:** Run success then contradiction; inspect cited hypothesis, critic,
-  safe abstention, proposal-only remediation, and deterministic ordering.
-- **13–15:** Run recovery and budget exhaustion; show durable retry/budget
-  outcomes and that no network or effect adapter was invoked.
+- **10–12:** Run specialist success; inspect citations, critique, proposal-only
+  authority, and deterministic ordering.
+- **12–15:** Run remediation success and ambiguity; show exact approval,
+  intent-before-effect, reconciliation, and fake-only capability.
 
 ## 30-minute architecture interview demo
 
@@ -82,6 +99,7 @@ status; do not present the fixture conclusion as a live diagnosis.
 - **52–57:** Verify recovery over multiple signals and update the incident.
 - **57–60:** Show event replay, cost/evaluation results, and unresolved gaps.
 
-The investigation/critique/proposal portion is implemented with fakes. Approval,
-rollback execution, post-action verification, live systems, and incident update
-remain planned, so the full 60-minute production narrative is not yet claimable.
+Investigation, critique, proposal, approval, fake controlled execution,
+reconciliation, and postcondition verification are implemented. Live systems,
+production credentials, operator UI, sandbox/code execution, and incident update
+remain planned, so the full production narrative is not yet claimable.
