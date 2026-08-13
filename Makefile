@@ -26,7 +26,7 @@ test: ## Run deterministic unit tests with coverage
 	$(PYTHON) -m pytest --cov --cov-report=term-missing
 
 evals: ## Run deterministic behavioral evaluations without live providers
-	$(PYTHON) -m pytest tests/test_gateway_eval.py tests/test_agent_evals.py
+	$(PYTHON) -m pytest tests/test_gateway_eval.py tests/test_agent_evals.py tests/test_remediation_evals.py
 
 postgres-test: ## Run live PostgreSQL integration tests (requires AEGIS_TEST_DATABASE_URL)
 	$(PYTHON) -m pytest tests/integration

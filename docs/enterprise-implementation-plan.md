@@ -43,8 +43,8 @@ flowchart LR
   L5[Model gateway]
   L6[Evidence connectors]
   L7[Specialist DAG]
-  L8[Approvals, tools, sandbox]
-  L9[Memory and retrieval]
+  L8[Exact approvals and controlled effects]
+  L9[Sandbox, memory, and retrieval]
   L10[Evals and observability]
   L11[Enterprise operations and protocols]
   L1 --> L2 --> L3 --> L4 --> L5 --> L6 --> L7 --> L8 --> L9 --> L10 --> L11
@@ -380,6 +380,15 @@ certification.
 
 ## EP-10–EP-11: Remediation, approval, tools, and sandbox
 
+**Layer 8 delivery status (2026-08): EP-10 implemented; EP-11 planned.**
+Immutable plans and exact policy snapshots, authenticated expiring approvals,
+separation of duties, quorum, fenced intent-before-effect execution,
+at-least-once reconciliation, and explicit postcondition verification are
+implemented. The deterministic fake and fixed-shape Kubernetes deployment
+rollout-restart adapter are the only action adapters. General sandbox/code
+execution, arbitrary commands, capability credential brokering, and production
+connectivity remain planned.
+
 ### Approval model
 
 - A proposal contains tenant, incident, hypothesis version, exact action,
@@ -388,20 +397,23 @@ certification.
 - Approval is an authenticated ledger event bound to that proposal version.
 - Editing a proposal invalidates prior approval. Approval cannot be replayed
   across tenant, incident, target, action, environment, or expiry.
-- Break-glass requires stronger authentication, reason, short duration,
-  additional audit, notification, and retrospective review.
+- Break-glass remains planned and will require stronger authentication, reason,
+  short duration, additional audit, notification, and retrospective review.
 
 ### Controlled effects
 
-- Validate typed tool input and target allowlists after approval.
-- Broker short-lived, action-scoped credentials just in time; never expose
-  standing credentials to a model or sandbox.
-- Commit intent, execute with idempotency/fence, record raw adapter result
-  safely, then reconcile and verify target state.
-- Initial demo action is a bounded deployment rollback. Arbitrary shell access
-  is not an acceptable remediation API.
+- Validate bounded typed action input, exact target identity, tenant policy,
+  current plan/policy digest, approval, cancellation, preconditions, and lease
+  fence immediately before effect intent.
+- Commit intent, execute with a stable tenant idempotency key, record a bounded
+  provider-neutral result, then reconcile ambiguous outcomes and verify explicit
+  postconditions with fresh evidence.
+- The initial official action is deployment rollout restart, not rollback.
+  Arbitrary shell access and arbitrary patches are not remediation APIs.
+- Short-lived action-scoped credential brokering remains planned; standing
+  credentials must never be exposed to a model or sandbox.
 
-### Sandbox
+### Sandbox (planned)
 
 - Run untrusted code outside the worker identity using a replaceable isolation
   backend.
@@ -413,10 +425,12 @@ certification.
 
 ### Exit gate
 
-Prompt/runbook injection, malformed proposal, approval replay, stale approval,
-target substitution, duplicate delivery, sandbox escape, forbidden egress,
-resource exhaustion, and secret access all fail closed. A successful tool call
-does not close the incident until independent verification passes.
+EP-10 tests make prompt/runbook injection, malformed proposal, forged/replayed
+decision, stale approval/policy/role/fence, target substitution, duplicate
+delivery, ambiguous outcome, and adapter failure explicit and fail closed. A
+successful action API response does not establish recovery; fresh verification
+must pass. Sandbox escape, forbidden egress, resource exhaustion, and sandbox
+secret-access tests remain EP-11 exit evidence.
 
 ## EP-12: Three-tier memory and retrieval
 

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
-from datetime import UTC, datetime
+from collections.abc import Mapping
+from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
@@ -18,7 +18,6 @@ from aegis_agent_platform.identity import (
     Permission,
     Principal,
 )
-from aegis_agent_platform.observability.context import PropagationContext
 from aegis_agent_platform.remediation.approvals import (
     ApprovalDecision,
     ProposalDecision,
@@ -62,14 +61,12 @@ class RemediationOperations:
         *,
         quotas: ActionQuotaReader | None = None,
         authorization: AuthorizationService | None = None,
-        clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._repository = repository
         self._approvals = approvals
         self._policies = policies
         self._quotas = quotas or repository
         self._authorization = authorization or AuthorizationService()
-        self._clock = clock or (lambda: datetime.now(UTC))
 
     async def propose(
         self,
@@ -78,10 +75,9 @@ class RemediationOperations:
         plan: RemediationPlan,
         *,
         idempotency_key: str,
-        propagation: PropagationContext | None = None,
     ) -> ProposalDecision:
         policy = self._policy(context)
-        usage = await self._quotas.quota_usage(context, at=self._clock())
+        usage = await self._quotas.quota_usage(context, at=plan.created_at)
         return await self._approvals.propose(
             principal,
             context,
@@ -89,7 +85,6 @@ class RemediationOperations:
             policy,
             usage,
             idempotency_key=idempotency_key,
-            propagation=propagation,
         )
 
     async def decide(

@@ -79,7 +79,34 @@ automated negative-test suite: `tests/test_identity_security.py`,
    cursor pagination, and maintenance-role projection rebuild.
 
 This lab does not call a live connector/model, approve or execute remediation,
-verify a post-action recovery, or prove production deployment behavior.
+verify a post-action recovery, or prove production deployment behavior. Layer 8
+provides those controls through a separate runtime.
+
+## Layer 8 lab: approval-gated controlled remediation
+
+**Implemented with deterministic fakes.**
+
+1. Run `python -m aegis_agent_platform.remediation --scenario approved-success`;
+   inspect exact plan/action/policy digests, two distinct approvals, durable
+   action intent, and fresh-evidence verification.
+2. Run `denied`, `expired`, and `policy-attack`; confirm no action intent or
+   adapter call is created.
+3. Run `ambiguous-reconciled`; confirm reconciliation precedes any retry and the
+   platform makes no exactly-once claim.
+4. Run `verification-failure` and `crash-recovery`; confirm provider acceptance
+   does not establish recovery and a lost outcome is reconciled before redelivery.
+5. Run `make evals` and the remediation unit suites to inspect SoD/quorum races,
+   stale digest/policy/role/revocation/fence, target substitution, cancellation,
+   timeout, adapter containment, duplicate delivery, rollback/compensation, and
+   hostile/oversized input tests.
+6. With a disposable `AEGIS_TEST_DATABASE_URL`, run
+   `tests/integration/test_remediation_postgres.py` for forced RLS, approval
+   races, immutable decisions, effect claims, stale fencing, and projection
+   rebuild.
+
+This lab uses no live action endpoint or credential. It does not prove
+production Kubernetes RBAC/identity, egress, API compatibility, read-after-write
+semantics, sandbox isolation, HA/DR, or operator escalation.
 
 ## Planned labs by layer
 
@@ -88,11 +115,9 @@ verify a post-action recovery, or prove production deployment behavior.
 | 2 | Live-database and live-Keycloak drill | Run the row-level-security policies and the append-only trigger against a running Postgres instance, and exercise `RemoteJwksProvider` against a real Keycloak realm with rotated keys — both are currently only asserted statically or against mocked transports |
 | 3 | Schema evolution | Replay old checkout fixtures through additive upcasters |
 | 4 | Connector ambiguity | Rate-limit and truncate Dynatrace/GitHub responses; preserve provenance and partial status |
-| 5 | Approval binding | Replay approval against another proposal, tenant, and expiry; deny all |
-| 5 | Tool idempotency | Crash after accepted rollback; reconcile without duplicate effect |
-| 5 | Sandbox escape | Attempt filesystem, process, privilege, and egress violations |
+| 9 | Sandbox escape | Attempt filesystem, process, privilege, and egress violations |
 | 6 | Retrieval isolation | Poison a runbook and attempt cross-tenant vector retrieval |
-| 10 | Production adversarial evaluation | Add versioned datasets, semantic graders, and release baselines beyond the deterministic Layer 7 matrix |
+| 10 | Production adversarial evaluation | Add versioned datasets, semantic graders, and release baselines beyond the deterministic Layers 7–8 matrices |
 | 10 | Telemetry privacy | Send sensitive/high-cardinality content; prove collector/backend redaction and rejection |
 | 11 | Capacity | Load hot and broad tenants while measuring queue lag and projection delay |
 | 11 | Regional failure | Lose a region and restore authoritative state within documented objectives |

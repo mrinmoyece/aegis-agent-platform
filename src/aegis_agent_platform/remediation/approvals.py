@@ -28,7 +28,6 @@ from aegis_agent_platform.domain import (
     PolicyOutcome,
     RemediationPlan,
     RemediationState,
-    TraceContext,
     WorkRequest,
     plan_to_payload,
     replay_remediation,
@@ -40,10 +39,6 @@ from aegis_agent_platform.identity import (
     Permission,
     Principal,
     PrincipalKind,
-)
-from aegis_agent_platform.observability.context import (
-    PropagationContext,
-    durable_trace_context,
 )
 from aegis_agent_platform.remediation.policy import (
     ActionQuotaUsage,
@@ -107,7 +102,6 @@ class RemediationApprovalService:
         usage: ActionQuotaUsage,
         *,
         idempotency_key: str,
-        propagation: PropagationContext | None = None,
     ) -> ProposalDecision:
         at = self._clock()
         self._require(
@@ -142,7 +136,6 @@ class RemediationApprovalService:
                 "policy_digest": current_policy.digest,
                 "revision": plan.revision,
             },
-            trace_context=durable_trace_context(propagation),
             max_attempts=5,
             timeout_seconds=3_600,
         )
@@ -158,7 +151,6 @@ class RemediationApprovalService:
                 },
                 idempotency_key=f"{idempotency_key}:proposal",
                 at=at,
-                trace_context=request.trace_context,
             )
         ]
         for action in plan.actions:
@@ -188,7 +180,6 @@ class RemediationApprovalService:
                         f"{current_policy.digest}"
                     ),
                     at=at,
-                    trace_context=request.trace_context,
                 )
             )
             self._audit_event(
@@ -235,7 +226,6 @@ class RemediationApprovalService:
                         f"{current_policy.digest}"
                     ),
                     at=at,
-                    trace_context=request.trace_context,
                 )
             )
             self._metrics.add("approvals_requested", action_kind=action.kind)
@@ -296,21 +286,16 @@ class RemediationApprovalService:
                 return _approval(state, approval_id)
             approval = _approval(state, approval_id)
             action = state.plan.action(approval.scope.action_id)
-            if approval.status is ApprovalStatus.EXPIRED:
-                raise ApprovalDeniedError("approval_expired")
             if approval.status is not ApprovalStatus.PENDING:
                 raise ApprovalDeniedError("approval_is_not_pending")
             if at >= approval.scope.expires_at:
-                try:
-                    await self._append_expired(
-                        principal,
-                        context,
-                        state,
-                        approval,
-                        at=at,
-                    )
-                except ConcurrencyError:
-                    continue
+                await self._append_expired(
+                    principal,
+                    context,
+                    state,
+                    approval,
+                    at=at,
+                )
                 raise ApprovalDeniedError("approval_expired")
             if (
                 current_policy.tenant_id != state.plan.tenant_id
@@ -627,7 +612,6 @@ class RemediationApprovalService:
         idempotency_key: str,
         at: datetime,
         event_id: UUID | None = None,
-        trace_context: TraceContext | None = None,
     ) -> EventEnvelope:
         return EventEnvelope(
             event_id=event_id or self._uuid_factory(),
@@ -638,11 +622,10 @@ class RemediationApprovalService:
             occurred_at=at,
             payload=payload,
             correlation_id=plan.investigation_run_id,
-            actor=ActorReference(principal.actor_id, _actor_kind(principal)),
+            actor=ActorReference(principal.actor_id, ActorKind.USER),
             identity_reference=principal.subject,
             policy_reference=plan.approval_policy.digest,
             idempotency_key=idempotency_key,
-            trace_context=trace_context,
         )
 
     def _audit_event(
@@ -698,12 +681,6 @@ def _matching_decision(
     ):
         raise RemediationIdempotencyConflictError("approval_decision_identifier_reused")
     return True
-
-
-def _actor_kind(principal: Principal) -> ActorKind:
-    return (
-        ActorKind.SERVICE if principal.kind is PrincipalKind.SERVICE else ActorKind.USER
-    )
 
 
 def _safe_rationale(rationale_code: str, comment: str) -> None:

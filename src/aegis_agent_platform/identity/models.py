@@ -98,6 +98,11 @@ class Permission(StrEnum):
     EVIDENCE_READ = "evidence:read"
     EVIDENCE_QUERY = "evidence:query"
     INVESTIGATION_READ = "investigation:read"
+    REMEDIATION_READ = "remediation:read"
+    REMEDIATION_PROPOSE = "remediation:propose"
+    ACTION_EXECUTE = "action:execute"
+    ACTION_RECONCILE = "action:reconcile"
+    ACTION_ROLLBACK = "action:rollback"
 
 
 @dataclass(frozen=True, slots=True)

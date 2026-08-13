@@ -12,8 +12,9 @@ Layer 5 adds the provider-neutral model gateway and cost governance. Layer 6
 adds durable read-only evidence acquisition, immutable ingestion, and
 deterministic correlation. Layer 7 adds governed specialist execution,
 ledger-only typed reasoning artifacts, deterministic fan-out/fan-in, and critic
-gates. Approval, tools, remediation execution, sandboxing, and memory arrive
-later.
+gates. Layer 8 adds exact-scope approval, controlled action execution,
+reconciliation, and explicit postcondition verification. General sandbox/code
+execution and memory arrive later.
 
 ```mermaid
 flowchart LR
@@ -31,7 +32,7 @@ flowchart LR
   W --> K8s[Kubernetes adapter]
   W --> RB[Runbook source]
   W --> Policy[Policy engine]
-  Policy --> S[Sandbox and tools]
+  Policy --> R[Approval-gated remediation]
   W --> M[Memory]
   CP -. telemetry .-> O[Observability]
   W -. telemetry .-> O
@@ -40,8 +41,10 @@ flowchart LR
 Dashed paths are diagnostic, never authoritative. PostgreSQL is truth; Redis is
 only at-least-once transport. Queue/lease and model gateway execution are
 implemented. Connector acquisition and deterministic correlation are also
-implemented. Governed specialist reasoning is implemented with deterministic
-fake acceptance scenarios; tool and remediation execution remain planned.
+implemented. Governed specialist reasoning and approval-gated controlled
+remediation are implemented with deterministic fake acceptance scenarios. The
+only official write adapter is a fixed-shape Kubernetes deployment
+rollout-restart; production connectivity is not configured or verified.
 
 ## Model gateway data flow
 
@@ -117,6 +120,42 @@ change ledger append order or the conclusion. Cancellation, bounded retries,
 timeouts, budget exhaustion, stale fencing, and malformed/provider-bug outcomes
 remain explicit events. PostgreSQL `agent_*` and reasoning-artifact projections
 use forced RLS and can be rebuilt; they are not authoritative.
+
+## Approval-gated controlled remediation data flow
+
+Layer 8 consumes an immutable Layer 7 proposal without giving the proposing
+agent approval authority. The plan revision binds exact action and target
+digests to a tenant policy snapshot. Policy is deny-by-default. Human decisions
+are authenticated, tenant-authorized, separation-of-duties checked, expiring,
+revocable, and quorum-based for high risk.
+
+```mermaid
+sequenceDiagram
+  participant O as Operator
+  participant C as Control plane
+  participant E as PostgreSQL ledger
+  participant W as Fenced worker
+  participant T as Controlled action adapter
+  C->>E: remediation.proposed + policy evaluation + approval requested
+  O->>C: exact-scope approval decision
+  C->>E: approval granted/denied/revoked
+  W->>E: dispatch + preflight + dry-run intent under current fence
+  W->>E: action.execution_requested.v1
+  W->>T: stable tenant idempotency key + exact target
+  T-->>W: result or ambiguous outcome
+  W->>E: outcome + reconciliation intent/result
+  W->>T: fresh target observation
+  W->>E: explicit postcondition verification
+```
+
+The executor rechecks authorization, policy digest, approval scope/expiry,
+current approver roles, target identity, cancellation, preconditions, and lease
+token/generation immediately before intent. A crash after provider application
+but before outcome append is recovered by read-after-write reconciliation before
+any retry. Effects are at-least-once and may remain ambiguous; exactly-once is
+not claimed. PostgreSQL migration `0007_remediation_approvals.sql` supplies
+forced-RLS rebuildable projections, immutable decision rows, quotas, and
+tenant-scoped effect claims. Redis remains transport only.
 
 Artifacts cover evidence assessments, primary and alternative hypotheses,
 contradictions/critiques, causal-graph and timeline references, remediation
@@ -337,8 +376,10 @@ intent. Aegis then checks telemetry against an explicit recovery window and
 updates the incident record with the action and result.
 
 Layers 6–7 supply evidence acquisition/correlation and the governed hypothesis
-workflow. They still have no approval flow, remediation tool, sandbox,
-post-action execution, operator UI, or incident-system writer.
+workflow. Layer 8 supplies exact-scope approval, fake-only end-to-end execution,
+one bounded official Kubernetes rollout-restart adapter, reconciliation, and
+postcondition verification. It does not supply a sandbox, arbitrary code or
+commands, production credentials, operator UI, or incident-system writer.
 
 ## Multi-agent investigation topology
 
@@ -390,12 +431,11 @@ better. Fixed roles avoid uncontrolled spawning; ledger mediation avoids opaque
 peer chat; least privilege limits blast radius; budgets and timeouts prevent
 runaway loops; citations and a critic expose unsupported consensus; deterministic
 aggregation and explicit conflict handling prevent race-dependent conclusions.
-Human approval will separate analysis from risky action, and a later execution
-layer will use the Verification Agent's durable plan after an approved effect.
-Layer 7 implements the fixed roles, scheduler, typed artifact ledger,
-deterministic conflict/finalization policy, and safe abstention. There is no
-approval service, spawning mechanism, remediation execution, or post-action
-verification in this layer.
+Human approval separates analysis from risky action. Layer 8 binds that approval
+to the planner and Verification Agent artifacts, but neither agent may approve
+the action. The controlled executor records fresh verification evidence after
+the effect. There is still no spawning mechanism, peer chat, or agent-controlled
+approval.
 
 ## Memory architecture
 

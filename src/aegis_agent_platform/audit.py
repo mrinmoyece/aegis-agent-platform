@@ -31,6 +31,9 @@ class AuditEventType(StrEnum):
     POLICY_EVALUATION = "security.policy_evaluation.v1"
     APPROVAL_IDENTITY_RECORDED = "security.approval_identity_recorded.v1"
     ADMINISTRATIVE_CHANGE = "security.administrative_change.v1"
+    REMEDIATION_POLICY_DECISION = "security.remediation_policy_decision.v1"
+    REMEDIATION_APPROVAL_DECISION = "security.remediation_approval_decision.v1"
+    CONTROLLED_ACTION_OUTCOME = "security.controlled_action_outcome.v1"
 
 
 class AuditOutcome(StrEnum):

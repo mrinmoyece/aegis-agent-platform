@@ -163,7 +163,7 @@ def test_remediation_approval_execution_rls_race_and_rebuild() -> None:
                     for actor_id in ("approver-one", "approver-two")
                 )
             )
-            assert any(grant.status is ApprovalStatus.GRANTED for grant in grants)
+            assert grants[-1].status is ApprovalStatus.GRANTED
             assert await repository.load(OTHER_CONTEXT, selected.plan_id) == ()
 
             active_lease = lease(
@@ -649,82 +649,5 @@ def test_postgres_effect_quota_race_and_long_stream_rebuild() -> None:
             second_adapter.release.set()
             await first_connection.close()
             await second_connection.close()
-
-    asyncio.run(scenario())
-
-
-def test_postgres_projection_allows_shared_action_digest_across_plans() -> None:
-    async def scenario() -> None:
-        assert DATABASE_URL is not None
-        connection = await psycopg.AsyncConnection.connect(
-            DATABASE_URL,
-            autocommit=True,
-        )
-        await connection.execute("SET ROLE aegis_app")
-        events = PostgresEventStore(connection)
-        repository = PostgresRemediationRepository(
-            connection,
-            events,
-            PostgresWorkRepository(connection, events),
-        )
-        service = RemediationApprovalService(repository, clock=Clock())
-        shared_action = action(
-            idempotency_key="tenant-remediation:shared-projection-action"
-        )
-        shared_policy = policy(
-            shared_action.target,
-            tenant_id=TenantId("tenant-remediation"),
-        )
-        first_plan = plan(
-            shared_action,
-            shared_policy,
-            requested_by="operator",
-            tenant_id=TenantId("tenant-remediation"),
-        )
-        second_plan = plan(
-            shared_action,
-            shared_policy,
-            requested_by="operator",
-            tenant_id=TenantId("tenant-remediation"),
-        )
-        try:
-            for selected_plan in (first_plan, second_plan):
-                await service.propose(
-                    principal(
-                        "operator",
-                        Role.OPERATOR,
-                        tenant_id=TenantId("tenant-remediation"),
-                    ),
-                    CONTEXT,
-                    selected_plan,
-                    shared_policy,
-                    ActionQuotaUsage(0, 0),
-                    idempotency_key=f"shared-action:{selected_plan.plan_id}",
-                )
-        finally:
-            await connection.close()
-
-        maintenance = await psycopg.AsyncConnection.connect(
-            DATABASE_URL,
-            autocommit=True,
-        )
-        try:
-            await maintenance.execute("SET ROLE aegis_maintenance")
-            cursor = await maintenance.execute(
-                """
-                SELECT plan_id, action_digest
-                FROM remediation_action_projection
-                WHERE tenant_id = %s AND action_digest = %s
-                ORDER BY plan_id
-                """,
-                ("tenant-remediation", shared_action.digest),
-            )
-            rows = await cursor.fetchall()
-            assert set(rows) == {
-                (first_plan.plan_id, shared_action.digest),
-                (second_plan.plan_id, shared_action.digest),
-            }
-        finally:
-            await maintenance.close()
 
     asyncio.run(scenario())

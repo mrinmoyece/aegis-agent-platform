@@ -18,8 +18,11 @@ coordination, safe effects, evaluation, and operations.
 > Layer 6 implements bounded evidence connectors, immutable cited ingestion, and
 > deterministic timeline correlation. Layer 7 implements the governed durable
 > specialist DAG, critic gates, typed reasoning artifacts, safe abstention, and
-> fake-only behavioral evals. Live environments remain unverified; approval,
-> tools/remediation, sandboxing, memory, and production operations remain planned.
+> fake-only behavioral evals. Layer 8 implements exact-scope human approval,
+> fenced controlled effects, at-least-once reconciliation, and explicit
+> verification with a fake and one fixed-shape Kubernetes adapter. Live
+> environments, general sandbox/code execution, memory, and production
+> operations remain unverified or planned.
 
 The curriculum is backed by the concrete delivery slices and acceptance
 evidence in `enterprise-implementation-plan.md`; the roadmap is not merely a
@@ -40,12 +43,13 @@ Implemented only when its document links executable code and tests.
 | Durable execution and event sourcing (`durable-execution.md`) | Design replay, additive schemas, projections, crash recovery, and intent-before-effect | 3 | Implemented persistence mechanics; ADR 0002/0010 and live PostgreSQL tests |
 | Leases, fencing, and idempotency (`worker-runtime.md`) | Explain at-least-once delivery, fencing, reconciliation, backpressure, cancellation, and DLQ operations | 4 | Implemented; ADR 0003/0011 and live PostgreSQL/Redis tests |
 | Model/provider routing and cost governance (`model-gateway.md`) | Normalize providers, route by policy, meter cost, enforce budgets, and handle uncertain outcomes | 5 | Implemented; mocked SDK transports and deterministic evals |
-| Tool security and sandboxing (`safe-tools.md`) | Apply policy, approvals, scoped capabilities, intent events, isolation, egress, and quotas | 8 | Planned; Layer 7 proposals grant no effect authority |
+| Controlled remediation (`architecture.md`, ADR 0015) | Apply exact policy/approval, fencing, intent events, idempotency, reconciliation, and verification | 8 | Implemented for fake execution and fixed-shape Kubernetes rollout restart |
+| General tool sandboxing (`safe-tools.md`) | Isolate arbitrary code with scoped capabilities, egress, and quotas | 9 | Planned; Layer 8 exposes no arbitrary command/code path |
 | Identity, tenancy, and RBAC (`identity-tenancy.md`) | Separate authentication from tenant authorization and prove isolation | 2–3 | PostgreSQL repositories and live RLS denial implemented; live-Keycloak drills planned |
 | Memory, RAG, and compaction (`memory-and-rag.md`, `protocols.md`) | Design working, episodic, and semantic tiers with provenance, PII controls, retention, relevance/recency, and faithful compaction | 9 | Protocol documented; storage planned |
 | Evidence connectors and correlation (`evidence-connectors.md`) | Translate Dynatrace, GitHub, Kubernetes, and runbooks into stable evidence; preserve provenance, partial results, ambiguity, and conflict | 6 | Implemented with mocked transports; live environments unverified |
 | Agent and tool protocols (`protocols.md`) | Distinguish internal correctness ports, MCP adapters, and external A2A interoperability | 6–8 | Position documented; MCP/A2A planned |
-| Evaluation strategy (`evaluation.md`) | Combine deterministic, live, adversarial, quality, safety, latency, and cost evaluation | 7/10 | Layer 7 deterministic behavior gate implemented; production harness planned |
+| Evaluation strategy (`evaluation.md`) | Combine deterministic, live, adversarial, quality, safety, latency, and cost evaluation | 7/10 | Layers 7–8 deterministic behavior gates implemented; production harness planned |
 | Observability and SLOs (`observability-and-slos.md`) | Correlate events/traces safely, select SLIs, control cardinality, and operate alerting | 7–8 | Local topology scaffolded |
 | Threat model (`threat-model.md`) | Analyze tenant, evidence, model, swarm, tool, sandbox, provider, and supply-chain threats | 1–8 | Foundation model documented |
 | Failure modes and runbooks (`failure-modes.md`, `runbook.md`) | Diagnose crashes, stale leases, partial effects, provider faults, poisoned evidence, and regional failure | 3–9 | Storage, worker, and provider failures implemented; regional sections planned |
@@ -54,7 +58,7 @@ Implemented only when its document links executable code and tests.
 | Deployment and supply chain (`deployment-and-supply-chain.md`) | Build least-privilege releases with SBOM, provenance, signing, promotion, and rollback | 8 | CI/container baseline only |
 | Alternatives and ADR index (`adr/README.md`) | Compare orchestration, queues, identity, sandbox, provider, and evaluation choices | 1–9 | Planned index; eleven ADRs exist |
 | Interview question bank (`interview-question-bank.md`) | Communicate tradeoffs and defend design under follow-up pressure | 1–8 | Foundation edition documented |
-| Hands-on labs (`labs.md`) | Turn each invariant into executable evidence and inject realistic failures | 1–11 | Layers 1–7 tests runnable |
+| Hands-on labs (`labs.md`) | Turn each invariant into executable evidence and inject realistic failures | 1–11 | Layers 1–8 tests runnable |
 | Terminology (`glossary.md`) | Use durability, evidence, tenancy, evaluation, and operations terms precisely | 1 | Documented |
 | Limitations and production gaps (`limitations.md`) | State what is absent, unsafe, local-only, or not yet proven | Every layer | Documented and maintained |
 

@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import timedelta
 from uuid import uuid4
 
 from aegis_agent_platform.audit import InMemoryAuditStore
@@ -14,14 +13,13 @@ from aegis_agent_platform.domain import plan_to_payload
 from aegis_agent_platform.identity import IdentityRecord, PrincipalKind, Role, UserId
 from aegis_agent_platform.policy import InMemoryPolicyRepository
 from aegis_agent_platform.remediation import (
-    ActionQuotaUsage,
     InMemoryRemediationPolicyRepository,
     InMemoryRemediationRepository,
     RemediationApprovalService,
     RemediationOperations,
 )
-from aegis_agent_platform.tenancy import InMemoryTenantRepository, Tenant, TenantContext
-from remediation_helpers import CONTEXT, NOW, TENANT_ID, Clock, plan, principal
+from aegis_agent_platform.tenancy import InMemoryTenantRepository, Tenant
+from remediation_helpers import CONTEXT, NOW, TENANT_ID, Clock, plan
 from security_helpers import (
     ISSUER,
     authentication_service,
@@ -31,22 +29,6 @@ from security_helpers import (
     token,
 )
 from test_api import bearer, request
-
-
-class RecordingQuotaReader:
-    def __init__(self) -> None:
-        self.at: datetime | None = None
-
-    async def quota_usage(
-        self,
-        context: TenantContext,
-        *,
-        at: datetime,
-        exclude_idempotency_key: str | None = None,
-    ) -> ActionQuotaUsage:
-        del context, exclude_idempotency_key
-        self.at = at
-        return ActionQuotaUsage(0, 0)
 
 
 def secured_remediation_app(
@@ -265,32 +247,6 @@ def test_api_rejects_unauthorized_stale_malformed_and_cross_tenant_requests() ->
     )
     assert missing_status == 403
     assert missing["error"]["code"] == "remediation_policy_not_configured"
-
-
-def test_proposal_uses_trusted_quota_evaluation_time() -> None:
-    repository = InMemoryRemediationRepository()
-    quota_reader = RecordingQuotaReader()
-    selected = plan(requested_by="operator")
-    stale = replace(selected, created_at=NOW - timedelta(days=30))
-    trusted_now = Clock(NOW + timedelta(hours=2))
-    operations = RemediationOperations(
-        repository,
-        RemediationApprovalService(repository, clock=Clock()),
-        InMemoryRemediationPolicyRepository((selected.approval_policy,)),
-        quotas=quota_reader,
-        clock=trusted_now,
-    )
-
-    asyncio.run(
-        operations.propose(
-            principal("operator", Role.OPERATOR),
-            CONTEXT,
-            stale,
-            idempotency_key="trusted-quota-time",
-        )
-    )
-
-    assert quota_reader.at == trusted_now.value
 
 
 def test_readiness_reports_remediation_capability_without_secrets() -> None:

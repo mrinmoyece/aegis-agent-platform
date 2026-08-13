@@ -8,7 +8,10 @@ Layer 4 adds Redis delivery plus PostgreSQL leases/fencing and live race evidenc
 Layer 5 adds the provider-neutral model gateway and fenced cost governance.
 Layer 6 adds read-only evidence adapters, bounded immutable ingestion, and
 deterministic correlation. Layer 7 adds the fixed specialist DAG, durable typed
-reasoning artifacts, and deterministic critic/finalization gates.
+reasoning artifacts, and deterministic critic/finalization gates. Layer 8 adds
+immutable remediation scope, deny-by-default policy, authenticated
+separation-of-duties approval, fenced controlled effects, reconciliation, and
+explicit postcondition verification.
 The system assumes model output, tool output, retrieved
 content, and tenant input can be hostile. Cloud, identity provider, model
 provider, and operator accounts can be compromised. Prompt instructions are
@@ -44,14 +47,14 @@ never trusted as controls.
 | --- | --- | --- | --- |
 | Tenant confusion | Cross-tenant reads or work claims | Explicit tenant context, database policy, negative tests | PostgreSQL repositories use transaction-local context; forced RLS and confused-deputy denial are proven against PostgreSQL 16 |
 | Identity spoofing | Attacker acts as an operator | OIDC validation, key rotation, audience checks | Standards-correct JWT signature/issuer/audience/expiry/algorithm verification implemented against deterministic fixtures and a Keycloak-compatible JWKS config, with a committed negative-test suite for malformed/expired/wrong-issuer/wrong-audience/unsupported-algorithm tokens; live-IdP key-rotation drills against a running Keycloak remain a deployment-time check |
-| Prompt injection | Evidence/model content changes authority or bypasses review | Treat content as untrusted data, strict schemas, code-enforced roles/citations; later tool approval | Layer 7 reasoning boundary implemented; no tool execution exists |
-| Confused deputy | Tool uses broader platform privilege | Scoped capability token per invocation | Planned |
-| Duplicate delivery | Repeated work or external effect | Intent event, deterministic message identity, inbox, reconciliation | Redis publication and inbox deduplication implemented; future target reconciliation remains required |
+| Prompt injection | Evidence/model content changes authority or bypasses review | Treat content as untrusted data, strict schemas, code-enforced roles/citations, exact human approval | Layer 8 policy and action parsing fail closed; content cannot approve or widen an action |
+| Confused deputy | Action uses broader platform privilege | Exact tenant/action/target policy and fixed-shape adapter | Implemented for rollout restart; short-lived capability credential brokering remains planned |
+| Duplicate delivery | Repeated work or external effect | Intent event, deterministic message identity, inbox, idempotency, target reconciliation | Redis/inbox deduplication plus Layer 8 tenant effect claims and reconciliation implemented |
 | Stale lease holder | Old worker overwrites a reclaimed result | PostgreSQL token/generation fence on every write | Implemented and live-tested |
 | Queue tenant spoofing | Work executes under another tenant | Tenant-bound envelope plus trusted context and RLS | Implemented; malformed/mismatched envelopes fail closed |
 | Poison queue payload | Parser exploit or supervisor crash | Size/schema bounds and quarantine | Safe decoder and supervisor containment implemented |
 | Event tampering | False state or missing audit evidence | Append controls, hashes/retention, restricted roles | Event/audit update-delete rejected by grants and live-tested triggers; retention and access review remain planned |
-| Sandbox escape | Host or network compromise | Strong isolation, deny-by-default egress, quotas | Boundary only |
+| Sandbox escape | Host or network compromise | Strong isolation, deny-by-default egress, quotas | Planned Layer 9 boundary; Layer 8 permits no general code execution |
 | Secret exfiltration | Credentials in prompts or telemetry | Brokered secrets, redaction, content policy | Secret-reference abstraction, redacted `SecretValue`, and audit-detail redaction implemented; only a local environment-variable provider exists, no vault-backed broker |
 | Provider data leakage | Sensitive content retained externally | Provider policy, classification, regional routing | Retention/residency policy and routing implemented; provider account verification and encrypted content artifacts remain planned |
 | Resource exhaustion | Runaway work or noisy tenant | Deadlines, queue backpressure, global and tenant quotas | Worker and provider concurrency, timeouts, request/token limits, circuits, and fenced model budgets implemented |
@@ -60,10 +63,13 @@ never trusted as controls.
 | Evaluation poisoning | Unsafe release passes gates | Dataset provenance, immutable results, approvals | Planned |
 | Evidence spoofing | Forged logs or change metadata drives a false hypothesis | Authenticated adapters, immutable references, timestamps, source labeling | Bounded authenticated adapters, digests, trust status, and quarantine implemented; live source assurance remains deployment evidence |
 | Stale correlation | Unrelated deployment is blamed for checkout failures | Explicit time windows, topology, counter-evidence, confidence | Deterministic clock-skew bounds, rationale, ambiguity, and conflicts implemented; no causal inference |
-| Runbook injection | Hostile text asks the agent to bypass policy | Treat runbooks as untrusted evidence; runtime authorization | Trust/schema validation and retrieval-only knowledge implemented; execution remains absent |
-| Approval confusion | Approval for one incident authorizes another action | Bind approval to tenant, incident, exact action, version, and expiry | Planned |
-| Remediation escalation | Rollback tool mutates unrelated services | Capability-scoped tool input and target allowlist | Planned |
-| False recovery | Incident closes after a transient metric dip | Defined verification window and multi-signal checks | Planned |
+| Runbook injection | Hostile text asks the agent to bypass policy | Treat runbooks as untrusted evidence; runtime authorization | Runtime approval and action policy implemented; injected arguments fail validation |
+| Approval confusion | Approval for one incident authorizes another action | Bind approval to tenant, plan/action/policy digests, exact target/risk/quorum/expiry | Implemented with stale/replay/forgery/cross-tenant negative tests |
+| Approval race or compromised approver | Revoked, expired, self-approved, or stale authority executes | Current role/policy/scope recheck, SoD, distinct quorum, optimistic concurrency, immutable audit | Implemented |
+| Remediation escalation | Action mutates unrelated services | Exact target fingerprint, allowlist, fixed-shape port, preflight recheck | Implemented for rollout restart; destructive/broad actions disabled |
+| Ambiguous or duplicate effect | Blind retry repeats provider mutation | Stable tenant idempotency key, durable intent, check-before-retry reconciliation, conflict escalation | Implemented without an exactly-once claim |
+| Stale remediation worker | Old lease applies or records an action | PostgreSQL token/generation check before intent and fenced outcome append | Implemented and negative-tested |
+| False recovery | Incident closes after action API acceptance or transient signal | Explicit postconditions and fresh evidence with success/failure/partial/unknown | Implemented; live external verification remains deployment evidence |
 | Connector token theft | Dynatrace or GitHub authority is exfiltrated | Brokered read-only credentials, rotation, redaction | Typed secret references and redaction implemented; vault brokering/rotation drills planned |
 | Agent authority creep | Specialist spawns workers or obtains broader tools | Fixed roles, coordinator-owned DAG, deny-by-default capability/output policy | Implemented and negative-tested |
 | Opaque collusion | Peer chat creates uncited consensus | No peer channel; ledger-only typed artifacts and independent critic | Implemented |
@@ -109,9 +115,10 @@ a separate typed proposal and cannot grant tool authority. Human approval is
 bound to the exact proposal, and verification is performed by a distinct role.
 
 Layer 7 implements scheduling, capability/output enforcement, budgets,
-deterministic aggregation, critique, and safe abstention. Approval, tool
-execution, sandboxing, and post-action verification remain planned and must not
-be inferred from a remediation recommendation or verification plan.
+deterministic aggregation, critique, and safe abstention. Layer 8 consumes the
+immutable proposal through policy, human approval, controlled execution,
+reconciliation, and fresh-evidence verification. An agent cannot approve its
+own proposal or treat provider acceptance as recovery.
 
 ## Canonical scenario security questions
 
@@ -127,8 +134,10 @@ The runtime records intent before the controlled tool receives authority.
 Recovery requires an explicit observation window and multiple relevant signals
 before the incident record is updated.
 
-Later acceptance tests must exercise these cases rather than relying on design
-claims.
+Deterministic Layer 8 acceptance tests exercise approval success, denial,
+staleness/expiry, policy and tenant attacks, ambiguous-effect reconciliation,
+verification failure/rollback, and crash recovery. Live targets remain
+deployment evidence.
 
 ## Layer 1 residual risk
 
@@ -221,6 +230,21 @@ coordinator may abstain or escalate; it must not invent missing evidence.
 The PostgreSQL event stream remains authoritative and specialist projections are
 rebuildable. Live PostgreSQL tests prove RLS, fencing, pagination, and rebuild in
 a disposable database, not backup/restore, HA, regional failover, or production
-capacity. Remediation is proposal-only. No approval service, write-capable tool,
-sandbox, memory/RAG, operator UI, MCP/A2A, production deployment, or live
-connector/model certification exists.
+capacity. Layer 7 remediation remains proposal-only; Layer 8 provides the
+separate approval and execution boundary.
+
+## Layer 8 residual risk
+
+The checkout remediation workflow is proven with deterministic fake evidence and
+actions. The official Kubernetes adapter is unit-tested against a fake official
+client and is not connected to a production cluster. A deployment must verify
+least-privilege workload identity, namespace/deployment allowlists, API
+compatibility, private egress, timeouts, target read-after-write semantics,
+credential rotation, and operator escalation.
+
+At-least-once delivery means a provider effect may remain ambiguous after a
+network partition or crash. Stable idempotency and reconciliation reduce blind
+duplicates but cannot prove exactly once. General sandbox/code execution,
+arbitrary commands, memory/RAG, operator UI, MCP/A2A, broad autonomous
+remediation, live external verification, production deployment, HA/DR, and
+multi-region operation remain absent.

@@ -1,4 +1,4 @@
-# Getting started with Layers 1–7
+# Getting started with Layers 1–8
 
 This repository teaches the less visible part of agent engineering: deciding
 where durability, security, and vendor boundaries live before writing
@@ -8,6 +8,8 @@ durable PostgreSQL ledger, inbox/outbox, projections, and production repositorie
 Layer 4 adds Redis Streams delivery and fenced worker execution. Layer 5 adds
 the model gateway and cost governance. Layer 6 adds bounded evidence connectors
 and deterministic correlation. Layer 7 adds the governed durable specialist DAG.
+Layer 8 adds exact-scope approval, fenced controlled effects, reconciliation,
+and explicit postcondition verification.
 
 ## What you will inspect
 
@@ -26,15 +28,17 @@ and deterministic correlation. Layer 7 adds the governed durable specialist DAG.
   liveness/readiness routes.
 - `agents` defines the fixed roles, bounded DAG/replay fold, typed reasoning
   artifacts, coordinator, strict model/fake engines, and read operations.
-- migrations `0001`–`0006` define governance, ledger, work state, leases, DLQ,
+- `remediation` defines policy, authenticated approvals, controlled execution,
+  reconciliation, verification, operations, and the deterministic fake demo.
+- migrations `0001`–`0007` define governance, ledger, work state, leases, DLQ,
   model budgets, evidence, specialist projections, roles, grants, triggers,
   forced RLS, inbox/outbox, and projections.
 - `compose.yaml` describes the local dependencies later layers will integrate.
 - architecture tests prevent infrastructure from leaking into the pure domain.
 
-The durable store, worker substrate, gateway, evidence acquisition contracts,
-and specialist reasoning runtime are implemented. No external effect or live
-Dynatrace/GitHub/Kubernetes/model call runs in the deterministic tutorial.
+The durable store, worker substrate, gateway, evidence acquisition, specialist
+reasoning, and controlled remediation runtime are implemented. No live
+Dynatrace/GitHub/Kubernetes/model/action call runs in the deterministic tutorial.
 
 ## Run the fast checks
 
@@ -54,9 +58,9 @@ migration validation. They do not require network services or a running
 identity provider — JWT verification is exercised against deterministic
 fixtures, not a live Keycloak realm.
 
-`make check` also runs `make evals`, which gates the fake checkout scenarios for
-success, ambiguity/abstention, contradiction/critic rejection, budget
-exhaustion, and retry recovery.
+`make check` also runs `make evals`, which gates the fake checkout investigation
+and remediation matrices, including approval denial/expiry, policy attack,
+ambiguous reconciliation, verification failure, and crash recovery.
 
 Run the live PostgreSQL/Redis suite against disposable services:
 
@@ -81,7 +85,22 @@ explicitly declares that it uses no live network and executes no remediation.
 Try `ambiguity`, `budget_exhaustion`, and `recovery`, then compare their terminal
 status and artifact list. The coordinator can propose a rollback and verification
 plan, but there is no approval service, write-capable tool, sandbox, or
-post-action verification in Layer 7.
+post-action verification inside Layer 7.
+
+## Run the fake-only controlled remediation
+
+```bash
+python -m aegis_agent_platform.remediation --scenario approved-success
+python -m aegis_agent_platform.remediation --scenario denied
+python -m aegis_agent_platform.remediation --scenario ambiguous-reconciled
+python -m aegis_agent_platform.remediation --scenario crash-recovery
+```
+
+Also try `expired`, `verification-failure`, and `policy-attack`. The output is a
+bounded event/status summary and explicitly reports fake capability. It uses no
+network or production credential. General sandbox/code execution and arbitrary
+commands do not exist; the only official action adapter is fixed-shape
+Kubernetes deployment rollout restart and is not invoked by this tutorial.
 
 ## Try the identity, tenancy, and governance slice
 

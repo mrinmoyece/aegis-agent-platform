@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import IntEnum, StrEnum
+from hashlib import sha256
 from types import MappingProxyType
 from typing import cast
 from uuid import UUID
@@ -24,10 +27,8 @@ MAX_CONDITIONS_PER_ACTION = 16
 MAX_EVIDENCE_PER_PLAN = 64
 MAX_RATIONALE_BYTES = 4_096
 MAX_EVENT_REASON_BYTES = 1_024
-_IDENTIFIER_REST = frozenset(
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:/-"
-)
-_HEX_LOWER = frozenset("0123456789abcdef")
+_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")
+_DIGEST = re.compile(r"^[0-9a-f]{64}$")
 
 
 class RiskTier(IntEnum):
@@ -53,7 +54,6 @@ class ActionKind(StrEnum):
     """Provider-neutral controlled actions implemented by Layer 8."""
 
     KUBERNETES_ROLLOUT_RESTART = "kubernetes.rollout_restart.v1"
-    SANDBOX_CHANGE_PREPARATION = "sandbox.change_preparation.v1"
 
 
 class ConditionOperator(StrEnum):
@@ -134,17 +134,12 @@ def _bounded_text(value: str, name: str, maximum: int) -> None:
 
 
 def _identifier(value: str, name: str) -> None:
-    if (
-        not value
-        or value[0] not in _IDENTIFIER_REST - frozenset("._:/-")
-        or any(character not in _IDENTIFIER_REST for character in value)
-        or len(value) > 256
-    ):
+    if not _IDENTIFIER.fullmatch(value):
         raise ValueError(f"{name} is not a safe normalized identifier")
 
 
 def _digest(value: str, name: str) -> None:
-    if len(value) != 64 or any(character not in _HEX_LOWER for character in value):
+    if not _DIGEST.fullmatch(value):
         raise ValueError(f"{name} must be a lowercase sha256 digest")
 
 
@@ -153,52 +148,9 @@ def _aware(value: datetime, name: str) -> None:
         raise ValueError(f"{name} must be timezone-aware")
 
 
-def _canonical_text(value: object) -> str:
-    if value is None:
-        return "null"
-    if value is True:
-        return "true"
-    if value is False:
-        return "false"
-    if isinstance(value, str):
-        escaped = value.replace("\\", "\\\\").replace('"', '"')
-        return f'"{escaped}"'
-    if isinstance(value, int | float):
-        return repr(value)
-    if isinstance(value, UUID):
-        return f'"{value}"'
-    if isinstance(value, datetime):
-        return f'"{value.isoformat()}"'
-    if isinstance(value, Mapping):
-        items = sorted((str(key), _canonical_text(item)) for key, item in value.items())
-        return (
-            "{"
-            + ",".join(f"{_canonical_text(key)}:{item}" for key, item in items)
-            + "}"
-        )
-    if isinstance(value, Sequence) and not isinstance(value, str):
-        return "[" + ",".join(_canonical_text(item) for item in value) + "]"
-    raise ValueError(f"unsupported canonical value: {type(value).__name__}")
-
-
 def _canonical_digest(value: Mapping[str, object]) -> str:
-    text = _canonical_text(value)
-    parts = [
-        0x243F6A8885A308D3,
-        0x13198A2E03707344,
-        0xA4093822299F31D0,
-        0x082EFA98EC4E6C89,
-    ]
-    for index, character in enumerate(text):
-        code = ord(character) + index + 1
-        for slot, multiplier in enumerate(
-            (0x100000001B3, 0x9E3779B185EBCA87, 0xC2B2AE3D27D4EB4F, 0x165667B19E3779F9)
-        ):
-            parts[slot] = (
-                parts[slot] ^ (code + slot * 17)
-            ) * multiplier & 0xFFFFFFFFFFFFFFFF
-            parts[slot] ^= parts[(slot - 1) % 4] >> ((slot + 1) * 7)
-    return "".join(f"{part:016x}" for part in parts)
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    return sha256(encoded).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)
@@ -439,42 +391,6 @@ class ActionSpecification:
                 raise ValueError("rollout restart requires a deployment target")
             if parameters:
                 raise ValueError("rollout restart accepts no free-form parameters")
-        elif self.kind is ActionKind.SANDBOX_CHANGE_PREPARATION:
-            if self.target.provider != "aegis":
-                raise ValueError("sandbox preparation requires the Aegis provider")
-            if self.target.resource_type != "sandbox":
-                raise ValueError("sandbox preparation requires a sandbox target")
-            required = {
-                "sandbox_policy_digest",
-                "sandbox_purpose",
-                "sandbox_risk",
-                "sandbox_spec_digest",
-            }
-            if set(parameters) != required:
-                raise ValueError("sandbox preparation requires an exact reviewed scope")
-            for key in ("sandbox_policy_digest", "sandbox_spec_digest"):
-                value = parameters[key]
-                if not isinstance(value, str):
-                    raise ValueError("sandbox preparation digests must be strings")
-                _digest(value, key)
-            purpose = parameters["sandbox_purpose"]
-            if purpose not in {
-                "code_analysis",
-                "config_analysis",
-                "test_execution",
-                "patch_preparation",
-                "evidence_production",
-            }:
-                raise ValueError("sandbox preparation purpose is invalid")
-            risk = parameters["sandbox_risk"]
-            if (
-                not isinstance(risk, int)
-                or isinstance(risk, bool)
-                or risk not in {1, 2, 3, 4}
-            ):
-                raise ValueError("sandbox preparation risk is invalid")
-            if risk != int(self.risk):
-                raise ValueError("sandbox preparation risk must match action risk")
         for reference, name in (
             (self.rollback_reference, "rollback"),
             (self.compensation_reference, "compensation"),
@@ -1029,7 +945,6 @@ def _fold_event(
             )
             for identifier, approval in state.approvals.items()
         }
-        revised_action_ids = {action.action_id for action in plan.actions}
         return replace(
             state,
             plan=plan,
@@ -1039,21 +954,6 @@ def _fold_event(
             },
             policy_evaluations={},
             approvals=approvals,
-            executions=tuple(
-                record
-                for record in state.executions
-                if record.action_id not in revised_action_ids
-            ),
-            reconciliations=tuple(
-                record
-                for record in state.reconciliations
-                if record.action_id not in revised_action_ids
-            ),
-            verifications=tuple(
-                record
-                for record in state.verifications
-                if record.action_id not in revised_action_ids
-            ),
         )
     action_id = _event_action_id(event)
     statuses = dict(state.action_statuses)

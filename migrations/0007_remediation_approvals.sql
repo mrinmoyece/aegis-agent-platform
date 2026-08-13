@@ -54,7 +54,7 @@ CREATE TABLE remediation_action_projection (
     aggregate_version bigint NOT NULL CHECK (aggregate_version > 0),
     updated_at timestamptz NOT NULL,
     PRIMARY KEY (tenant_id, plan_id, action_id),
-    UNIQUE (tenant_id, plan_id, action_digest),
+    UNIQUE (tenant_id, action_digest),
     FOREIGN KEY (tenant_id, plan_id)
         REFERENCES remediation_plan_projection (tenant_id, plan_id)
 );

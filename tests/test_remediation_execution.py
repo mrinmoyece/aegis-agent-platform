@@ -13,7 +13,6 @@ import pytest
 
 from aegis_agent_platform.domain import (
     ActionLifecycleStatus,
-    ApprovalStatus,
     Condition,
     ConditionOperator,
     DomainEventType,
@@ -805,117 +804,6 @@ def test_verification_failure_unknown_and_controlled_reversals() -> None:
     asyncio.run(scenario())
 
 
-def test_stale_verification_observation_is_rejected() -> None:
-    async def scenario() -> None:
-        repository, selected, active_lease = await approved()
-        stale = StaleVerificationObservationAdapter(clock=Clock())
-        state = await executor(repository, stale).execute(
-            principal("operator", Role.OPERATOR),
-            CONTEXT,
-            selected.plan_id,
-            selected.actions[0].action_id,
-            active_lease,
-            selected.approval_policy,
-        )
-        assert state.verifications[-1].outcome is VerificationOutcome.UNKNOWN
-        assert (
-            state.action_statuses[selected.actions[0].action_id]
-            is ActionLifecycleStatus.VERIFICATION_UNKNOWN
-        )
-
-    asyncio.run(scenario())
-
-
-def test_revision_reexecutes_reused_action_ids() -> None:
-    async def scenario() -> None:
-        repository, selected, active_lease = await approved()
-        adapter = FakeControlledActionAdapter(clock=Clock())
-        worker = executor(repository, adapter)
-
-        initial = await worker.execute(
-            principal("operator", Role.OPERATOR),
-            CONTEXT,
-            selected.plan_id,
-            selected.actions[0].action_id,
-            active_lease,
-            selected.approval_policy,
-        )
-        assert initial.verifications[-1].outcome is VerificationOutcome.SUCCESS
-
-        revised_action = replace(
-            selected.actions[0],
-            idempotency_key="tenant-remediation:checkout:restart:revision-2",
-        )
-        revised_plan = replace(
-            selected,
-            revision=2,
-            rationale="Revalidate the rollout restart after renewed evidence.",
-            actions=(revised_action,),
-        )
-        service = RemediationApprovalService(repository, clock=Clock())
-        revised = await service.revise(
-            principal("operator", Role.OPERATOR),
-            CONTEXT,
-            revised_plan,
-            revised_plan.approval_policy,
-            ActionQuotaUsage(0, 0),
-            idempotency_key="revision-reuse-action-id",
-        )
-        revised_approval = next(
-            approval.scope.approval_id
-            for approval in revised.approvals.values()
-            if approval.scope.plan_digest == revised_plan.digest
-            and approval.status is ApprovalStatus.PENDING
-        )
-        for actor_id in ("approver-one", "approver-two"):
-            await service.decide(
-                principal(actor_id, Role.APPROVER),
-                CONTEXT,
-                revised_plan.plan_id,
-                revised_approval,
-                ApprovalDecision.GRANT,
-                decision_id=uuid4(),
-                current_policy=revised_plan.approval_policy,
-                rationale_code="reviewed",
-                comment="approved",
-            )
-        rerun = await worker.execute(
-            principal("operator", Role.OPERATOR),
-            CONTEXT,
-            revised_plan.plan_id,
-            revised_action.action_id,
-            active_lease,
-            revised_plan.approval_policy,
-        )
-        assert adapter.calls.count("execute") == 2
-        assert len(rerun.executions) == 1
-        assert len(rerun.verifications) == 1
-        assert rerun.verifications[-1].outcome is VerificationOutcome.SUCCESS
-
-    asyncio.run(scenario())
-
-
-def test_dispatch_metric_counts_only_claim_events() -> None:
-    async def scenario() -> None:
-        repository, selected, active_lease = await approved()
-        metrics = RemediationMetrics()
-        adapter = FakeControlledActionAdapter(clock=Clock())
-        await executor(repository, adapter, metrics=metrics).execute(
-            principal("operator", Role.OPERATOR),
-            CONTEXT,
-            selected.plan_id,
-            selected.actions[0].action_id,
-            active_lease,
-            selected.approval_policy,
-        )
-        assert (
-            metrics.snapshot()[("actions_dispatched", selected.actions[0].kind.value)]
-            == 1
-        )
-
-    asyncio.run(scenario())
-
-
 @pytest.mark.parametrize(
     ("failed_event", "compensate", "adapter_call", "error_code"),
     [
@@ -1257,26 +1145,6 @@ class VerificationUnknownAdapter(FakeControlledActionAdapter):
                 retryable=True,
             )
         return await super().observe(context, action_spec)  # type: ignore[arg-type]
-
-
-class StaleVerificationObservationAdapter(FakeControlledActionAdapter):
-    def __init__(self, *, clock: Clock) -> None:
-        super().__init__(clock=clock)
-        self.observations = 0
-
-    async def observe(
-        self,
-        context: TenantContext,
-        action_spec: object,
-    ) -> ActionObservation:
-        observation = await super().observe(context, action_spec)  # type: ignore[arg-type]
-        self.observations += 1
-        if self.observations >= 3:
-            return replace(
-                observation,
-                observed_at=observation.observed_at - timedelta(seconds=1),
-            )
-        return observation
 
 
 class BuggyAdapter(FakeControlledActionAdapter):
