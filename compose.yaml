@@ -16,6 +16,7 @@ services:
       AEGIS_OIDC_ISSUER: http://localhost:${AEGIS_KEYCLOAK_PORT:-8081}/realms/aegis
       AEGIS_OIDC_JWKS_URL: http://keycloak:8080/realms/aegis/protocol/openid-connect/certs
       AEGIS_OIDC_AUDIENCE: aegis-control-plane
+      AEGIS_OIDC_CLOCK_SKEW_SECONDS: "30"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       OTEL_SERVICE_NAME: aegis-control-plane
     ports:
@@ -52,6 +53,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+      - ./migrations/0001_identity_governance.sql:/docker-entrypoint-initdb.d/20-identity-governance.sql:ro
     healthcheck:
       test:
         - CMD-SHELL

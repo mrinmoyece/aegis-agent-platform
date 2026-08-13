@@ -31,6 +31,14 @@ def test_direct_construction_enforces_validation() -> None:
         ({"AEGIS_LOG_LEVEL": "verbose"}, "not recognized"),
         ({"AEGIS_ENVIRONMENT": "preview"}, "must be one of"),
         ({"AEGIS_SERVICE_NAME": " "}, "cannot be empty"),
+        (
+            {"AEGIS_OIDC_CLOCK_SKEW_SECONDS": "invalid"},
+            "must be an integer",
+        ),
+        (
+            {"AEGIS_OIDC_CLOCK_SKEW_SECONDS": "301"},
+            "between 0 and 300",
+        ),
     ],
 )
 def test_invalid_configuration_is_rejected(

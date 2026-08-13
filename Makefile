@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install format format-check lint type test docs-check manifest-check check compose-config container-check
+.PHONY: help install format format-check lint type test docs-check manifest-check migration-check check compose-config container-check
 
 PYTHON ?= python3
 
@@ -31,7 +31,10 @@ docs-check: ## Validate documentation links and required content
 manifest-check: ## Validate repository configuration manifests
 	$(PYTHON) scripts/check_manifests.py
 
-check: format-check lint type test docs-check manifest-check ## Run all fast local checks
+migration-check: ## Validate ordered SQL migrations and tenant controls
+	$(PYTHON) scripts/check_migrations.py
+
+check: format-check lint type test docs-check manifest-check migration-check ## Run all fast local checks
 
 compose-config: ## Render and validate the local Compose configuration
 	docker compose --env-file .env.example config --quiet

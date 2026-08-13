@@ -14,12 +14,20 @@ deployments, Kubernetes/runtime changes, and runbooks. This narrow story makes
 durability, evidence provenance, authorization, and safe effects testable end
 to end.
 
-> **Current status: Layer 1 — Foundation.** This repository currently provides
-> architecture contracts, an importable Python skeleton, local infrastructure,
-> and engineering guardrails. Dynatrace and GitHub packages are typed read-port
-> boundaries only; they do not make network calls. This layer does **not** yet
-> investigate incidents, execute agents, persist events, enforce production
-> authorization, perform remediation, or provide a production-ready deployment.
+> **Current status: Layer 2 — Identity and tenancy governance.** Layer 1's
+> contracts and guardrails are joined by a small, real control-plane vertical
+> slice: standards-correct local JWT verification (signature, issuer,
+> audience, expiry, key rotation via JWKS) against deterministic fixtures, a
+> Keycloak-compatible JWKS/issuer/audience configuration abstraction, deny-by-
+> default tenant authorization with fixed roles, tenant-scoped policy and
+> quota evaluation, redacted append-only security audit events, a secret
+> reference abstraction, and a Postgres migration adding tenant row-level
+> security. Live network reachability to a running Keycloak realm is
+> deployment-dependent and not exercised by the fast local checks. Durable
+> event-sourced runtime, queue workers, and live Dynatrace/GitHub connectors
+> remain planned in later layers. See
+> [Limitations and production gaps](docs/limitations.md) for the complete,
+> honest gap list.
 
 ## Foundational invariants
 
@@ -34,8 +42,9 @@ to end.
 
 ## Learning path
 
-1. **Foundation (current):** boundaries, invariants, tooling, local stack.
-2. **Identity and tenancy:** authenticated principals and tenant isolation.
+1. **Foundation:** boundaries, invariants, tooling, local stack.
+2. **Identity and tenancy (current):** authenticated principals, deny-by-default
+   tenant authorization, policy/quota governance, and audit evidence.
 3. **Durable orchestration:** event-backed runs and deterministic transitions.
 4. **Workers and leases:** reliable claiming, retries, and recovery.
 5. **Tools and sandboxing:** policy-gated effects and isolation.
@@ -58,8 +67,9 @@ deterministic aggregation. Fixed specialist roles produce typed evidence,
 findings, hypotheses, remediation proposals, and verification results. They
 communicate only by committing those artifacts to the event ledger—never by
 peer chat—and cannot spawn other agents. Read-only investigations can run in
-parallel; risky tools remain approval-gated. Layer 1 defines these contracts but
-does not execute the workflow.
+parallel; risky tools remain approval-gated. These contracts are defined, but
+the durable scheduler, agent execution, and deterministic aggregation that
+would run the workflow remain planned.
 
 Each layer has an acceptance gate in [the roadmap](docs/roadmap.md). The
 [enterprise checklist](docs/enterprise-checklist.md) distinguishes implemented
@@ -88,10 +98,13 @@ cp .env.example .env
 make compose-config
 ```
 
-See [Getting started](docs/getting-started.md) for the tutorial and
-[Architecture](docs/architecture.md) for the system boundaries. The
-[Staff-level curriculum](docs/curriculum.md), [demo scripts](docs/demo-script.md),
-and [interview question bank](docs/interview-question-bank.md) turn the roadmap
+See [Getting started](docs/getting-started.md) for the tutorial,
+[Architecture](docs/architecture.md) for the system boundaries, and the
+[identity and tenancy tutorial](docs/identity-tenancy.md) for a hands-on
+walkthrough of authentication, authorization, policy, quotas, audit, and
+secrets. The [Staff-level curriculum](docs/curriculum.md),
+[demo scripts](docs/demo-script.md), and
+[interview question bank](docs/interview-question-bank.md) turn the roadmap
 into a structured learning path.
 
 ## Repository map
