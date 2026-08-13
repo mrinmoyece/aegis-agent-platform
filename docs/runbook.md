@@ -61,6 +61,29 @@ intent without result, query the target using the intent idempotency key. If the
 target cannot answer, leave the outcome ambiguous and escalate; never synthesize
 success.
 
+## Model gateway triage
+
+1. Use the tenant-scoped model catalog, model-usage, and provider-health views.
+   Capture bounded provider/model, circuit state, pricing version, error code,
+   reservation ID, and event positions. Never copy prompts, tool arguments,
+   provider keys, or raw SDK exceptions into a ticket.
+2. Confirm `model.route_decided.v1`, `model.call_requested.v1`, and
+   `model.budget_reserved.v1` precede `model.call_started.v1`. A started call
+   without those committed facts is an integrity incident.
+3. For budget denial, compare active reservations and current-period usage to
+   tenant/run quota. Rebuild projections from ledger events if drift is suspected;
+   do not edit a charged usage row or increase quota to clear an alert.
+4. For an open circuit, repair provider reachability/auth/configuration and wait
+   for the bounded half-open probe. Do not manually mark the circuit healthy.
+5. For malformed/schema/safety/auth failures, do not retry. Correct catalog,
+   schema, policy, or credentials and create new durable work.
+6. For `billing_ambiguous=true`, preserve the provider request ID and Aegis
+   idempotency key. Compare provider usage/billing exports. Leave the outcome
+   ambiguous when the provider cannot prove it; never synthesize tokens or cost.
+7. Rotate a key by updating its versioned secret reference and calling the client
+   reload boundary. Verify the old reference is revoked. The current environment
+   provider is local-only; production needs a vault-backed provider.
+
 ## Integrity or RLS incident
 
 Stop writers if an aggregate sequence gap, event mutation, or cross-tenant row is
@@ -71,8 +94,8 @@ still Layer 8 work.
 
 ## Rollback policy
 
-Migrations `0002_durable_ledger.sql` and
-`0003_distributed_worker_runtime.sql` are forward-only. They create authoritative
+Migrations `0002_durable_ledger.sql`, `0003_distributed_worker_runtime.sql`, and
+`0004_model_gateway.sql` are forward-only. They create authoritative
 facts and security roles; automated downgrade would destroy evidence or weaken
 isolation. Roll forward with an additive corrective migration. Disaster restore
 uses a separately tested backup, not `DROP TABLE` downgrade SQL.

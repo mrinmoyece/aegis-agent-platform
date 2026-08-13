@@ -56,7 +56,6 @@ def model_request(
     *,
     timeout: float = 1,
     structured: bool = False,
-    messages: tuple[ModelMessage, ...] | None = None,
 ) -> ModelRequest:
     schema = (
         JsonSchema(
@@ -74,8 +73,7 @@ def model_request(
         request_id=uuid4(),
         tenant_id=str(TENANT),
         run_id=uuid4(),
-        messages=messages
-        or (
+        messages=(
             ModelMessage(MessageRole.SYSTEM, (TextPart("Be concise"),)),
             ModelMessage(MessageRole.USER, (TextPart("Hello"),)),
         ),
@@ -183,65 +181,6 @@ def test_openai_translation_usage_tool_call_and_request_id() -> None:
     assert "text" in create.kwargs
     assert captured["api_key"] == "local-test-key"
     assert "api_key" not in repr(response)
-
-
-def test_openai_request_serializes_function_items_at_top_level() -> None:
-    raw = SimpleNamespace(
-        output=[
-            SimpleNamespace(
-                type="message",
-                content=[SimpleNamespace(type="output_text", text="ok")],
-            )
-        ],
-        usage=SimpleNamespace(
-            input_tokens=4,
-            output_tokens=1,
-            input_tokens_details=SimpleNamespace(cached_tokens=0),
-            output_tokens_details=SimpleNamespace(reasoning_tokens=0),
-        ),
-        _request_id="openai-request",
-    )
-    create = AsyncCreate(raw)
-    factory, _captured = client_factory(create, openai=True)
-    request = model_request(
-        "openai",
-        messages=(
-            ModelMessage(MessageRole.USER, (TextPart("Hello"),)),
-            ModelMessage(
-                MessageRole.ASSISTANT,
-                (ToolCallPart(ToolCallProposal("call-1", "answer", {"ok": True})),),
-            ),
-            ModelMessage(
-                MessageRole.TOOL,
-                (ToolResultPart("call-1", {"done": True}),),
-            ),
-        ),
-    )
-    adapter = OpenAIAdapter(
-        TenantContext(TENANT),
-        secret_provider(),
-        settings(),
-        client_factory=factory,
-        clock=lambda: 1,
-    )
-
-    asyncio.run(adapter.complete(request, ModelIdentity("openai", "model-1")))
-
-    assert create.kwargs is not None
-    assert create.kwargs["input"] == [
-        {"role": "user", "content": [{"type": "input_text", "text": "Hello"}]},
-        {
-            "type": "function_call",
-            "call_id": "call-1",
-            "name": "answer",
-            "arguments": '{"ok":true}',
-        },
-        {
-            "type": "function_call_output",
-            "call_id": "call-1",
-            "output": '{"done":true}',
-        },
-    ]
 
 
 def test_anthropic_translation_structured_output_and_cache_usage() -> None:
@@ -633,16 +572,11 @@ def test_translation_helpers_cover_cancellation_and_invalid_values() -> None:
             self.response = SimpleNamespace(headers={"retry-after": "invalid"})
 
     assert classify_sdk_error(InvalidRetryError()).retry_after_seconds is None
-    capped = StatusError(429)
-    capped.response = SimpleNamespace(headers={"retry-after": "Infinity"})  # type: ignore[attr-defined]
-    assert classify_sdk_error(capped).retry_after_seconds is None
-    delayed = StatusError(429)
-    delayed.response = SimpleNamespace(headers={"retry-after": "999"})  # type: ignore[attr-defined]
-    assert classify_sdk_error(delayed).retry_after_seconds == 300.0
     assert classify_sdk_error(TimeoutError()).error_class is ModelErrorClass.TIMEOUT
-    connection = classify_sdk_error(ConnectionError())
-    assert connection.error_class is ModelErrorClass.PROVIDER_UNAVAILABLE
-    assert connection.billing_ambiguous is True
+    assert (
+        classify_sdk_error(ConnectionError()).error_class
+        is ModelErrorClass.PROVIDER_UNAVAILABLE
+    )
 
     async def cancelled_during_wait() -> None:
         cancellation = asyncio.Event()

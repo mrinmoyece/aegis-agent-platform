@@ -52,9 +52,9 @@ class PostgresGatewayRepository(GatewayRepository):
     async def completed(
         self,
         context: TenantContext,
-        request: ModelRequest,
+        idempotency_key: str,
     ) -> ModelResponse | None:
-        del context, request
+        del context, idempotency_key
         # Raw responses are intentionally not persisted without an encrypted artifact
         # store. Durable workers deduplicate before invocation via reservation keys.
         return None
@@ -137,8 +137,9 @@ class PostgresGatewayRepository(GatewayRepository):
                     COALESCE(sum(cost_limit_usd), 0)
                 FROM model_budget_reservations
                 WHERE tenant_id = %s AND status = 'active'
+                  AND created_at >= date_trunc('month', %s::timestamptz)
                 """,
-                (request.tenant_id,),
+                (request.tenant_id, at),
             )
             tenant_active = await cursor.fetchone()
             usage_cursor = await connection.execute(
@@ -288,7 +289,15 @@ class PostgresGatewayRepository(GatewayRepository):
         at: datetime,
     ) -> None:
         _validate(context, request, lease, at)
-        tokens, cost = _actual_usage(pricing, response, reservation)
+        cost = pricing.cost(response.usage)
+        tokens = response.usage.billable_tokens
+        if tokens > reservation.token_limit or cost > reservation.cost_limit_usd:
+            raise ModelGatewayError(
+                ModelErrorClass.PROVIDER_BUG,
+                "usage_exceeded_reservation",
+                retryable=False,
+                billing_ambiguous=True,
+            )
         common = {
             **_common(request, lease, reservation),
             "provider": response.model.provider,
@@ -387,146 +396,6 @@ class PostgresGatewayRepository(GatewayRepository):
 
         await self._append_fenced(context, lease, events, at=at, mutation=mutation)
 
-    async def record_usage_failure(
-        self,
-        context: TenantContext,
-        request: ModelRequest,
-        lease: WorkLease,
-        reservation: BudgetReservation,
-        response: ModelResponse,
-        pricing: PricingVersion,
-        error: ModelGatewayError,
-        *,
-        at: datetime,
-    ) -> None:
-        _validate(context, request, lease, at)
-        tokens, cost = _actual_usage(pricing, response, reservation)
-        common = {
-            **_common(request, lease, reservation),
-            "provider": response.model.provider,
-            "model": response.model.model,
-            "price_version": pricing.version,
-        }
-        usage = response.usage
-        details = {
-            **common,
-            "error_class": error.error_class.value,
-            "error_code": error.code,
-            "retryable": error.retryable,
-            "billing_ambiguous": error.billing_ambiguous,
-        }
-        events = _events(
-            request,
-            lease,
-            at,
-            (
-                (_failure_event_type(error), details),
-                (
-                    DomainEventType.MODEL_USAGE_RECORDED,
-                    {**common, **_usage(usage), "cost_usd": str(cost)},
-                ),
-                (
-                    DomainEventType.MODEL_BUDGET_CHARGED,
-                    {**common, "tokens": tokens, "cost_usd": str(cost)},
-                ),
-                (
-                    DomainEventType.MODEL_BUDGET_RELEASED,
-                    {
-                        **common,
-                        "tokens_released": reservation.token_limit - tokens,
-                        "cost_released_usd": str(reservation.cost_limit_usd - cost),
-                        "reason": "validation_failed_after_provider_response",
-                    },
-                ),
-            ),
-        )
-
-        async def mutation(connection: psycopg.AsyncConnection[Any]) -> None:
-            updated = await connection.execute(
-                """
-                UPDATE model_budget_reservations
-                SET status = 'charged', charged_tokens = %s,
-                    charged_cost_usd = %s, reconciled_at = %s
-                WHERE tenant_id = %s AND reservation_id = %s
-                  AND status = 'active' AND lease_token = %s
-                  AND lease_generation = %s
-                """,
-                (
-                    tokens,
-                    cost,
-                    at,
-                    request.tenant_id,
-                    reservation.reservation_id,
-                    lease.token,
-                    lease.generation,
-                ),
-            )
-            if updated.rowcount != 1:
-                raise ConcurrencyError(1, 0)
-            await connection.execute(
-                """
-                INSERT INTO model_usage_projection (
-                    tenant_id, request_id, run_id, provider, model, price_version,
-                    input_tokens, output_tokens, cache_read_tokens,
-                    cache_write_tokens, reasoning_tokens, total_tokens, cost_usd,
-                    recorded_at
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                )
-                """,
-                (
-                    request.tenant_id,
-                    request.request_id,
-                    request.run_id,
-                    response.model.provider,
-                    response.model.model,
-                    pricing.version,
-                    usage.input_tokens,
-                    usage.output_tokens,
-                    usage.cache_read_tokens,
-                    usage.cache_write_tokens,
-                    usage.reasoning_tokens,
-                    tokens,
-                    cost,
-                    at,
-                ),
-            )
-
-        await self._append_fenced(context, lease, events, at=at, mutation=mutation)
-
-    async def record_attempt_failure(
-        self,
-        context: TenantContext,
-        request: ModelRequest,
-        lease: WorkLease,
-        reservation: BudgetReservation,
-        error: ModelGatewayError,
-        *,
-        provider: str,
-        model: str,
-        attempt: int,
-        fallback_index: int,
-        at: datetime,
-    ) -> None:
-        _validate(context, request, lease, at)
-        details = {
-            **_common(request, lease, reservation),
-            "provider": provider,
-            "model": model,
-            "attempt": attempt,
-            "fallback_index": fallback_index,
-            "error_class": error.error_class.value,
-            "error_code": error.code,
-            "retryable": error.retryable,
-            "billing_ambiguous": error.billing_ambiguous,
-        }
-        await self._append_fenced(
-            context,
-            lease,
-            _events(request, lease, at, ((_failure_event_type(error), details),)),
-            at=at,
-        )
-
     async def fail(
         self,
         context: TenantContext,
@@ -538,6 +407,11 @@ class PostgresGatewayRepository(GatewayRepository):
         at: datetime,
     ) -> None:
         _validate(context, request, lease, at)
+        event_type = {
+            ModelErrorClass.TIMEOUT: DomainEventType.MODEL_CALL_TIMED_OUT,
+            ModelErrorClass.RATE_LIMIT: DomainEventType.MODEL_CALL_RATE_LIMITED,
+            ModelErrorClass.CANCELLED: DomainEventType.MODEL_CALL_CANCELLED,
+        }.get(error.error_class, DomainEventType.MODEL_CALL_FAILED)
         common = _common(request, lease, reservation)
         details = {
             **common,
@@ -551,7 +425,7 @@ class PostgresGatewayRepository(GatewayRepository):
             lease,
             at,
             (
-                (_failure_event_type(error), details),
+                (event_type, details),
                 (
                     DomainEventType.MODEL_BUDGET_RELEASED,
                     {
@@ -725,7 +599,7 @@ def _events(
 ) -> tuple[EventEnvelope, ...]:
     result: list[EventEnvelope] = []
     causation: UUID | None = None
-    for index, (event_type, payload) in enumerate(values, start=1):
+    for event_type, payload in values:
         event_id = uuid4()
         result.append(
             EventEnvelope(
@@ -738,11 +612,8 @@ def _events(
                 payload=payload,
                 correlation_id=request.run_id,
                 causation_id=causation,
-                idempotency_key=_event_idempotency_key(
-                    request,
-                    event_type,
-                    payload,
-                    index=index,
+                idempotency_key=(
+                    f"{request.idempotency_key}:{event_type.value}:{event_id}"
                 ),
             )
         )
@@ -758,57 +629,6 @@ def _usage(value: TokenUsage) -> dict[str, JsonValue]:
         "cache_write_tokens": value.cache_write_tokens,
         "reasoning_tokens": value.reasoning_tokens,
     }
-
-
-def _failure_event_type(error: ModelGatewayError) -> DomainEventType:
-    if error.error_class is ModelErrorClass.TIMEOUT:
-        return DomainEventType.MODEL_CALL_TIMED_OUT
-    if error.error_class is ModelErrorClass.RATE_LIMIT:
-        return DomainEventType.MODEL_CALL_RATE_LIMITED
-    if error.error_class is ModelErrorClass.CANCELLED:
-        return DomainEventType.MODEL_CALL_CANCELLED
-    return DomainEventType.MODEL_CALL_FAILED
-
-
-def _actual_usage(
-    pricing: PricingVersion,
-    response: ModelResponse,
-    reservation: BudgetReservation,
-) -> tuple[int, Decimal]:
-    cost = pricing.cost(response.usage)
-    tokens = response.usage.billable_tokens
-    if tokens > reservation.token_limit or cost > reservation.cost_limit_usd:
-        raise ModelGatewayError(
-            ModelErrorClass.PROVIDER_BUG,
-            "usage_exceeded_reservation",
-            retryable=False,
-            billing_ambiguous=True,
-        )
-    return tokens, cost
-
-
-def _event_idempotency_key(
-    request: ModelRequest,
-    event_type: DomainEventType,
-    payload: Mapping[str, JsonValue],
-    *,
-    index: int,
-) -> str:
-    parts = [
-        request.idempotency_key,
-        event_type.value,
-        str(payload.get("fallback_index", 0)),
-        str(payload.get("attempt", 0)),
-        str(payload.get("reservation_id", "")),
-        str(index),
-    ]
-    provider = payload.get("provider")
-    model = payload.get("model")
-    if isinstance(provider, str) and provider:
-        parts.append(provider)
-    if isinstance(model, str) and model:
-        parts.append(model)
-    return ":".join(parts)
 
 
 __all__ = ["PostgresGatewayRepository"]

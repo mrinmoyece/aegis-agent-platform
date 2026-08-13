@@ -8,6 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "migrations" / "0001_identity_governance.sql"
 LEDGER_MIGRATION = ROOT / "migrations" / "0002_durable_ledger.sql"
+GATEWAY_MIGRATION = ROOT / "migrations" / "0004_model_gateway.sql"
 
 
 def test_identity_governance_schema_has_tenant_constraints_and_indexes() -> None:
@@ -88,3 +89,18 @@ def test_destructive_migration_guard_rejects_optional_truncate_syntax() -> None:
     assert pattern.search("TRUNCATE events;".lower())
     assert pattern.search("TRUNCATE TABLE events;".lower())
     assert not pattern.search("REVOKE TRUNCATE ON events;".lower())
+
+
+def test_model_budget_schema_is_tenant_scoped_fenced_and_versioned() -> None:
+    schema = GATEWAY_MIGRATION.read_text(encoding="utf-8").lower()
+    for table in (
+        "tenant_model_budget_locks",
+        "model_budget_reservations",
+        "model_usage_projection",
+    ):
+        assert f"alter table {table} force row level security" in schema
+        assert f"{table}_tenant_isolation" in schema
+    assert "unique (tenant_id, idempotency_key)" in schema
+    assert "price_version text not null" in schema
+    assert "lease_generation bigint not null" in schema
+    assert "where status = 'active'" in schema

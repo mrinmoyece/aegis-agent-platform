@@ -65,6 +65,9 @@ class TenantPolicy:
     tools_requiring_approval: frozenset[str]
     approver_roles: frozenset[Role]
     quotas: QuotaLimits
+    allowed_providers: frozenset[str] = frozenset()
+    allowed_data_residencies: frozenset[str] = frozenset()
+    allow_provider_retention: bool = False
 
     def __post_init__(self) -> None:
         if not self.version:

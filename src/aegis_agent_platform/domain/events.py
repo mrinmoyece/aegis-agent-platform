@@ -52,6 +52,20 @@ class DomainEventType(StrEnum):
     WORK_CANCELLED = "work.cancelled.v1"
     WORK_DEAD_LETTERED = "work.dead_lettered.v1"
     WORK_RECONCILED = "work.reconciled.v1"
+    MODEL_CALL_REQUESTED = "model.call_requested.v1"
+    MODEL_CALL_STARTED = "model.call_started.v1"
+    MODEL_CALL_ATTEMPTED = "model.call_attempted.v1"
+    MODEL_CALL_SUCCEEDED = "model.call_succeeded.v1"
+    MODEL_CALL_FAILED = "model.call_failed.v1"
+    MODEL_CALL_TIMED_OUT = "model.call_timed_out.v1"
+    MODEL_CALL_RATE_LIMITED = "model.call_rate_limited.v1"
+    MODEL_CALL_CANCELLED = "model.call_cancelled.v1"
+    MODEL_USAGE_RECORDED = "model.usage_recorded.v1"
+    MODEL_ROUTE_DECIDED = "model.route_decided.v1"
+    MODEL_FALLBACK_SELECTED = "model.fallback_selected.v1"
+    MODEL_BUDGET_RESERVED = "model.budget_reserved.v1"
+    MODEL_BUDGET_RELEASED = "model.budget_released.v1"
+    MODEL_BUDGET_CHARGED = "model.budget_charged.v1"
 
 
 @dataclass(frozen=True, slots=True)

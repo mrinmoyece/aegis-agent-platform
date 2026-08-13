@@ -104,12 +104,12 @@ class ModelRouter:
             )
             checks = {
                 "model_not_allowed": not allowed_model,
-                "provider_not_allowed": (
-                    identity.provider not in policy.allowed_providers
-                ),
+                "provider_not_allowed": bool(policy.allowed_providers)
+                and identity.provider not in policy.allowed_providers,
                 "environment_not_allowed": environment not in entry.environments
                 or environment.value not in policy.allowed_environments,
-                "residency_not_allowed": not entry.data_residencies.intersection(
+                "residency_not_allowed": bool(policy.allowed_data_residencies)
+                and not entry.data_residencies.intersection(
                     policy.allowed_data_residencies
                 ),
                 "retention_not_allowed": entry.provider_retains_data

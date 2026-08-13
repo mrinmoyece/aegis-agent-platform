@@ -95,11 +95,29 @@ remediation are intentionally deferred.
 **Acceptance gate:** duplicate delivery, lease expiry/reclaim, stale writers,
 publisher restart windows, cancellation races, timeout/retry exhaustion, poison
 messages, and DLQ operations have deterministic or live-service evidence.
-Provider rate limits, ambiguous provider outcomes, connector fixtures, and
-deterministic specialist aggregation remain later Layer 4 follow-ups and are not
-claimed by this worker layer.
+Provider controls and ambiguous-outcome recording are implemented separately in
+Layer 5. Connector fixtures and deterministic specialist aggregation remain
+future work and are not claimed by this worker layer.
 
-## Layer 5 — Tools, policy, and sandbox
+## Layer 5 — Provider-neutral model gateway
+
+Implement neutral content/message/tool/schema contracts, OpenAI and Anthropic
+adapters, a deterministic fake, explicit catalog/pricing, tenant policy routing,
+fenced pre-call budget reservation, usage reconciliation, structured validation,
+retry/failover/rate/concurrency/circuit controls, redacted telemetry, and bounded
+operator views.
+
+**Status:** implemented in `domain.model`, `providers`, `gateway`, migration
+`0004_model_gateway.sql`, and deterministic adapter/routing/budget evaluations.
+No live provider call runs in CI.
+
+**Acceptance gate:** unknown models/prices deny; intent and reservation precede
+network; stale workers cannot call/charge/surface responses; permanent failures
+do not retry; fallback is bounded; usage retains its price version; prompts and
+keys never enter model events or telemetry; ambiguous provider billing is
+reported rather than treated as exactly once.
+
+## Layer 6 — Tools, policy, and sandbox
 
 Add typed tool contracts, policy decisions, approvals, capability-scoped
 credentials, an incident proposal/approval workflow, and isolated execution with
@@ -111,7 +129,7 @@ authorization; sandbox escape and egress tests fail closed; every effect is
 attributable to an approved intent; the checkout rollback cannot execute before
 valid approval.
 
-## Layer 6 — Memory and retrieval
+## Layer 7 — Memory and retrieval
 
 Add tenant-scoped short- and long-term memory, pgvector retrieval, provenance,
 classification, retention, export, and deletion workflows. Index runbooks and
@@ -125,7 +143,7 @@ retrieved item has provenance; deletion and retention behavior is auditable.
 Compaction tests preserve material evidence, uncertainty, conflict, approval
 state, and budgets, and semantic retrieval cannot cross tenants.
 
-## Layer 7 — Evaluation and observability
+## Layer 8 — Evaluation and observability
 
 Add versioned datasets, offline and online evaluation, release gates, traces,
 metrics, logs, cost accounting, and safe content handling. Score hypothesis
@@ -136,7 +154,7 @@ and recovery verification on checkout-failure variants.
 event-to-trace correlation works; telemetry contains no disallowed content or
 unbounded tenant labels.
 
-## Layer 8 — Enterprise operations
+## Layer 9 — Enterprise operations
 
 Add deployment automation, SLOs, alerting, runbooks, backup and restore, HA,
 capacity tests, software provenance, signing, governance evidence, and incident
