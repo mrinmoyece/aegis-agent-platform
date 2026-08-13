@@ -17,6 +17,11 @@ recoverable; acknowledgement requires the current lease.
 PostgreSQL is the initial correctness store. Redis may optimize notification or
 ephemeral coordination but cannot become a source of truth.
 
+Layer 4 implements this decision with a shared Redis Stream, deterministic
+message identity, PostgreSQL inbox deduplication, `work_leases` token/generation
+CAS, fenced event append, heartbeat, expiry/reclaim, bounded retry, cancellation,
+and DLQ projections. ADR 0011 records the shared-stream cardinality tradeoff.
+
 ## Consequences
 
 Handlers must be idempotent or reconcilable. Lease expiry and worker pauses are

@@ -13,12 +13,12 @@ Status meanings:
 | Architecture dependency rule | Implemented | `tests/test_architecture.py` |
 | Liveness and configuration readiness | Implemented | control-plane ASGI tests |
 | Local pgvector PostgreSQL | Implemented | Compose plus live PostgreSQL 16 tests |
-| Local Redis | Scaffolded | `compose.yaml` |
+| Local Redis transport | Implemented | Redis Streams adapter, Compose, live tests |
 | Local OIDC realm | Scaffolded | Keycloak import |
 | OTLP, Prometheus, and Grafana topology | Scaffolded | `deploy/` |
 | Dynatrace evidence read contract | Scaffolded | `integrations.dynatrace` |
 | GitHub delivery evidence read contract | Scaffolded | `integrations.github` |
-| Live Dynatrace and GitHub connectors | Planned | Layer 4 |
+| Live Dynatrace and GitHub connectors | Planned | Future connector layer |
 | Checkout-failure incident investigation | Planned | Layers 3–7 |
 | Approval-gated rollback and recovery verification | Planned | Layers 5–7 |
 | Fixed incident specialist roles and typed artifacts | Scaffolded | `agents` |
@@ -55,9 +55,11 @@ Status meanings:
 | Transactional inbox/outbox | Implemented | deduplication, atomic append, claims, retry/DLQ |
 | Rebuildable projections/checkpoints | Implemented | run/artifact/approval/usage/tenant views |
 | Authorized ledger/timeline inspection | Implemented | tenant-scoped redacted read-only API |
-| Durable queue and fenced leases | Planned | Layer 4 |
-| Retry, timeout, dead-letter, and recovery policy | Planned | Layer 4 |
-| Provider adapters and normalized metering | Planned | Layer 4 |
+| Durable queue and fenced leases | Implemented | `queueing`, `runtime.postgres`, migration `0003`, live race tests |
+| Retry, timeout, dead-letter, and recovery policy | Implemented | `runtime.WorkerSupervisor`, deterministic tests |
+| Authorized queue/cancel/DLQ/reconcile operations | Implemented | `runtime.operations`; payload-free bounded views |
+| Bounded runtime metrics and OTel spans | Implemented | `observability.runtime`; no identifier labels |
+| Provider adapters and normalized metering | Planned | Future provider layer |
 | Tool schema registry and runtime policy | Planned | Layer 5 |
 | Human approval and break-glass audit | Planned | Layer 5 |
 | Isolated sandbox with egress policy and quotas | Planned | Layer 5 |

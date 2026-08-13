@@ -12,13 +12,27 @@ from aegis_agent_platform.domain.events import (
     TraceContext,
     require_aware_datetime,
 )
+from aegis_agent_platform.domain.work import (
+    FailureClass,
+    WorkLease,
+    WorkRequest,
+    WorkStatus,
+    WorkTransition,
+    next_status,
+)
 
 __all__ = [
     "ActorKind",
     "ActorReference",
     "DomainEventType",
     "EventEnvelope",
+    "FailureClass",
     "JsonValue",
     "TraceContext",
     "require_aware_datetime",
+    "WorkLease",
+    "WorkRequest",
+    "WorkStatus",
+    "WorkTransition",
+    "next_status",
 ]

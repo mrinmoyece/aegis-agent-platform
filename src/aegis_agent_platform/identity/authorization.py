@@ -39,6 +39,8 @@ ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyTy
                 Permission.RESOURCE_READ,
                 Permission.POLICY_READ,
                 Permission.OPERATION_PROPOSE,
+                Permission.QUEUE_READ,
+                Permission.WORK_CANCEL,
             }
         ),
         Role.TENANT_ADMIN: frozenset(
@@ -52,6 +54,10 @@ ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyTy
                 Permission.IDENTITY_MANAGE,
                 Permission.ROLE_BINDING_MANAGE,
                 Permission.SECRET_REFERENCE_MANAGE,
+                Permission.QUEUE_READ,
+                Permission.WORK_CANCEL,
+                Permission.DLQ_REQUEUE,
+                Permission.WORK_RECONCILE,
             }
         ),
         Role.PLATFORM_ADMIN: frozenset(
