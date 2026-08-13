@@ -186,3 +186,4 @@ def test_specialist_schema_is_tenant_scoped_fenced_and_rebuildable() -> None:
     assert "unique (tenant_id, run_id, ledger_sequence)" in schema
     assert "revoke delete, truncate on agent_run_projection" in schema
     assert "revoke update on reasoning_artifact_projection" in schema
+    assert "grant usage on schema public to aegis_maintenance" in schema

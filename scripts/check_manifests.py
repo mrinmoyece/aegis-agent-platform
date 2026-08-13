@@ -111,6 +111,10 @@ def main() -> None:
     init_mounts = services["postgres"]["volumes"]
     if not any("40-create-app-user.sh" in volume for volume in init_mounts):
         raise SystemExit("PostgreSQL must create the restricted runtime login")
+    for migration in sorted((ROOT / "migrations").glob("*.sql")):
+        mount = f"./migrations/{migration.name}:"
+        if not any(mount in volume for volume in init_mounts):
+            raise SystemExit(f"PostgreSQL init mounts must include {migration.name}")
     runtime_init = (ROOT / "docker" / "postgres" / "40-create-app-user.sh").read_text(
         encoding="utf-8"
     )
