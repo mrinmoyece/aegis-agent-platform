@@ -5,9 +5,10 @@
 - Dynatrace and GitHub packages are interfaces, not working connectors.
 - Kubernetes, runbook, incident-management, and remediation adapters do not
   exist.
-- Agent roles, artifacts, plans, budgets, and ledger are types only. There is no
-  scheduler, model invocation, deterministic aggregation, critic enforcement,
-  approval workflow, or specialist execution.
+- Agent roles, artifacts, and plans are types only. There is no specialist
+  scheduler, deterministic aggregation, critic enforcement, approval workflow,
+  or specialist execution. Model invocation and model-call budgets are
+  implemented independently of that future orchestration.
 - Sandbox, tools, memory, and evaluation packages are boundaries only.
 - Runtime spans and bounded metric instruments exist, but no production
   collector dashboards, alert rules, or SLO evidence are claimed.
@@ -18,6 +19,38 @@
   tool access, external task exchange, streaming, cancellation, or status.
 - CI scans and builds a baseline but does not yet emit an SBOM, provenance,
   signature, release artifact, or deployment.
+
+## Current Layer 5 implementation (model gateway)
+
+- Provider-neutral immutable contracts cover messages/content, tools, schemas,
+  capabilities, identity, safety/refusal, finish reasons, five usage token
+  classes, latency, versioned pricing, and classified failures.
+- Official OpenAI and Anthropic Python SDK adapters are isolated at the provider
+  edge and tested through mocked SDK clients. They are production-capable
+  translations, but CI performs no live provider call and proves no provider
+  account, regional endpoint, quota, or SLA.
+- Routing fails closed for unknown models/prices and enforces tenant model/
+  provider/environment/residency/retention policy, capability/context/output
+  limits, bounded catalog health, and cost/latency ordering.
+- PostgreSQL fenced reservations serialize tenant capacity and atomically commit
+  route/request/reservation events before network. Usage/charge/release commits
+  after response. Stale workers cannot call before a failed reservation or
+  charge/surface a response after a failed result fence.
+- Only metadata and a content digest enter model events. Raw prompts, tool
+  arguments/results, images, keys, and SDK errors are not persisted or logged.
+  There is no encrypted prompt/response artifact store yet.
+- Prompt token estimates are conservative caller input; exact preflight
+  tokenizers are not implemented. Reservation drift is observable.
+- Provider timeouts can be billing-ambiguous. Idempotency is forwarded where
+  supported, but exactly-once provider billing is not claimed. Automated
+  reconciliation with provider billing exports is not implemented.
+- Automatic structured-output repair is not implemented. Invalid JSON/schema or
+  tool arguments fail explicitly; a future repair must be a separately durable,
+  budgeted call.
+- The read-only model catalog, usage, and health APIs are implemented. Live
+  completion is deliberately not an HTTP shortcut; production invocation must
+  enter through durable worker execution. The CLI diagnostic uses only the
+  scripted mock.
 
 ## Current Layer 2 implementation (identity, tenancy, and governance)
 
@@ -63,8 +96,8 @@
 - Global positions provide ordering, not a no-gap promise after rolled-back
   identity allocations. Aggregate sequence is gapless.
 - The outbox remains delivery state only. Layer 4 publishes it to Redis, but
-  model/provider calls, live connectors, agent execution, approval, and external
-  effect adapters do not exist.
+  live connectors, agent execution, approval, and external remediation effect
+  adapters do not exist. Layer 5 model calls use their own durable fenced path.
 - Exactly-once effects are not claimed. Intent/result contracts and idempotency
   keys exist, but later adapters must implement idempotency or reconciliation.
 - Projections cover generic run status, artifacts, approvals, usage, and tenant
@@ -102,7 +135,8 @@
 ## Claims deliberately not made
 
 Aegis does not currently diagnose checkout failures, protect production data,
-guarantee exactly-once effects, provide a secure code sandbox, satisfy a
+guarantee exactly-once effects or provider billing, provide a secure code
+sandbox, satisfy a
 compliance framework, meet an SLO, or support multi-region recovery. Live local
 PostgreSQL tests prove specific RLS and durability controls, not production
 deployment hardening or operational readiness.

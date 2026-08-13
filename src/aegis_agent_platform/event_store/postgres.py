@@ -534,6 +534,29 @@ class PostgresEventStore:
                 )
             yield event
 
+    async def current_version(
+        self,
+        context: TenantContext,
+        aggregate_id: str,
+    ) -> int:
+        """Read the current aggregate head for a subsequent guarded append."""
+        if not aggregate_id:
+            raise ValueError("aggregate_id is required")
+        try:
+            async with _tenant_transaction(self._connection, self._lock, context):
+                cursor = await self._connection.execute(
+                    """
+                    SELECT current_version
+                    FROM event_stream_heads
+                    WHERE tenant_id = %s AND aggregate_id = %s
+                    """,
+                    (str(context.tenant_id), aggregate_id),
+                )
+                row = await cursor.fetchone()
+                return int(row[0]) if row is not None else 0
+        except psycopg.Error as error:
+            raise classify_storage_error(error) from error
+
     async def read_all(
         self,
         context: TenantContext,

@@ -63,6 +63,7 @@ services:
       - ./migrations/0001_identity_governance.sql:/docker-entrypoint-initdb.d/20-identity-governance.sql:ro
       - ./migrations/0002_durable_ledger.sql:/docker-entrypoint-initdb.d/30-durable-ledger.sql:ro
       - ./migrations/0003_distributed_worker_runtime.sql:/docker-entrypoint-initdb.d/35-worker-runtime.sql:ro
+      - ./migrations/0004_model_gateway.sql:/docker-entrypoint-initdb.d/37-model-gateway.sql:ro
       - ./docker/postgres/40-create-app-user.sh:/docker-entrypoint-initdb.d/40-create-app-user.sh:ro
     healthcheck:
       test:

@@ -7,18 +7,29 @@ import json
 import threading
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
 import pytest
 
 from aegis_agent_platform.audit import REDACTED, AuditEventType, InMemoryAuditStore
+from aegis_agent_platform.config import Environment
 from aegis_agent_platform.control_plane.api import ControlPlaneApp, application
-from aegis_agent_platform.domain import DomainEventType, EventEnvelope
-from aegis_agent_platform.event_store import (
-    EventPage,
-    EventStore,
-    TransientStorageError,
+from aegis_agent_platform.domain import (
+    DomainEventType,
+    EventEnvelope,
+    JsonValue,
+    ModelCapabilities,
+    ModelIdentity,
+    PricingVersion,
+)
+from aegis_agent_platform.event_store import EventPage, EventStore, TransientStorageError
+from aegis_agent_platform.gateway import (
+    GatewayOperations,
+    ModelCatalog,
+    ModelCatalogEntry,
+    ProviderControls,
 )
 from aegis_agent_platform.identity import PLATFORM_TENANT_ID, Principal
 from aegis_agent_platform.policy import InMemoryPolicyRepository
@@ -83,6 +94,10 @@ def request(
     return status, body, response_headers
 
 
+def bearer(encoded: str) -> str:
+    return "Bearer " + encoded
+
+
 class PatchedEnvironment:
     """Narrow environment patcher that does not require an HTTP test framework."""
 
@@ -126,7 +141,9 @@ class PatchedEnvironment:
 
 
 def secured_app(
-    *, event_store: EventStore | None = None
+    *,
+    event_store: EventStore | None = None,
+    gateway_operations: GatewayOperations | None = None,
 ) -> tuple[ControlPlaneApp, str, InMemoryAuditStore]:
     signing = signing_fixture()
     audit = InMemoryAuditStore()
@@ -136,8 +153,49 @@ def secured_app(
         policies=InMemoryPolicyRepository((tenant_policy(),)),
         audit=audit,
         event_store=event_store,
+        gateway_operations=gateway_operations,
     )
     return app, token(signing), audit
+
+
+class StaticUsageReader:
+    def usage_summary(self, tenant_id: str) -> dict[str, JsonValue]:
+        assert tenant_id == str(TENANT_ID)
+        return {"tokens": 12, "cost_usd": "0.001", "calls": 1}
+
+
+def model_operations() -> GatewayOperations:
+    identity = ModelIdentity("mock", "model-safe")
+    catalog = ModelCatalog(
+        (
+            ModelCatalogEntry(
+                identity=identity,
+                capabilities=ModelCapabilities(8_192, 1_024, True, False, True),
+                pricing=PricingVersion(
+                    "mock-price-v1",
+                    datetime(2026, 1, 1, tzinfo=UTC),
+                    Decimal("1"),
+                    Decimal("2"),
+                ),
+                environments=frozenset({Environment.PRODUCTION}),
+                data_residencies=frozenset({"eu"}),
+                provider_retains_data=False,
+                cost_rank=0,
+                latency_rank=0,
+            ),
+        )
+    )
+    return GatewayOperations(
+        catalog,
+        ProviderControls(
+            (identity,),
+            concurrency=1,
+            requests_per_minute=10,
+            tokens_per_minute=10_000,
+            clock=lambda: 0,
+        ),
+        StaticUsageReader(),
+    )
 
 
 class TimelineEventStore:
@@ -448,6 +506,54 @@ def test_duplicate_tenant_records_are_rejected() -> None:
 
     with pytest.raises(ValueError, match="duplicate tenant records"):
         InMemoryTenantRepository((tenant, tenant))
+
+
+def test_authorized_model_catalog_usage_and_health_views_are_bounded() -> None:
+    app, encoded, _ = secured_app(gateway_operations=model_operations())
+    authorization = bearer(encoded)
+
+    models_status, models, _ = request(
+        "/v1/tenants/tenant-alpha/models",
+        app=app,
+        authorization=authorization,
+    )
+    usage_status, usage, _ = request(
+        "/v1/tenants/tenant-alpha/model-usage",
+        app=app,
+        authorization=authorization,
+    )
+    health_status, health, _ = request(
+        "/v1/tenants/tenant-alpha/provider-health",
+        app=app,
+        authorization=authorization,
+    )
+
+    assert models_status == usage_status == health_status == 200
+    assert models["models"][0]["model"] == "model-safe"
+    assert models["models"][0]["pricing_version"] == "mock-price-v1"
+    assert usage == {"tokens": 12, "cost_usd": "0.001", "calls": 1}
+    assert health["providers"][0]["circuit_state"] == "closed"
+    assert "tenant_id" not in health["providers"][0]
+
+
+def test_model_views_fail_closed_without_gateway_or_across_tenants() -> None:
+    app, encoded, _ = secured_app()
+    missing_status, missing, _ = request(
+        "/v1/tenants/tenant-alpha/models",
+        app=app,
+        authorization=bearer(encoded),
+    )
+    secured, secured_encoded, _ = secured_app(gateway_operations=model_operations())
+    denied_status, denied, _ = request(
+        "/v1/tenants/tenant-beta/models",
+        app=secured,
+        authorization=bearer(secured_encoded),
+    )
+
+    assert missing_status == 503
+    assert missing["error"]["code"] == "gateway_not_configured"
+    assert denied_status == 403
+    assert denied["error"]["code"] == "authorization_denied"
 
 
 def test_ledger_rejects_invalid_cursor() -> None:

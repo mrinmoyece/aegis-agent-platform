@@ -5,6 +5,7 @@
 This model covers the intended platform and marks control status honestly.
 Layer 1 established contracts; Layers 2–3 added governance and the ledger.
 Layer 4 adds Redis delivery plus PostgreSQL leases/fencing and live race evidence.
+Layer 5 adds the provider-neutral model gateway and fenced cost governance.
 The system assumes model output, tool output, retrieved
 content, and tenant input can be hostile. Cloud, identity provider, model
 provider, and operator accounts can be compromised. Prompt instructions are
@@ -49,10 +50,10 @@ never trusted as controls.
 | Event tampering | False state or missing audit evidence | Append controls, hashes/retention, restricted roles | Event/audit update-delete rejected by grants and live-tested triggers; retention and access review remain planned |
 | Sandbox escape | Host or network compromise | Strong isolation, deny-by-default egress, quotas | Boundary only |
 | Secret exfiltration | Credentials in prompts or telemetry | Brokered secrets, redaction, content policy | Secret-reference abstraction, redacted `SecretValue`, and audit-detail redaction implemented; only a local environment-variable provider exists, no vault-backed broker |
-| Provider data leakage | Sensitive content retained externally | Provider policy, classification, regional routing | Planned |
-| Resource exhaustion | Runaway work or noisy tenant | Deadlines, queue backpressure, global and tenant quotas | Worker concurrency, timeout, bounded reads/reclaim, and tenant quotas implemented; model/token budgets planned |
+| Provider data leakage | Sensitive content retained externally | Provider policy, classification, regional routing | Retention/residency policy and routing implemented; provider account verification and encrypted content artifacts remain planned |
+| Resource exhaustion | Runaway work or noisy tenant | Deadlines, queue backpressure, global and tenant quotas | Worker and provider concurrency, timeouts, request/token limits, circuits, and fenced model budgets implemented |
 | Supply-chain compromise | Malicious build dependency/action | Pinned actions, review, scanning, attestations | Partial |
-| Telemetry leakage | Tenant data in labels or traces | Redaction and bounded-cardinality conventions | Runtime instruments expose fixed operation/metric names and no identifier labels; production telemetry backend review remains planned |
+| Telemetry leakage | Tenant data in labels or traces | Redaction and bounded-cardinality conventions | Runtime/model instruments use fixed names and catalog-bounded provider/model labels without tenant/run/request IDs; backend review remains planned |
 | Evaluation poisoning | Unsafe release passes gates | Dataset provenance, immutable results, approvals | Planned |
 | Evidence spoofing | Forged logs or change metadata drives a false hypothesis | Authenticated adapters, immutable references, timestamps, source labeling | Contracts only |
 | Stale correlation | Unrelated deployment is blamed for checkout failures | Explicit time windows, topology, counter-evidence, confidence | Planned |
@@ -175,4 +176,15 @@ for production configuration but managed Redis failover, PostgreSQL HA, backup,
 restore, and multi-region behavior are untested. No external target is called, so
 the intent/result ambiguity protocol is represented but target idempotency and
 reconciliation are not yet proven. Cooperative cancellation does not isolate
-hostile code; sandboxing remains Layer 5.
+hostile code; sandboxing remains Layer 6.
+
+## Layer 5 residual risk
+
+Provider SDK calls now require tenant policy, catalog capability, health, and a
+fenced durable reservation. Raw content and API keys are excluded from model
+events, logs, metrics, and spans. This does not prove a provider honors retention
+or residency claims, and the environment secret provider is not a vault. There
+is no encrypted durable prompt/response store. A timeout can follow provider
+acceptance and billing; Aegis records ambiguity but cannot automatically
+reconcile a provider invoice. Provider egress, proxy, TLS trust roots, account
+rotation, and live regional failure drills remain deployment evidence.
