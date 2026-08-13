@@ -84,6 +84,30 @@ success.
    reload boundary. Verify the old reference is revoked. The current environment
    provider is local-only; production needs a vault-backed provider.
 
+## Evidence connector triage
+
+1. Inspect the tenant-scoped query status, source kind, bounded error code,
+   partial/truncated flags, counts, and event positions. Do not copy query
+   content, URLs, logs, traces, diffs, runbooks, or credentials into tickets.
+2. Confirm `evidence.query_requested.v1` committed before
+   `evidence.query_started.v1`. A network read without durable intent is an
+   integrity incident.
+3. For rate limiting, honor the bounded retry-after and tenant deadline. For
+   timeout/cancellation, create no success-shaped result.
+4. For partial results, retain ingested pages and explicit omission reasons.
+   Resume only from a cursor committed by the current lease generation.
+5. For quarantine, inspect source kind, record ID, reason, size, digest, and trust
+   metadata only. Correct policy/schema/trust and submit new work; do not edit an
+   immutable record or bypass validation.
+6. For cursor lag, compare the source cursor's query and lease generation with
+   current durable work. Never manually advance a cursor to hide lag.
+7. For correlation conflict, inspect citations, typed identifiers, clock-skew
+   tolerance, confidence, and rationale. Preserve unresolved ambiguity rather
+   than selecting a causal story.
+8. Keep a connector disabled while rotating credentials or correcting
+   allowlists. Verify least-privilege source permissions, TLS/private egress, and
+   residency before re-enabling.
+
 ## Integrity or RLS incident
 
 Stop writers if an aggregate sequence gap, event mutation, or cross-tenant row is
@@ -94,8 +118,9 @@ still Layer 8 work.
 
 ## Rollback policy
 
-Migrations `0002_durable_ledger.sql`, `0003_distributed_worker_runtime.sql`, and
-`0004_model_gateway.sql` are forward-only. They create authoritative
+Migrations `0002_durable_ledger.sql`, `0003_distributed_worker_runtime.sql`,
+`0004_model_gateway.sql`, and `0005_evidence_connectors.sql` are forward-only.
+They create authoritative
 facts and security roles; automated downgrade would destroy evidence or weaken
 isolation. Roll forward with an additive corrective migration. Disaster restore
 uses a separately tested backup, not `DROP TABLE` downgrade SQL.

@@ -170,6 +170,54 @@ DomainEventType.MODEL_BUDGET_RELEASED = DomainEventType._define(
 DomainEventType.MODEL_BUDGET_CHARGED = DomainEventType._define(
     "model.budget_charged.v1"
 )
+DomainEventType.EVIDENCE_QUERY_REQUESTED = DomainEventType._define(
+    "evidence.query_requested.v1"
+)
+DomainEventType.EVIDENCE_QUERY_STARTED = DomainEventType._define(
+    "evidence.query_started.v1"
+)
+DomainEventType.EVIDENCE_QUERY_SUCCEEDED = DomainEventType._define(
+    "evidence.query_succeeded.v1"
+)
+DomainEventType.EVIDENCE_QUERY_PARTIALLY_SUCCEEDED = DomainEventType._define(
+    "evidence.query_partially_succeeded.v1"
+)
+DomainEventType.EVIDENCE_QUERY_FAILED = DomainEventType._define(
+    "evidence.query_failed.v1"
+)
+DomainEventType.EVIDENCE_QUERY_TIMED_OUT = DomainEventType._define(
+    "evidence.query_timed_out.v1"
+)
+DomainEventType.EVIDENCE_QUERY_RATE_LIMITED = DomainEventType._define(
+    "evidence.query_rate_limited.v1"
+)
+DomainEventType.EVIDENCE_QUERY_CANCELLED = DomainEventType._define(
+    "evidence.query_cancelled.v1"
+)
+DomainEventType.EVIDENCE_INGESTED = DomainEventType._define(
+    "evidence.ingested.v1"
+)
+DomainEventType.EVIDENCE_DEDUPLICATED = DomainEventType._define(
+    "evidence.deduplicated.v1"
+)
+DomainEventType.EVIDENCE_REDACTED = DomainEventType._define(
+    "evidence.redacted.v1"
+)
+DomainEventType.EVIDENCE_QUARANTINED = DomainEventType._define(
+    "evidence.quarantined.v1"
+)
+DomainEventType.CORRELATION_STARTED = DomainEventType._define(
+    "evidence.correlation_started.v1"
+)
+DomainEventType.CORRELATION_COMPLETED = DomainEventType._define(
+    "evidence.correlation_completed.v1"
+)
+DomainEventType.CORRELATION_FAILED = DomainEventType._define(
+    "evidence.correlation_failed.v1"
+)
+DomainEventType.SOURCE_CURSOR_ADVANCED = DomainEventType._define(
+    "evidence.source_cursor_advanced.v1"
+)
 
 
 @dataclass(frozen=True, slots=True)
