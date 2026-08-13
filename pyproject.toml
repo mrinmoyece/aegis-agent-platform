@@ -18,32 +18,19 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
-  "anthropic>=0.64,<1",
   "cryptography>=45,<49",
-  "jsonschema>=4.25,<5",
-  "kubernetes>=33,<35",
-  "openai>=1.99,<3",
-  "opentelemetry-api>=1.36,<2",
-  "psycopg[binary]>=3.2.9,<4",
-  "pyyaml>=6.0.2,<7",
   "pyjwt>=2.10,<3",
-  "redis>=6.4,<7",
-  "urllib3>=1.26,<2.4",
   "uvicorn>=0.35,<1",
 ]
-
-[project.scripts]
-aegis-replay = "aegis_agent_platform.observability.__main__:main"
 
 [project.optional-dependencies]
 dev = [
   "mypy>=1.17,<2",
   "pytest>=8.4,<9",
-  "pytest-asyncio>=1.1,<2",
   "pytest-cov>=6.2,<7",
+  "pyyaml>=6.0.2,<7",
   "ruff>=0.12,<1",
   "types-pyyaml>=6.0.12,<7",
-  "types-jsonschema>=4.25,<5",
 ]
 
 [project.urls]
@@ -63,8 +50,6 @@ ignore = ["S101"]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/**" = ["ANN401"]
-"src/aegis_agent_platform/providers/anthropic.py" = ["ANN401"]
-"src/aegis_agent_platform/providers/openai.py" = ["ANN401"]
 "tests/**" = ["ANN201"]
 
 [tool.ruff.format]
@@ -79,37 +64,13 @@ warn_unreachable = true
 show_error_codes = true
 pretty = true
 
-[[tool.mypy.overrides]]
-module = ["kubernetes", "kubernetes.*"]
-ignore_missing_imports = true
-
 [tool.pytest.ini_options]
 addopts = "--strict-config --strict-markers -q"
 testpaths = ["tests"]
-markers = [
-  "integration: requires a live PostgreSQL test database",
-  "redis_integration: requires live PostgreSQL and Redis test services",
-]
 
 [tool.coverage.run]
 branch = true
 source = ["aegis_agent_platform"]
-omit = [
-  "src/aegis_agent_platform/event_store/postgres.py",
-  "src/aegis_agent_platform/persistence/postgres.py",
-  "src/aegis_agent_platform/runtime/postgres.py",
-  "src/aegis_agent_platform/gateway/postgres.py",
-  "src/aegis_agent_platform/evidence/postgres.py",
-  "src/aegis_agent_platform/agents/postgres.py",
-  "src/aegis_agent_platform/remediation/postgres.py",
-  "src/aegis_agent_platform/sandbox/postgres.py",
-  "src/aegis_agent_platform/memory/postgres.py",
-  "src/aegis_agent_platform/memory/redis_cache.py",
-  "src/aegis_agent_platform/evidence/transport.py",
-  "src/aegis_agent_platform/integrations/kubernetes/official.py",
-  "src/aegis_agent_platform/control_plane/__main__.py",
-  "src/aegis_agent_platform/queueing/redis_streams.py",
-]
 
 [tool.coverage.report]
 fail_under = 90

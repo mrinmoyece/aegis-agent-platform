@@ -13,22 +13,12 @@ The curriculum teaches the platform decisions behind that story: durable
 execution, multi-tenant authorization, evidence provenance, bounded multi-agent
 coordination, safe effects, evaluation, and operations.
 
-> **Current status:** Layers 1–4 provide boundaries, governance, the ledger, and
-> distributed workers. Layer 5 implements the provider-neutral model gateway.
-> Layer 6 implements bounded evidence connectors, immutable cited ingestion, and
-> deterministic timeline correlation. Layer 7 implements the governed durable
-> specialist DAG, critic gates, typed reasoning artifacts, safe abstention, and
-> fake-only behavioral evals. Layer 8 implements exact-scope human approval,
-> fenced controlled effects, at-least-once reconciliation, and explicit
-> verification with a fake and one fixed-shape Kubernetes adapter. Layer 9
-> implements approval-bound hardened ephemeral analysis, safe artifacts,
-> lifecycle reconciliation, fake evals, and a locked-down Kubernetes Job
-> adapter. Layer 10 implements event-grounded memory, pgvector RAG, cited
-> compaction, retention lifecycle, fake evals, and a deterministic demo. Layer
-> 11 implements the unified deterministic harness, governed 91-case corpus,
-> release gates, bounded reports/telemetry, baseline/waiver and fixture
-> governance, CLI, and focused `make eval-*` targets.
-> Live environments and production operations remain unverified or planned.
+> **Current status:** Layer 1 provides package contracts, health and
+> configuration checks, local infrastructure, tests, and governance. Layer 2
+> adds a real identity/tenancy/governance vertical slice (JWT verification,
+> deny-by-default authorization, policy/quota evaluation, redacted audit
+> events, secret references). Curriculum modules labeled Planned describe
+> future acceptance evidence, not working features.
 
 The curriculum is backed by the concrete delivery slices and acceptance
 evidence in `enterprise-implementation-plan.md`; the roadmap is not merely a
@@ -45,26 +35,25 @@ Implemented only when its document links executable code and tests.
 | System overview and elevator pitch (`README.md`, this document) | Frame the product, users, trust boundaries, and non-goals in two minutes | 1 | Documented |
 | Canonical incident and demo scripts (`demo-script.md`) | Narrate evidence-to-verification without overstating automation | 1–8 | Foundation script documented |
 | Architecture walkthrough (`architecture.md`) | Explain control/data planes, boundaries, authoritative state, and trust crossings | 1 | Documented; architecture tests |
-| Multi-agent workflow and artifacts (`architecture.md`, ADR 0008/0014) | Defend fixed roles, DAG scheduling, ledger communication, critique, and bounded authority | 7 | Implemented; unit/live-Postgres tests and fake evals |
-| Durable execution and event sourcing (`durable-execution.md`) | Design replay, additive schemas, projections, crash recovery, and intent-before-effect | 3 | Implemented persistence mechanics; ADR 0002/0010 and live PostgreSQL tests |
-| Leases, fencing, and idempotency (`worker-runtime.md`) | Explain at-least-once delivery, fencing, reconciliation, backpressure, cancellation, and DLQ operations | 4 | Implemented; ADR 0003/0011 and live PostgreSQL/Redis tests |
-| Model/provider routing and cost governance (`model-gateway.md`) | Normalize providers, route by policy, meter cost, enforce budgets, and handle uncertain outcomes | 5 | Implemented; mocked SDK transports and deterministic evals |
-| Controlled remediation (`architecture.md`, ADR 0015) | Apply exact policy/approval, fencing, intent events, idempotency, reconciliation, and verification | 8 | Implemented for fake execution and fixed-shape Kubernetes rollout restart |
-| Hardened sandbox execution (`sandbox-execution.md`, ADR 0016) | Isolate bounded analysis/test/patch work with exact approval, fencing, egress, artifacts, reconciliation, and cleanup | 9 | Implemented boundary; production cluster controls unverified |
-| Identity, tenancy, and RBAC (`identity-tenancy.md`) | Separate authentication from tenant authorization and prove isolation | 2–3 | PostgreSQL repositories and live RLS denial implemented; live-Keycloak drills planned |
-| Memory, RAG, and compaction (`memory-and-rag.md`, `protocols.md`, ADR 0017) | Design working, episodic, and semantic tiers with provenance, PII controls, retention, relevance/recency, and faithful compaction | 10 | Implemented; deterministic and live pgvector/RLS evidence |
-| Evidence connectors and correlation (`evidence-connectors.md`) | Translate Dynatrace, GitHub, Kubernetes, and runbooks into stable evidence; preserve provenance, partial results, ambiguity, and conflict | 6 | Implemented with mocked transports; live environments unverified |
+| Multi-agent workflow and artifacts (`architecture.md`, ADR 0008) | Defend fixed roles, DAG scheduling, ledger communication, critique, and bounded authority | 1–4 | Contracts scaffolded |
+| Durable execution and event sourcing (`durable-execution.md`) | Design replay, additive schemas, projections, crash recovery, and intent-before-effect | 3 | Planned; ADR 0002 |
+| Leases, fencing, and idempotency (`reliable-work.md`) | Explain at-least-once delivery, fencing, reconciliation, and why exactly-once is not claimed | 4 | Planned; ADR 0003 and queue port |
+| Model/provider routing and cost governance (`provider-routing.md`) | Normalize providers, route by policy, meter cost, enforce budgets, and handle uncertain outcomes | 4 | Planned; provider types only |
+| Tool security and sandboxing (`safe-tools.md`) | Apply policy, approvals, scoped capabilities, intent events, isolation, egress, and quotas | 5 | Planned; policy/sandbox boundaries |
+| Identity, tenancy, and RBAC (`identity-tenancy.md`) | Separate authentication from tenant authorization and prove isolation | 2 | Implemented with a committed negative-test suite (`tests/test_identity_security.py`, `tests/test_policy_security.py`, `tests/test_audit_secrets.py`); durable Postgres wiring and live-Keycloak drills planned |
+| Memory, RAG, and compaction (`memory-and-rag.md`, `protocols.md`) | Design working, episodic, and semantic tiers with provenance, PII controls, retention, relevance/recency, and faithful compaction | 6 | Protocol documented; storage planned |
+| Connector design (`connector-design.md`) | Translate Dynatrace, GitHub, and Kubernetes APIs into stable evidence contracts | 4 | Dynatrace/GitHub ports scaffolded |
 | Agent and tool protocols (`protocols.md`) | Distinguish internal correctness ports, MCP adapters, and external A2A interoperability | 6–8 | Position documented; MCP/A2A planned |
-| Evaluation strategy (`evaluation.md`, ADR 0018) | Separate hermetic CI, integration, live/statistical qualification, and production evidence; govern datasets, gates, waivers, judges, reports, and lifecycle | 11 | Implemented deterministic suite/CLI; optional-live boundary limited and no production qualification |
-| Observability and SLOs (`observability-and-slos.md`) | Correlate events/traces safely, select SLIs, control cardinality, and operate alerting | 12 | Local topology scaffolded; production layer planned |
-| Threat model (`threat-model.md`) | Analyze tenant, evidence, model, swarm, tool, memory, sandbox, provider, evaluation, and supply-chain threats | 1–11 | Layer 11 evaluation controls and environment gaps documented |
-| Failure modes and runbooks (`failure-modes.md`, `runbook.md`) | Diagnose crashes, stale leases, partial effects, provider faults, poisoned memory/evidence/evaluation data, and regional failure | 3–12 | Runtime and Layer 11 evaluation responses documented; regional sections planned |
+| Evaluation strategy (`evaluation.md`) | Combine deterministic, live, adversarial, quality, safety, latency, and cost evaluation | 7 | Planned; ADR 0007 |
+| Observability and SLOs (`observability-and-slos.md`) | Correlate events/traces safely, select SLIs, control cardinality, and operate alerting | 7–8 | Local topology scaffolded |
+| Threat model (`threat-model.md`) | Analyze tenant, evidence, model, swarm, tool, sandbox, provider, and supply-chain threats | 1–8 | Foundation model documented |
+| Failure modes and runbooks (`failure-modes.md`) | Diagnose crashes, stale leases, partial effects, provider faults, poisoned evidence, and regional failure | 3–8 | Planned |
 | Scaling and multi-region (`scaling-and-multi-region.md`) | Estimate capacity, partition tenants, preserve ordering, and choose recovery objectives | 8 | Planned |
 | Privacy, retention, and compliance (`privacy-and-compliance.md`) | Classify data, minimize collection, enforce deletion/legal hold, and produce evidence | 6–8 | Planned |
 | Deployment and supply chain (`deployment-and-supply-chain.md`) | Build least-privilege releases with SBOM, provenance, signing, promotion, and rollback | 8 | CI/container baseline only |
-| Alternatives and ADR index (`adr/README.md`) | Compare orchestration, queues, identity, sandbox, provider, and evaluation choices | 1–11 | Planned index; eighteen ADRs exist |
-| Interview question bank (`interview-question-bank.md`) | Communicate tradeoffs and defend design under follow-up pressure | 1–11 | Layer 11 release-evidence boundary questions documented |
-| Hands-on labs (`labs.md`) | Turn each invariant into executable evidence and inject realistic failures | 1–12 | Layers 1–11 deterministic labs runnable |
+| Alternatives and ADR index (`adr/README.md`) | Compare orchestration, queues, identity, sandbox, provider, and evaluation choices | 1–8 | Planned index; nine ADRs exist |
+| Interview question bank (`interview-question-bank.md`) | Communicate tradeoffs and defend design under follow-up pressure | 1–8 | Foundation edition documented |
+| Hands-on labs (`labs.md`) | Turn each invariant into executable evidence and inject realistic failures | 1–8 | Layer 1 and Layer 2 labs runnable |
 | Terminology (`glossary.md`) | Use durability, evidence, tenancy, evaluation, and operations terms precisely | 1 | Documented |
 | Limitations and production gaps (`limitations.md`) | State what is absent, unsafe, local-only, or not yet proven | Every layer | Documented and maintained |
 
@@ -82,11 +71,3 @@ A strong learner can:
    operations claims.
 7. Quantify capacity, latency, cost, and recovery tradeoffs.
 8. Present limitations and alternatives before proposing complexity.
-
-## Layer 12 learning outcomes
-
-Learners define low-cardinality semantics, propagate W3C context safely across
-at-least-once work, design measurable SLIs and burn alerts, provision dashboards
-that treat no-data honestly, contain exporter failure, and debug from immutable
-ledger facts. The demo explicitly distinguishes configured/local objectives
-from production-measured attainment.

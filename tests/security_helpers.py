@@ -172,6 +172,4 @@ def tenant_policy() -> TenantPolicy:
             max_tenant_cost_usd_per_period=Decimal("20.00"),
             max_concurrent_runs=3,
         ),
-        allowed_providers=frozenset({"mock"}),
-        allowed_data_residencies=frozenset({"eu"}),
     )

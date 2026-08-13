@@ -6,8 +6,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
-from aegis_agent_platform.domain import require_aware_datetime
-
 
 def _validate_identifier(value: str, name: str) -> None:
     if not value or value != value.strip() or len(value) > 128:
@@ -91,31 +89,6 @@ class Permission(StrEnum):
     SECRET_REFERENCE_MANAGE = "secret_reference:manage"  # noqa: S105
     PLATFORM_TENANT_CREATE = "platform:tenant:create"
     PLATFORM_AUDIT_READ = "platform:audit:read"
-    QUEUE_READ = "queue:read"
-    WORK_CANCEL = "work:cancel"
-    DLQ_REQUEUE = "dlq:requeue"
-    WORK_RECONCILE = "work:reconcile"
-    MODEL_READ = "model:read"
-    MODEL_DIAGNOSTIC = "model:diagnostic"
-    EVIDENCE_READ = "evidence:read"
-    EVIDENCE_QUERY = "evidence:query"
-    INVESTIGATION_READ = "investigation:read"
-    REMEDIATION_READ = "remediation:read"
-    REMEDIATION_PROPOSE = "remediation:propose"
-    ACTION_EXECUTE = "action:execute"
-    ACTION_RECONCILE = "action:reconcile"
-    ACTION_ROLLBACK = "action:rollback"
-    SANDBOX_EXECUTE = "sandbox:execute"
-    SANDBOX_READ = "sandbox:read"
-    MEMORY_READ = "memory:read"
-    MEMORY_RETRIEVE = "memory:retrieve"
-    MEMORY_INGEST = "memory:ingest"
-    MEMORY_ACCEPT = "memory:accept"
-    MEMORY_FEEDBACK = "memory:feedback"
-    MEMORY_ADMIN = "memory:admin"
-    OBSERVABILITY_READ = "observability:read"
-    REPLAY_READ = "observability:replay"
-    SUPPORT_EXPORT = "observability:support:export"
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,19 +103,20 @@ class RoleBinding:
     revoked_at: datetime | None = None
 
     def __post_init__(self) -> None:
-        require_aware_datetime(self.assigned_at, field_name="assigned_at")
-        if self.role is Role.PLATFORM_ADMIN and self.tenant_id != PLATFORM_TENANT_ID:
-            raise ValueError("platform_admin bindings require the platform tenant")
+        if self.assigned_at.tzinfo is None:
+            raise ValueError("assigned_at must be timezone-aware")
         if self.expires_at is not None:
-            require_aware_datetime(self.expires_at, field_name="expires_at")
+            if self.expires_at.tzinfo is None:
+                raise ValueError("expires_at must be timezone-aware")
             if self.expires_at <= self.assigned_at:
                 raise ValueError("expires_at must follow assigned_at")
-        if self.revoked_at is not None:
-            require_aware_datetime(self.revoked_at, field_name="revoked_at")
+        if self.revoked_at is not None and self.revoked_at.tzinfo is None:
+            raise ValueError("revoked_at must be timezone-aware")
 
     def is_active(self, at: datetime) -> bool:
         """Return whether the binding is active at a caller-supplied time."""
-        require_aware_datetime(at, field_name="authorization time")
+        if at.tzinfo is None:
+            raise ValueError("authorization time must be timezone-aware")
         return (
             self.assigned_at <= at
             and (self.expires_at is None or at < self.expires_at)

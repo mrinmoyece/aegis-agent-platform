@@ -5,19 +5,11 @@
 Aegis separates decision-making from effects so an interrupted incident
 investigation can be explained, resumed, and audited. Its reference product is
 an enterprise incident-response agent. Layer 1 established package and trust
-boundaries. Layers 2–3 add identity/governance and the PostgreSQL ledger.
-Layer 4 adds Redis Streams delivery, PostgreSQL-authoritative leases/fencing,
-bounded fair workers, cancellation, retry/DLQ, and reconciliation protocols.
-Layer 5 adds the provider-neutral model gateway and cost governance. Layer 6
-adds durable read-only evidence acquisition, immutable ingestion, and
-deterministic correlation. Layer 7 adds governed specialist execution,
-ledger-only typed reasoning artifacts, deterministic fan-out/fan-in, and critic
-gates. Layer 8 adds exact-scope approval, controlled action execution,
-reconciliation, and explicit postcondition verification. Layer 9 adds a separate
-fenced, approval-bound ephemeral sandbox for bounded analysis and change
-preparation. Layer 10 adds event-grounded memory and derived RAG. Layer 11's
-deterministic evaluation contracts, governed corpus, release gates, reports, and
-CLI are implemented.
+boundaries. Layer 2 adds a real, test-suite-verified control-plane vertical
+slice for identity, tenancy, and governance: JWT authentication, deny-by-default
+tenant authorization, tenant policy/quota evaluation, and redacted audit
+evidence. Connectors, durable investigation, and orchestration arrive in later
+layers.
 
 ```mermaid
 flowchart LR
@@ -26,8 +18,6 @@ flowchart LR
   CP --> ES[(Event store)]
   CP --> Q[Durable queue]
   Q --> W[Worker runtime]
-  W --> A[Specialist coordinator DAG]
-  A --> ES
   W --> ES
   W --> P[Model providers]
   W --> DT[Dynatrace adapter]
@@ -35,193 +25,17 @@ flowchart LR
   W --> K8s[Kubernetes adapter]
   W --> RB[Runbook source]
   W --> Policy[Policy engine]
-  Policy --> R[Approval-gated remediation]
-  Policy --> S[Hardened analysis sandbox]
-  S --> ES
+  Policy --> S[Sandbox and tools]
   W --> M[Memory]
   CP -. telemetry .-> O[Observability]
   W -. telemetry .-> O
 ```
 
-Dashed paths are diagnostic, never authoritative. PostgreSQL is truth; Redis is
-only at-least-once transport. Queue/lease and model gateway execution are
-implemented. Connector acquisition and deterministic correlation are also
-implemented. Governed specialist reasoning and approval-gated controlled
-remediation are implemented with deterministic fake acceptance scenarios. The
-only official write adapter is a fixed-shape Kubernetes deployment
-rollout-restart. The sandbox has a deterministic fake backend and a hardened
-Kubernetes Job adapter, but production cluster controls and connectivity are not
-configured or verified.
-
-## Evaluation release boundary
-
-Layer 11 is a release-pipeline boundary, not part of authoritative run
-execution. Its implemented contracts and workflow are documented in
-[Evaluation and release evidence](evaluation.md) and
-[ADR 0018](adr/0018-layered-deterministic-evaluation-gates.md).
-
-```mermaid
-flowchart LR
-  D[Versioned synthetic datasets] --> H[Hermetic deterministic harness]
-  F[Named fault cut points] --> H
-  H --> R[Immutable redacted results]
-  R --> G[Release gates and scoped expiring non-safety waivers]
-  I[Environment-gated integration] --> R
-  L[Opt-in live/statistical qualification] --> R
-  P[Bounded production evidence] -. review only .-> D
-```
-
-The required CI path uses fixed clocks, IDs, seeds, provider-neutral fakes, and
-no live secret, network, model judge, or production effect. Integration,
-live/statistical, and production-evidence classes stay separately gated and
-reported. Evaluation artifacts cannot authorize actions, reconstruct run state,
-or weaken code-enforced safety. Baselines, comparisons, waivers, and reports are
-versioned release evidence outside the runtime event stream.
-The 91-case hermetic catalog includes 12 adversarial cases, all 22 named fault
-cut points, and cross-layer core scenarios. Optional integration/live boundaries
-remain separately gated; no live adapter or model judge executes by default.
-
-## Model gateway data flow
-
-The Layer 5 flow is documented in
-[Provider-neutral model gateway](model-gateway.md). Route decision,
-`model.call_requested.v1`, and `model.budget_reserved.v1` commit under the
-current worker fence before an OpenAI/Anthropic network call. Result, normalized
-usage, versioned charge, and released capacity commit under the same fence
-before a response is surfaced. PostgreSQL migration `0004_model_gateway.sql`
-adds RLS-protected reservation and usage projections; events remain truth.
-
-## Evidence acquisition and correlation data flow
-
-The Layer 6 flow is documented in
-[Evidence connectors and deterministic correlation](evidence-connectors.md).
-`evidence.query_requested.v1` and durable work/outbox state commit before any
-external read. The worker validates its lease token and generation before
-querying and again before recording results or advancing a cursor. Connector
-responses pass through bounded canonicalization, redaction, SHA-256 addressing,
-tenant deduplication, classification, and quarantine.
-
-```mermaid
-flowchart LR
-  API[Authorized evidence API] --> L[(Ledger + outbox)]
-  L --> W[Fenced evidence worker]
-  W --> C[Neutral connector port]
-  C --> DT[Dynatrace]
-  C --> GH[GitHub]
-  C --> K[Kubernetes]
-  C --> R[Runbook source]
-  W --> I[Canonicalize / redact / digest]
-  I --> S[(Immutable evidence store)]
-  S --> E[Deterministic correlation]
-  E --> B[EvidenceBundle + timeline artifact]
-```
-
-Only bounded redacted metadata enters events. Complete logs, traces, diffs, and
-runbooks do not. Retained raw payloads require encrypted external
-`aegis-object://` references. Correlation uses typed IDs and bounded
-clock-skew/resource heuristics; ambiguity and source conflicts remain visible
-and temporal proximity is never labeled causality.
-
-## Governed specialist orchestration data flow
-
-Layer 7 uses one Layer 4 work aggregate and active lease for an investigation.
-The coordinator records an immutable plan with fixed roles and code-defined
-capabilities. Every dispatch intent commits before the specialist engine runs;
-the model gateway separately commits its call intent and budget reservation
-before provider I/O. Artifacts and terminal task outcomes append under the same
-lease token/generation fence.
-
-```mermaid
-sequenceDiagram
-  participant C as Incident Coordinator
-  participant E as PostgreSQL event ledger
-  participant S as Fixed-role specialist
-  participant G as Model gateway
-  C->>E: investigation.plan_recorded.v1
-  C->>E: specialist.task_dispatch_requested.v1 + started
-  C->>S: bounded redacted committed context
-  S->>G: fenced structured request
-  G->>E: model intent + budget reservation
-  G-->>S: strictly validated neutral output
-  S->>E: reasoning.artifact_recorded.v1 + task outcome
-  C->>E: coordinator decision + final assessment
-```
-
-The pure fold validates gapless aggregate order, duplicate event/idempotency
-keys, declared dependencies, cycles, role/output transitions, artifact linkage,
-provenance reachability, citations, token accounting, and critic/finalization
-gates. Ready nodes sort by plan ordinal and ID; parallel completion order cannot
-change ledger append order or the conclusion. Cancellation, bounded retries,
-timeouts, budget exhaustion, stale fencing, and malformed/provider-bug outcomes
-remain explicit events. PostgreSQL `agent_*` and reasoning-artifact projections
-use forced RLS and can be rebuilt; they are not authoritative.
-
-## Approval-gated controlled remediation data flow
-
-Layer 8 consumes an immutable Layer 7 proposal without giving the proposing
-agent approval authority. The plan revision binds exact action and target
-digests to a tenant policy snapshot. Policy is deny-by-default. Human decisions
-are authenticated, tenant-authorized, separation-of-duties checked, expiring,
-revocable, and quorum-based for high risk.
-
-```mermaid
-sequenceDiagram
-  participant O as Operator
-  participant C as Control plane
-  participant E as PostgreSQL ledger
-  participant W as Fenced worker
-  participant T as Controlled action adapter
-  C->>E: remediation.proposed + policy evaluation + approval requested
-  O->>C: exact-scope approval decision
-  C->>E: approval granted/denied/revoked
-  W->>E: dispatch + preflight + dry-run intent under current fence
-  W->>E: action.execution_requested.v1
-  W->>T: stable tenant idempotency key + exact target
-  T-->>W: result or ambiguous outcome
-  W->>E: outcome + reconciliation intent/result
-  W->>T: fresh target observation
-  W->>E: explicit postcondition verification
-```
-
-The executor rechecks authorization, policy digest, approval scope/expiry,
-current approver roles, target identity, cancellation, preconditions, and lease
-token/generation immediately before intent. A crash after provider application
-but before outcome append is recovered by read-after-write reconciliation before
-any retry. Effects are at-least-once and may remain ambiguous; exactly-once is
-not claimed. PostgreSQL migration `0007_remediation_approvals.sql` supplies
-forced-RLS rebuildable projections, immutable decision rows, quotas, and
-tenant-scoped effect claims. Redis remains transport only.
-
-Artifacts cover evidence assessments, primary and alternative hypotheses,
-contradictions/critiques, causal-graph and timeline references, remediation
-recommendations, verification plans, coordinator decisions, and final incident
-assessments. Remediation is proposal-only. The fake CLI/evals use no network,
-credentials, live model, or effect adapter.
-
-## Distributed delivery and worker data flow
-
-```mermaid
-sequenceDiagram
-  participant C as Authorized caller
-  participant P as PostgreSQL ledger/outbox
-  participant O as Outbox publisher
-  participant R as Redis Stream
-  participant W as Worker supervisor
-  C->>P: append work.requested.v1 + outbox
-  O->>P: bounded SKIP LOCKED claim
-  O->>R: XADD deterministic message_id
-  O->>P: mark published
-  R-->>W: consumer-group delivery
-  W->>P: inbox dedup + published event
-  W->>P: CAS lease claim (token, generation, expiry)
-  W->>P: fenced start / heartbeat / outcome
-  W->>R: XACK only after durable outcome
-```
-
-A crash after `XADD` but before PostgreSQL acknowledgement republishes the same
-logical message. The inbox absorbs duplicates. Redis ownership never authorizes
-a result: every state-changing worker append checks the current PostgreSQL lease
-token and generation. See [Reliable distributed work](worker-runtime.md).
+Dashed paths are diagnostic, never authoritative. The Dynatrace and GitHub
+packages currently define read ports only. The control plane now authenticates
+callers and enforces tenant policy (see "Identity, tenancy, and governance
+boundary" below); the event store, durable queue, worker runtime, providers,
+and connector adapters remain planned, not implemented.
 
 ## Package boundaries
 
@@ -242,23 +56,13 @@ flowchart TB
   Integrations[integrations] --> Domain
 ```
 
-`domain` imports no other platform package. The Layer 11 implementation
-under `aegis_agent_platform.evals` consumes provider-neutral contracts and
-cannot become a runtime authority. Infrastructure-facing packages
-depend inward on domain types. PostgreSQL adapters live under `event_store` and
-`persistence`; model SDKs are isolated to `providers/openai.py` and
-`providers/anthropic.py`; database/vendor types never enter domain contracts.
+`domain` imports no other platform package. Infrastructure-facing packages may
+depend inward on domain types. Adapters will live under their owning boundary
+and implement ports defined toward the core.
 
-`integrations.dynatrace`, `integrations.github`, `integrations.kubernetes`, and
-`integrations.runbooks` translate external APIs or documents into
-provider-neutral tenant-scoped evidence. The official Kubernetes client is
-isolated in `integrations.kubernetes.official`. Investigation logic cannot
-import vendor SDK objects or credentials.
-
-`agents.coordination` and `agents.artifacts` remain deterministic and
-provider-neutral. `agents.service` composes the event, work, gateway, policy,
-evidence, telemetry, and persistence boundaries. Model SDK objects stop in
-`providers`; PostgreSQL objects stop in `agents.postgres`.
+`integrations.dynatrace` and `integrations.github` expose provider-neutral,
+tenant-scoped evidence contracts. Future adapters will translate vendor APIs at
+those edges. Investigation logic cannot import vendor SDK objects or credentials.
 
 ## Identity, tenancy, and governance boundary
 
@@ -269,7 +73,7 @@ sequenceDiagram
   participant J as JwtVerifier + JWKS provider
   participant D as IdentityDirectory
   participant Z as AuthorizationService
-  participant P as PolicyRepository
+  participant Q as PolicyEvaluator
   participant A as AuditStore
   C->>CP: Bearer JWT
   CP->>J: verify signature, issuer, audience, expiry
@@ -278,8 +82,8 @@ sequenceDiagram
   D-->>CP: Principal (tenant, roles)
   CP->>Z: decide(principal, tenant_id, permission)
   Z-->>CP: AuthorizationDecision
-  CP->>P: get(TenantContext(tenant_id))
-  P-->>CP: TenantPolicy
+  CP->>Q: evaluate(policy, request, usage)
+  Q-->>CP: PolicyDecision (allow/deny/require_approval)
   CP->>A: append(AuthenticationOutcome, AuthorizationDecision)
 ```
 
@@ -287,7 +91,7 @@ This is an implemented vertical slice, not a design sketch, proven by a
 committed automated negative-test suite (`tests/test_identity_security.py`,
 `tests/test_policy_security.py`, `tests/test_audit_secrets.py`,
 `tests/test_migrations.py`, and cross-tenant/authentication cases in
-`tests/test_api.py`, plus live PostgreSQL integration coverage). `identity.models`
+`tests/test_api.py`; 99 tests passing as of this writing). `identity.models`
 defines provider-neutral, normalized identifiers (`TenantId`, `UserId`,
 `ServiceIdentity`), a fixed `Role`/`Permission` set, time-bound `RoleBinding`s
 (`assigned_at`/`expires_at`/`revoked_at`), and a `Principal` that must resolve
@@ -333,9 +137,9 @@ ceilings, tenant-period token/cost ceilings, and a concurrency ceiling).
 combines allowlist checks, risk comparison, and quota arithmetic against
 caller-supplied `QuotaUsage` to return an auditable `PolicyDecision`
 (`allow`/`deny`/`require_approval`, reasons, and required approver roles).
-Layer 5 now records authoritative model token/cost usage and maintains a
-rebuildable budget projection. Other quota classes remain caller-supplied until
-their runtimes emit durable usage.
+Quota *usage* accounting itself — the authoritative counters this evaluator
+consumes — is a durable-runtime concern and remains planned with the Layer
+3/4 event store and worker runtime.
 
 **Audit (`audit`).** Security events use additive, versioned type names
 (`security.authentication_outcome.v1`, `security.authorization_decision.v1`,
@@ -344,9 +148,10 @@ their runtimes emit durable usage.
 new ones added. Every `AuditEvent` unconditionally redacts fields whose keys
 look like credentials, tokens, prompts, or secrets, and scrubs inline bearer
 values from any remaining string content, before the frozen dataclass is
-constructed — a caller cannot bypass redaction. `InMemoryAuditStore` remains a
-test adapter; `PostgresAuditStore` persists the same contract behind forced RLS
-and an immutable-row trigger.
+constructed — a caller cannot bypass redaction. `InMemoryAuditStore` is a
+deterministic, tenant-scoped, append-only store used by the current vertical
+slice; a durable Postgres-backed adapter is described by migration
+`0001_identity_governance.sql` (see below) but not yet wired up.
 
 **Secrets (`secrets_boundary`).** Tools and adapters carry a `SecretReference`
 (provider, name, optional version) rather than raw material. `SecretValue`
@@ -360,25 +165,21 @@ planned.
 **Durable persistence.** `migrations/0001_identity_governance.sql` creates
 `tenants`, `identities`, `role_bindings`, `tenant_policies`, `tenant_quotas`,
 and `security_audit_events` tables. Row-level security is enabled and forced
-on every tenant-scoped table. `0002_durable_ledger.sql` adds events, aggregate
-heads, inbox/outbox, projection checkpoints/read models, application and
-maintenance roles, per-tenant commit-order locks, grants, and immutable-event
-triggers. PostgreSQL identity,
-tenant, policy, and audit repositories use transaction-local tenant context.
-Live tests exercise RLS and immutability. Deployment must explicitly compose
-these adapters; the demo application does not silently open a database.
+on every tenant-scoped table, with a policy requiring `tenant_id` to equal the
+session's `aegis.tenant_id` setting, and an append-only trigger rejects
+`UPDATE`/`DELETE` on `security_audit_events`. The control plane's default
+repositories remain the in-memory adapters above; connecting them to this
+schema, and to the event store and worker runtime, is Layer 3/4 work.
 
 **Control-plane API surface.** `ControlPlaneApp` composes the pieces above
 behind a small route set: `/healthz` and `/health/live` for liveness,
 `/readyz` and `/health/ready` for configuration readiness (unauthenticated, as
 in Layer 1), `/v1/me` returning the authenticated principal's tenant and active
-roles, tenant and policy routes, bounded model catalog/usage/provider-health
-views, plus bounded redacted ledger, run-timeline, and run-status projection
-reads. Every `/v1/*` route requires a valid bearer token; `/v1/me` returns
-immediately after authentication, while the tenant-scoped routes also require a
-passing authorization decision. Authentication outcomes, and authorization
-outcomes where authorization runs, are recorded as audit events before a
-response is returned. No other `/v1/*`
+roles, `/v1/tenants/{tenant_id}` returning the tenant record, and
+`/v1/tenants/{tenant_id}/policy` returning the tenant's governance policy and
+quotas. Every `/v1/*` route requires a valid bearer token and a passing
+authorization decision, and both authentication and authorization outcomes are
+recorded as audit events before a response is returned. No other `/v1/*`
 surface should be assumed until it appears in the code and its tests.
 
 ## Canonical incident: checkout failures after deployment
@@ -414,58 +215,9 @@ authorized operator approves it, a controlled tool performs the recorded
 intent. Aegis then checks telemetry against an explicit recovery window and
 updates the incident record with the action and result.
 
-Layers 6–7 supply evidence acquisition/correlation and the governed hypothesis
-workflow. Layer 8 supplies exact-scope approval, fake-only end-to-end execution,
-one bounded official Kubernetes rollout-restart adapter, reconciliation, and
-postcondition verification. Layer 9 may run only validated argv-token commands
-inside an approval-bound analysis sandbox; it is not an arbitrary interactive
-shell and cannot mutate production or bypass Layer 8.
-
-## Hardened sandbox execution
-
-The canonical request digest binds tenant, run, task, remediation
-plan/action/approval, purpose, risk, canonical spec digest, exact immutable image
-digest, content-addressed
-inputs, mounts, environment and secret references, egress, limits, expected
-outputs, retry, and cleanup. The pure fold rejects illegal lifecycle transitions
-and remains authoritative; projections, claims, quotas, artifacts, cleanup rows,
-and attestations are disposable views of the ledger.
-
-Layer 8 approves a dedicated `sandbox.change_preparation.v1` action whose
-immutable action digest contains the reviewed Layer 9 spec digest, policy digest,
-purpose, and risk. The PostgreSQL approval authority compares those projected fields
-under forced RLS; caller-supplied approver identifiers alone never establish
-sandbox authority.
-
-```mermaid
-sequenceDiagram
-  participant C as Control plane
-  participant L as PostgreSQL ledger
-  participant W as Fenced worker
-  participant B as Sandbox backend
-  C->>L: request + policy decision + exact approval binding
-  W->>L: dispatch + provisioning intent under current fence
-  W->>B: observe before create
-  W->>B: provision suspended workload
-  W->>L: provisioned + start intent
-  W->>B: start and collect bounded output/artifacts
-  W->>L: result + attestation + cleanup intent
-  W->>B: cleanup/reconcile
-  W->>L: cleanup completed/failed/quarantined
-```
-
-Network is none by default. Artifact and archive paths are canonicalized before
-atomic staging; links, devices, traversal, bombs, conflicts, and oversized
-content deny. Raw output is untrusted data and only redacted bounded metadata
-enters events/APIs. The Kubernetes adapter emits a suspended digest-pinned Job
-with non-root identity, read-only root filesystem, dropped capabilities, no
-privilege escalation, RuntimeDefault seccomp, disabled service-account token,
-no host namespaces, explicit resources/deadline, and ephemeral volumes. Admission
-policy, authoritative lease-fence validation, runtime isolation, PID enforcement,
-artifact collection, and default-deny networking are environment controls:
-readiness is false until separately verified. See
-[Hardened sandbox execution](sandbox-execution.md) and
-[ADR 0016](adr/0016-hardened-ephemeral-sandbox-boundary.md).
+Layer 1 supplies only the ports and design. It has no live evidence collection,
+hypothesis engine, Kubernetes integration, approval flow, remediation tool, or
+incident-system writer.
 
 ## Multi-agent investigation topology
 
@@ -517,11 +269,12 @@ better. Fixed roles avoid uncontrolled spawning; ledger mediation avoids opaque
 peer chat; least privilege limits blast radius; budgets and timeouts prevent
 runaway loops; citations and a critic expose unsupported consensus; deterministic
 aggregation and explicit conflict handling prevent race-dependent conclusions.
-Human approval separates analysis from risky action. Layer 8 binds that approval
-to the planner and Verification Agent artifacts, but neither agent may approve
-the action. The controlled executor records fresh verification evidence after
-the effect. There is still no spawning mechanism, peer chat, or agent-controlled
-approval.
+Human approval separates analysis from risky action, and the Verification Agent
+prevents a successful tool response from being mistaken for incident recovery.
+
+Layer 1 provides role, artifact, assignment, budget, and ledger interfaces only.
+There is no scheduler, agent execution, aggregation, conflict resolver, approval
+service, or spawning mechanism.
 
 ## Memory architecture
 
@@ -534,19 +287,10 @@ tenant-scoped runbooks and curated incident knowledge with pgvector; it is a
 derived retrieval surface with source citations.
 
 All tiers carry tenant scope, provenance, classification, retention/deletion
-policy, and PII controls. Layer 10 implements these contracts in `domain.memory`
-and the `memory` package. Every scan, embedding, index, retrieval, and summary
-effect follows a durable intent and current work fence. Semantic candidates
-require explicit human or policy acceptance; generated text cannot promote
-itself to trusted knowledge.
-
-PostgreSQL forced RLS is the correctness authority. pgvector, lexical search,
-checkpoints, and tenant-digested reference-only Redis cache entries are derived
-and rebuildable. Metadata/ACL/retention filters run before deterministic hybrid
-ranking and diversity control. Context compaction retains citations, uncertainty,
-conflict, approval state, and budgets; summaries never replace event history.
-Retrieved snippets are delimited untrusted data and cannot grant tools, roles,
-approvals, or policy changes. See `memory-and-rag.md` and ADR 0017.
+policy, and PII controls. Retrieval balances relevance, recency, source quality,
+and topology. Context compaction must retain citations, uncertainty, conflict,
+approval state, and budgets; summaries never replace event history. These are
+Layer 6 requirements, not implemented behavior.
 
 ## Protocol positioning
 
@@ -581,12 +325,6 @@ Crashes between steps are expected. Recovery reads the event stream and either
 retries safely or reconciles an ambiguous effect. A trace or queue message
 cannot replace the committed intent.
 
-Layer 3 implements the ledger and intent/result contracts; Layer 4 delivers and
-fences work but still has no external effect caller. Events and outbox work
-commit atomically; inbox identity deduplicates delivery. Outbox and dead-letter
-status are projections, not truth. See `durable-execution.md`,
-`worker-runtime.md`, and ADR 0010/0011.
-
 ## Binding invariants
 
 1. **Event log as truth:** projections and caches are disposable views.
@@ -601,8 +339,6 @@ status are projections, not truth. See `durable-execution.md`,
    tenant context.
 8. **At-least-once reality:** consumers and effects are idempotent or
    reconcilable.
-9. **Evaluation is release evidence:** scores, baselines, model judges, reports,
-   and production telemetry never replace runtime truth or safety enforcement.
 
 ## Data and trust boundaries
 
@@ -615,37 +351,21 @@ until `JwtVerifier` checks its signature, issuer, audience, and expiry; a
 verified token is still untrusted as tenant/role authority until
 `IdentityDirectory` resolves it against an authoritative local record.
 
-PostgreSQL owns the implemented event log and durable projections. Migrations
-`0001`–`0009` define identity, governance, ledger, delivery, gateway, evidence,
-specialist, remediation, sandbox, and memory read models with forced row-level
-security. Redis is used only
-where data loss cannot violate correctness. OpenTelemetry carries
+PostgreSQL will own the event log and durable projections; migration
+`0001_identity_governance.sql` already defines its tenant, identity,
+role-binding, policy, quota, and append-only audit tables with row-level
+security, ahead of the durable event store landing in Layer 3. Redis will be
+used only where data loss cannot violate correctness. OpenTelemetry carries
 correlation metadata with tenant-safe cardinality; sensitive content is
 excluded by default, and audit-event redaction follows the same principle.
-Evaluation telemetry and reports follow the same bounded redaction:
-identifiers, digests, versions, counts, and aggregate statistics only. Synthetic
-dataset provenance and lifecycle are governed; quarantined, deleted, or
-digest-mismatched data cannot participate in a release gate.
 
 ## Local topology
 
-Compose provides pgvector-enabled PostgreSQL (initialized with both forward
-migrations), Redis, Keycloak, an OpenTelemetry Collector,
+Compose provides pgvector-enabled PostgreSQL (now initialized with the
+identity/governance migration), Redis, Keycloak, an OpenTelemetry Collector,
 Prometheus, Grafana, and the control-plane API. Ports bind to loopback. The API
 runs as a non-root user with Linux capabilities dropped. The imported Keycloak
 realm has no users and self-registration disabled; it is a config-shape
 reference for the JWKS/issuer/audience abstraction, not a live-tested identity
 path in the fast local checks. These are developer conveniences, not a
 production deployment model.
-
-## Layer 12 observability and replay
-
-Layer 12 instruments every implemented boundary with the versioned,
-provider-neutral conventions in
-[telemetry-semantic-conventions.md](telemetry-semantic-conventions.md).
-Telemetry, SLI windows, dashboards, health caches, and support views are
-derived. The append-only event ledger remains authoritative. Strict W3C context
-validation, deterministic sampling, bounded async links, central redaction,
-fixed metric cardinality, non-blocking export, authenticated observability APIs,
-and the read-only replay debugger preserve domain purity and durable execution.
-Configured SLOs and local dashboards are not production attainment evidence.

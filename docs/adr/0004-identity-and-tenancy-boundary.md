@@ -40,9 +40,12 @@ A committed automated test suite (`tests/test_identity_security.py`,
 cross-tenant/authentication cases in `tests/test_api.py`) proves cross-tenant
 denial, malformed/expired/wrong-issuer/wrong-audience/unsupported-algorithm
 tokens, and expired/revoked role bindings against these in-memory ports. The
-Postgres migration (`migrations/0001_identity_governance.sql`) adds row-level
-security forcing `tenant_id` equality on every tenant-scoped table. Layer 3
-subsequently adds the durable adapters and live PostgreSQL denial evidence
-without changing this decision. Live-network Keycloak behavior is out of scope for the
+Postgres migration (`migrations/0001_identity_governance.sql`) already adds
+row-level security forcing `tenant_id` equality on every tenant-scoped table,
+and `tests/test_migrations.py` asserts that schema statically, but the durable
+adapter wiring those tables to the in-memory ports above does not exist yet,
+and the row-level-security policies have not been exercised against a running
+Postgres instance — that remains outstanding before the Layer 2 acceptance
+gate is fully met. Live-network Keycloak behavior is out of scope for the
 fast local checks (`RemoteJwksProvider` is tested against a mocked HTTPS
 transport) and must be validated separately per deployment.

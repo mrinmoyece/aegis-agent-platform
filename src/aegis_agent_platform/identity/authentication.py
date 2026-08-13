@@ -8,7 +8,6 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from threading import Lock
 from typing import Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -80,11 +79,7 @@ class StaticJwksProvider:
     """Deterministic JWKS test double and offline verifier source."""
 
     def __init__(self, keys: tuple[VerificationKey, ...]) -> None:
-        self._keys: dict[str, VerificationKey] = {}
-        for key in keys:
-            if key.key_id in self._keys:
-                raise ValueError("duplicate signing key ids are not allowed")
-            self._keys[key.key_id] = key
+        self._keys = {key.key_id: key for key in keys}
 
     def get_key(self, key_id: str) -> VerificationKey:
         try:
@@ -115,28 +110,16 @@ class RemoteJwksProvider:
         if not 1.0 <= cache_ttl_seconds <= 3_600.0:
             raise ValueError("JWKS cache TTL must be between 1 and 3600 seconds")
         self._jwks_url = jwks_url
-        self._allow_http = allow_http
         self._timeout_seconds = timeout_seconds
         self._cache_ttl_seconds = cache_ttl_seconds
         self._monotonic = monotonic
-        self._lock = Lock()
-        self._cached_keys: dict[str, VerificationKey] = {}
-        self._document_expires_at = 0.0
+        self._cache: dict[str, tuple[VerificationKey, float]] = {}
 
     def get_key(self, key_id: str) -> VerificationKey:
+        cached = self._cache.get(key_id)
         now = self._monotonic()
-        with self._lock:
-            if now >= self._document_expires_at:
-                self._refresh(now)
-            key = self._cached_keys.get(key_id)
-            if key is not None:
-                return key
-        raise AuthenticationError(
-            AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
-            "signing key was not found",
-        )
-
-    def _refresh(self, now: float) -> None:
+        if cached is not None and now < cached[1]:
+            return cached[0]
         request = Request(  # noqa: S310 - URL scheme is constrained above
             self._jwks_url,
             headers={"Accept": "application/json"},
@@ -146,24 +129,8 @@ class RemoteJwksProvider:
                 request,
                 timeout=self._timeout_seconds,
             ) as response:
-                final_url = (
-                    response.geturl() if hasattr(response, "geturl") else self._jwks_url
-                )
-                if not final_url.startswith("https://") and not (
-                    self._allow_http and final_url.startswith("http://")
-                ):
-                    raise AuthenticationError(
-                        AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
-                        "JWKS endpoint redirected to a non-HTTPS URL",
-                    )
                 document = json.loads(response.read())
-        except (
-            HTTPError,
-            URLError,
-            TimeoutError,
-            UnicodeDecodeError,
-            json.JSONDecodeError,
-        ) as error:
+        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as error:
             raise AuthenticationError(
                 AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
                 "JWKS endpoint could not provide signing keys",
@@ -173,13 +140,20 @@ class RemoteJwksProvider:
                 AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
                 "JWKS document is invalid",
             )
-        refreshed_keys: dict[str, VerificationKey] = {}
         for raw_key in document["keys"]:
             key = _parse_rsa_jwk(raw_key)
             if key is not None:
-                refreshed_keys[key.key_id] = key
-        self._cached_keys = refreshed_keys
-        self._document_expires_at = now + self._cache_ttl_seconds
+                self._cache[key.key_id] = (
+                    key,
+                    now + self._cache_ttl_seconds,
+                )
+        try:
+            return self._cache[key_id][0]
+        except KeyError as error:
+            raise AuthenticationError(
+                AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
+                "signing key was not found",
+            ) from error
 
 
 def _parse_rsa_jwk(raw_key: object) -> VerificationKey | None:
@@ -190,15 +164,9 @@ def _parse_rsa_jwk(raw_key: object) -> VerificationKey | None:
         return None
     if raw_key["kty"] != "RSA":
         return None
-    try:
-        modulus = int.from_bytes(jwt.utils.base64url_decode(raw_key["n"]), "big")
-        exponent = int.from_bytes(jwt.utils.base64url_decode(raw_key["e"]), "big")
-        public_key = rsa.RSAPublicNumbers(exponent, modulus).public_key()
-    except (TypeError, ValueError) as error:
-        raise AuthenticationError(
-            AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
-            "JWKS key material is invalid",
-        ) from error
+    modulus = int.from_bytes(jwt.utils.base64url_decode(raw_key["n"]))
+    exponent = int.from_bytes(jwt.utils.base64url_decode(raw_key["e"]))
+    public_key = rsa.RSAPublicNumbers(exponent, modulus).public_key()
     pem = public_key.public_bytes(
         serialization.Encoding.PEM,
         serialization.PublicFormat.SubjectPublicKeyInfo,
@@ -348,14 +316,9 @@ def _verified_claims(payload: Mapping[str, object]) -> VerifiedClaims:
             "audience claim has an invalid type",
         )
     raw_tenant_id = payload.get("tenant_id")
-    if raw_tenant_id is not None and not isinstance(raw_tenant_id, str):
-        raise AuthenticationError(
-            AuthenticationErrorCode.INVALID_CLAIMS,
-            "tenant claim has an invalid type",
-        )
     try:
         asserted_tenant_id = (
-            TenantId(raw_tenant_id) if raw_tenant_id is not None else None
+            TenantId(raw_tenant_id) if isinstance(raw_tenant_id, str) else None
         )
     except ValueError as error:
         raise AuthenticationError(
@@ -372,21 +335,11 @@ def _verified_claims(payload: Mapping[str, object]) -> VerifiedClaims:
         issuer=issuer,
         subject=subject,
         audiences=audiences,
-        expires_at=_numeric_date(expires_at, claim_name="exp"),
-        issued_at=_numeric_date(issued_at, claim_name="iat"),
+        expires_at=datetime.fromtimestamp(expires_at, UTC),
+        issued_at=datetime.fromtimestamp(issued_at, UTC),
         asserted_tenant_id=asserted_tenant_id,
         authorized_party=authorized_party,
     )
-
-
-def _numeric_date(value: int | float, *, claim_name: str) -> datetime:
-    try:
-        return datetime.fromtimestamp(value, UTC)
-    except (OverflowError, OSError, ValueError) as error:
-        raise AuthenticationError(
-            AuthenticationErrorCode.INVALID_CLAIMS,
-            f"{claim_name} claim has an invalid value",
-        ) from error
 
 
 @dataclass(frozen=True, slots=True)
@@ -401,18 +354,6 @@ class IdentityRecord:
     enabled: bool = True
     user_id: UserId | None = None
     service_identity: ServiceIdentity | None = None
-
-    def __post_init__(self) -> None:
-        has_user = self.user_id is not None
-        has_service = self.service_identity is not None
-        if has_user == has_service:
-            raise ValueError("identity record must have exactly one internal identity")
-        if self.kind is PrincipalKind.USER and not has_user:
-            raise ValueError("user identity record requires user_id")
-        if self.kind is PrincipalKind.SERVICE and not has_service:
-            raise ValueError("service identity record requires service_identity")
-        if any(binding.tenant_id != self.tenant_id for binding in self.role_bindings):
-            raise ValueError("identity record role bindings must match the tenant")
 
     def to_principal(self) -> Principal:
         return Principal(
@@ -438,12 +379,7 @@ class InMemoryIdentityDirectory:
     """Deterministic identity repository used by tests and local development."""
 
     def __init__(self, records: tuple[IdentityRecord, ...]) -> None:
-        self._records: dict[tuple[str, str], IdentityRecord] = {}
-        for record in records:
-            key = (record.issuer, record.subject)
-            if key in self._records:
-                raise ValueError("duplicate identity records are not allowed")
-            self._records[key] = record
+        self._records = {(record.issuer, record.subject): record for record in records}
 
     def resolve(self, claims: VerifiedClaims) -> Principal:
         try:
@@ -467,14 +403,6 @@ class InMemoryIdentityDirectory:
                 "signed tenant claim does not match the identity record",
             )
         return record.to_principal()
-
-
-class AuthenticationPort(Protocol):
-    """Structural port satisfied by any callable that authenticates a bearer token."""
-
-    def authenticate(self, authorization_header: str | None) -> Principal:
-        """Raise AuthenticationError on failure; return Principal on success."""
-        ...
 
 
 class AuthenticationService:

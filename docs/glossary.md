@@ -21,27 +21,6 @@ role, or permission produces a denial, never an implicit allow.
 **Event ledger** — Append-only authoritative record from which incident state is
 reconstructed.
 
-**Evidence record** — Immutable tenant-scoped normalized observation or
-retrieved knowledge item with source identity, UTC timestamps, digest,
-provenance, classification, retention, and redaction metadata.
-
-**Evidence bundle** — Deterministically ordered evidence, typed links, timeline
-entries, ambiguity, and source conflicts prepared for later specialists. It is
-not a diagnosis.
-
-**Partial result** — Explicit connector outcome stating that some bounded data
-was returned while pages, records, or bytes were omitted; it is never represented
-as complete success.
-
-**Provenance** — Immutable source URI, source record ID, retrieval timestamp, and
-trust status used to verify and cite an evidence record.
-
-**Quarantine** — Tenant-scoped holding metadata for invalid, oversized, or
-untrusted evidence that cannot enter the immutable evidence store.
-
-**Source cursor** — Bounded opaque pagination/resumption value advanced only by
-the currently fenced worker after durable result persistence.
-
 **Fence** — Monotonically increasing token used to reject work from a stale
 lease holder.
 
@@ -54,17 +33,6 @@ evidence, distinct from a fact.
 **Idempotency key** — Stable identifier allowing duplicate requests to resolve
 to one logical effect where the external system supports it.
 
-**Inbox** — Tenant/source/message deduplication record committed in the same
-transaction as the events produced by an incoming delivery.
-
-**Dead-letter queue (DLQ)** — Tenant-scoped projection of work that exhausted
-retry policy or failed permanently. Requeue requires authorization and explicit
-approval; it never rewrites the failure events.
-
-**Delivery count** — Redis pending-entry attempt count used for operations and
-reclaim decisions. It is diagnostic transport metadata, not authoritative work
-attempt state.
-
 **Intent event** — Durable record of an exact planned side effect written before
 attempting it.
 
@@ -75,42 +43,13 @@ claims embedded in the token itself.
 **Lease** — Time-bounded claim on durable work; expiry permits recovery but does
 not by itself fence stale writers.
 
-**Outbox** — Mutable delivery state committed atomically with causing events. It
-supports at-least-once publication but is not authoritative run state.
-
-**Budget reservation** — Durable worst-case token and cost capacity held before
-a model network effect, then charged and released against normalized actual
-usage under the same worker fence.
-
-**Circuit breaker** — Bounded provider-health state (`closed`, `open`,
-`half_open`) that prevents repeated calls during an outage and admits one
-deterministic recovery probe.
-
-**Pricing version** — Immutable catalog identifier and token-class rates applied
-to one usage record so historical cost never changes when current prices do.
-
-**Billing ambiguity** — State where a provider may have accepted/billed a call
-but Aegis did not receive a trustworthy response; it must be reconciled and is
-not exactly-once billing.
-
 **Projection** — Rebuildable query view derived from the event ledger.
-
-**Projection checkpoint** — Monotonic per-tenant cursor advanced atomically with
-a projection page; it can be deleted and recreated from the ledger.
-
-**Row-level security (RLS)** — PostgreSQL policy restricting visible/writable rows
-to transaction-local trusted tenant context. `FORCE ROW LEVEL SECURITY` also
-subjects table owners unless they have explicit bypass authority.
 
 **Provider-neutral type** — Core contract that does not expose a vendor SDK
 object.
 
 **Reconciliation** — Determining the outcome of an ambiguous external effect
 from idempotency and target state.
-
-**Shared stream** — Layer 4's single bounded Redis Stream. Tenant identity is
-inside a validated envelope; PostgreSQL RLS and leases enforce isolation and
-ownership. The choice bounds Redis cardinality but moves fairness to workers.
 
 **Redaction** — Unconditional removal of credential-, token-, and secret-shaped
 values from audit event details at construction time, not by caller

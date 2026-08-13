@@ -11,7 +11,7 @@ from types import MappingProxyType
 from typing import Protocol
 from uuid import UUID
 
-from aegis_agent_platform.domain import JsonValue, require_aware_datetime
+from aegis_agent_platform.domain import JsonValue
 from aegis_agent_platform.identity import TenantId
 from aegis_agent_platform.tenancy import TenantContext
 
@@ -31,10 +31,6 @@ class AuditEventType(StrEnum):
     POLICY_EVALUATION = "security.policy_evaluation.v1"
     APPROVAL_IDENTITY_RECORDED = "security.approval_identity_recorded.v1"
     ADMINISTRATIVE_CHANGE = "security.administrative_change.v1"
-    REMEDIATION_POLICY_DECISION = "security.remediation_policy_decision.v1"
-    REMEDIATION_APPROVAL_DECISION = "security.remediation_approval_decision.v1"
-    CONTROLLED_ACTION_OUTCOME = "security.controlled_action_outcome.v1"
-    OBSERVABILITY_ACCESS = "security.observability_access.v1"
 
 
 class AuditOutcome(StrEnum):
@@ -82,7 +78,8 @@ class AuditEvent:
     schema_version: int = 1
 
     def __post_init__(self) -> None:
-        require_aware_datetime(self.occurred_at, field_name="occurred_at")
+        if self.occurred_at.tzinfo is None:
+            raise ValueError("occurred_at must be timezone-aware")
         if self.schema_version != 1:
             raise ValueError("audit schema changes must use a new additive event type")
         if not self.actor_id or not self.action or not self.resource:
@@ -97,9 +94,7 @@ class AuditStore(Protocol):
         """Append one event after validating tenant context."""
         ...
 
-    def query(
-        self, context: TenantContext, *, limit: int = 100
-    ) -> tuple[AuditEvent, ...]:
+    def query(self, context: TenantContext) -> tuple[AuditEvent, ...]:
         """Return only events owned by the supplied tenant."""
         ...
 
@@ -115,11 +110,7 @@ class InMemoryAuditStore:
             raise ValueError("audit event tenant does not match trusted context")
         self._events.append(event)
 
-    def query(
-        self, context: TenantContext, *, limit: int = 100
-    ) -> tuple[AuditEvent, ...]:
-        if not 1 <= limit <= 1_000:
-            raise ValueError("audit query limit must be between 1 and 1000")
+    def query(self, context: TenantContext) -> tuple[AuditEvent, ...]:
         return tuple(
             event for event in self._events if event.tenant_id == context.tenant_id
-        )[-limit:]
+        )

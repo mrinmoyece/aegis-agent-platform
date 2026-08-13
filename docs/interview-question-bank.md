@@ -41,12 +41,11 @@ delivery, durable outcomes, and reconciliation for ambiguous completion.
 the task. Time alone does not revoke authority. Authoritative writes reject the
 older monotonic fence.
 
-### What happens if the worker crashes after a controlled action succeeds?
+### What happens if the worker crashes after rollback succeeds?
 
 **Answer outline:** replay finds a committed intent without a completion.
 Reconcile using the idempotency key and target state; do not blindly infer
-failure or issue an unkeyed second action. Layer 8 redelivery detects the
-in-flight attempt and reconciles before retry.
+failure or issue an unkeyed second rollback.
 
 ## Security and tenancy
 
@@ -56,91 +55,17 @@ in-flight attempt and reconciles before retry.
 a selected tenant. Bind principal, tenant, action, and resource explicitly and
 enforce again at persistence and tool boundaries.
 
-### How do you stop prompt injection from executing remediation?
+### How do you stop prompt injection from executing rollback?
 
 **Answer outline:** treat all content as untrusted. The model cannot grant
-capabilities. A typed immutable proposal passes deny-by-default runtime policy,
-exact human approval, current-fence checks, intent persistence, fixed-shape
-adapter validation, reconciliation, and explicit verification. Layer 8 exposes
-no arbitrary production command or model-selected credential. Layer 9 analysis
-uses a separate exact-approval sandbox boundary and cannot mutate production.
-
-### Why is a Kubernetes Job manifest not proof of sandbox isolation?
-
-**Answer outline:** workload security context is only one layer. Admission must
-reject weakening mutations; the runtime class/node boundary must isolate the
-kernel; PID and resource controllers must enforce limits; network policy and an
-egress/DNS boundary must prevent metadata/private-network/rebinding attacks; and
-content/artifact drivers must preserve tenant scope. Layer 9 therefore generates
-a locked-down suspended Job but reports readiness false until those environment
-controls are independently verified.
-
-### How does sandbox redelivery avoid duplicate or orphaned workloads?
-
-**Answer outline:** it does not claim exactly once. A stable tenant/sandbox name
-and spec digest form the provider identity. The current fenced worker commits
-provision/cleanup intent, observes before create/delete retry, records explicit
-reconciliation, and continues only for a matching scope. Unknown or conflicting
-state remains ambiguous or quarantined. Redis acknowledgement is irrelevant to
-the authoritative decision.
-
-### Why reject shell strings even when execution is isolated?
-
-**Answer outline:** isolation reduces impact but does not make command
-construction safe. Provider-neutral contracts preserve argv token boundaries;
-canonical validation rejects shell families, interpolation/control operators,
-control characters, and policy-escaping Unicode. No adapter may use
-`shell=True`, `eval`, or a host subprocess fallback.
-
-### Why is pgvector not the memory source of truth?
-
-**Answer outline:** authoritative event/artifact references are distinct from
-derived search acceleration. Replay, lifecycle intent, forced RLS, tenant-first
-filtering, checkpoints/rebuild, and cache invalidation keep correctness outside
-the ANN index. pgvector cannot decide acceptance, retention, legal hold, or
-deletion.
-
-### How does compaction avoid turning a model summary into false memory?
-
-**Answer outline:** record summary intent and exact source references, validate
-every claim citation and coverage, preserve contradiction, bound recursive
-depth, reject unsupported output, use deterministic extractive fallback, and
-keep raw references. Summaries are derived, and retrieved text cannot grant
-tools, roles, policy, or approvals.
+capabilities. A typed proposal passes runtime policy, exact scoped approval,
+intent persistence, controlled tool validation, and sandbox/egress controls.
 
 ### How can specialists communicate safely?
 
 **Answer outline:** only through typed tenant/incident-scoped artifacts committed
 to the ledger. No direct chat, recursive spawning, hidden scratchpad authority,
 or capability transfer.
-
-### How does Layer 7 prevent parallel completion order from changing the answer?
-
-**Answer outline:** the coordinator alone declares the immutable acyclic graph.
-Readiness is a pure function of ledger-folded task states. Ready nodes sort by
-declared ordinal and ID; completed task results sort again by ordinal and
-artifact kind/ID before one fenced append. No specialist writes shared state or
-talks to peers. Replay rejects premature dispatch, duplicate identity, and
-unreachable provenance, so wall-clock completion cannot become authority.
-
-### When must the coordinator abstain instead of finalizing?
-
-**Answer outline:** finalization requires a durable selected hypothesis with
-valid immutable citations, confidence at or above the plan threshold, and at
-least one accepted critique with no unsupported claims or unresolved
-contradictions. Missing evidence, contradictory evidence, critic rejection, or
-low confidence produces an explicit abstain/escalate artifact retaining
-unresolved questions. A fluent model response cannot override this runtime gate.
-
-### Why is a remediation recommendation not permission to remediate?
-
-**Answer outline:** Layer 7's artifact constructor requires `proposal_only=true`
-and binds the recommendation to an upstream hypothesis. Layer 8 is a separate
-boundary: authenticated humans authorize the exact tenant, immutable
-plan/action/policy digests, target, risk, quorum, and expiry. The executor
-rechecks that scope and its PostgreSQL fence before intent, invokes only a
-controlled idempotent adapter, reconciles ambiguity, and records fresh
-verification. Agents cannot approve their own proposals.
 
 ## Identity and tenancy deep dive
 
@@ -149,9 +74,9 @@ verification. Agents cannot approve their own proposals.
 > `audit.py`, `secrets_boundary.py`, `migrations/0001_identity_governance.sql`),
 > proven by a committed automated negative-test suite
 > (`tests/test_identity_security.py`, `tests/test_policy_security.py`,
-> `tests/test_audit_secrets.py`, `tests/test_migrations.py`). Live-Keycloak
-> drills and runtime quota-usage emission remain planned — see
-> `limitations.md` and `roadmap.md` before claiming the full gate is met.
+> `tests/test_audit_secrets.py`, `tests/test_migrations.py`). Durable Postgres
+> wiring, live-Keycloak drills, and quota usage accounting remain planned —
+> see `limitations.md` and `roadmap.md` before claiming the full gate is met.
 
 ### Why does `AuthorizationService.decide` check tenant match before checking permission?
 
@@ -243,52 +168,9 @@ and persist evidence. Tool success is not service recovery.
 ### What should be deterministic in evaluation?
 
 **Answer outline:** schemas, authorization, tenant isolation, citations,
-budgets, transition legality, approval binding, effect guards, and named crash
-cuts. Fix fixtures, clocks, IDs, and seeds. Use statistical or model grading only
-for semantic quality, calibrated against human labels and never as the sole
-security assertion.
-
-### Why are evaluation results not production truth?
-
-**Answer outline:** a result describes one versioned dataset, implementation,
-policy, fixture, grader, and execution class. It can support a release decision
-but cannot authorize an action, reconstruct run state, or prove a live provider
-behaved identically. The event ledger remains runtime truth; authorization,
-budgets, sandboxing, approval, intent, reconciliation, and safety limits remain
-code-enforced even after a perfect score.
-
-### Why split hermetic CI, integration, live/statistical, and production evidence?
-
-**Answer outline:** they answer different questions. Required CI must reproduce
-contract and safety behavior without secrets, network, judge, or effects.
-Integration checks disposable infrastructure. Live/statistical runs qualify
-dedicated non-production providers with repeated samples and uncertainty.
-Production evidence detects drift through bounded redacted observations but is
-not a baseline or replay source by itself.
-
-### How can a baseline or waiver hide a regression?
-
-**Answer outline:** automatically accepting current output turns every regression
-into the new normal; a broad or permanent waiver removes the gate. Baselines are
-reviewed immutable versions. A waiver binds exact case/gate, candidate and
-baseline digests, release scope, reason, compensating control, owner, reviewer,
-and expiry. Mismatch or expiry fails closed, and runtime safety never changes.
-
-### When is a model-as-judge acceptable?
-
-**Answer outline:** only for optional semantic evidence behind an isolated
-provider-neutral adapter with minimized redacted inputs, versioned rubric/model/
-prompt, repeated samples, uncertainty, and calibration against reviewed labels.
-It is disabled in required CI, has no tools or production authority, and cannot
-be the sole safety, tenancy, authorization, approval, or effect gate.
-
-### What happens when an evaluation dataset is tampered with or deleted?
-
-**Answer outline:** provenance/schema/digest failure quarantines the exact
-version and blocks promotion; tamper becomes a release/security incident rather
-than an in-place repair. Deletion checks legal hold, records approval and a
-tombstone, purges source and derived judge/report data, and marks historical
-evidence unavailable while retaining only allowed non-sensitive audit metadata.
+budgets, transition legality, approval binding, and effect guards. Use
+statistical or model grading only for semantic quality, calibrated against human
+labels and never as the sole security assertion.
 
 ## Scale and operations
 
@@ -310,16 +192,3 @@ error-budget action.
 **Answer outline:** not a feature checklist alone. Require isolation evidence,
 failure and restore drills, SLOs, capacity tests, key rotation, privacy
 workflows, signed artifacts, runbooks, audit review, and explicit residual risk.
-
-## Layer 12 questions
-
-**Why not reconstruct a run from traces?** Traces are sampled, lossy, reordered,
-and optional. The ledger is authoritative; trace links are diagnostic.
-
-**How do retries avoid inflating success?** Attempt metrics count attempts.
-Business outcomes require a durable outcome key and are deduplicated across
-retry, redelivery, replay, and projection rebuild.
-
-**Why can telemetry degradation leave readiness green?** Export is optional to
-correctness and must not block work. DB, fencing, policy, or sandbox enforcement
-can gate readiness; exporter loss reports degraded and uses replay fallback.
