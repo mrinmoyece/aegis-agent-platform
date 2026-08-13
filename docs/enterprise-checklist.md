@@ -25,13 +25,13 @@ Status meanings:
 | Deterministic evidence timeline and conflict preservation | Implemented | `evidence.correlation`; no causal inference or specialist reasoning |
 | Live connector environment certification | Planned | account/cluster scopes, egress, TLS, rotation, residency drills |
 | Verified connector webhooks and replay protection | Planned | no webhook routes in Layer 6 |
-| Checkout-failure incident investigation | Planned | Layers 3–7 |
-| Approval-gated rollback and recovery verification | Planned | Layers 5–7 |
-| Fixed incident specialist roles and typed artifacts | Scaffolded | `agents` |
-| Ledger-only specialist communication | Scaffolded | `ArtifactLedger` port |
-| Coordinator DAG, capability, budget, and timeout enforcement | Planned | Layers 3–4 |
-| Deterministic evidence correlation and conflict representation | Implemented | Layer 6 evidence bundles; coordinator aggregation remains planned |
-| Recursive spawning and peer chat prohibited | Scaffolded | `AGENTS.md`, ADR 0008 |
+| Checkout-failure incident investigation | Implemented | Fake-only Layer 7 workflow; no live diagnosis claim |
+| Approval-gated rollback and recovery verification | Planned | Layer 8; Layer 7 emits proposal and verification plan only |
+| Fixed incident specialist roles and typed artifacts | Implemented | `agents.artifacts`, role/output policy tests |
+| Ledger-only specialist communication | Implemented | `reasoning.artifact_recorded.v1`, replay fold |
+| Coordinator DAG, capability, budget, and timeout enforcement | Implemented | `agents.coordination`, `agents.service`, ADR 0014 |
+| Deterministic evidence correlation and conflict representation | Implemented | Layer 6 bundles plus Layer 7 hypothesis/contradiction/critic artifacts |
+| Recursive spawning and peer chat prohibited | Implemented | Fixed DAG/runtime boundary; no spawning/chat interface |
 | Staff-level curriculum index | Implemented | `docs/curriculum.md` |
 | Canonical 15/30/60-minute demo scripts | Implemented | `docs/demo-script.md` |
 | Staff interview question bank with answer outlines | Implemented | `docs/interview-question-bank.md` |
@@ -56,10 +56,10 @@ Status meanings:
 | Quota usage accounting projection | Implemented | Model usage events plus rebuildable versioned-cost view |
 | Append-only event store | Implemented | `PostgresEventStore`, migration `0002`, live race/immutability tests |
 | Additive event compatibility | Implemented | additive defaults and legacy fixture replay |
-| Deterministic incident state machine | Planned | Specialist runtime; generic run-status projection exists |
+| Deterministic incident state machine | Implemented | Pure Layer 7 event fold and corruption tests |
 | Intent-before-model-side-effect enforcement | Implemented | fenced model request/reservation before SDK call |
 | Transactional inbox/outbox | Implemented | deduplication, atomic append, claims, retry/DLQ |
-| Rebuildable projections/checkpoints | Implemented | run/artifact/approval/usage/tenant views |
+| Rebuildable projections/checkpoints | Implemented | run/artifact/approval/usage/tenant and specialist views |
 | Authorized ledger/timeline inspection | Implemented | tenant-scoped redacted read-only API |
 | Durable queue and fenced leases | Implemented | `queueing`, `runtime.postgres`, migration `0003`, live race tests |
 | Retry, timeout, dead-letter, and recovery policy | Implemented | `runtime.WorkerSupervisor`, deterministic tests |
@@ -80,9 +80,13 @@ Status meanings:
 | Three-tier working/episodic/semantic memory | Planned | Layer 6, `docs/protocols.md` |
 | PII-safe compaction, retention, and deletion | Planned | Layer 6 |
 | Data retention, export, and erasure workflows | Planned | Layer 6 |
-| Offline evaluation datasets and baselines | Planned | Layer 7 |
+| Deterministic specialist behavioral evaluations | Implemented | success, ambiguity, contradiction, budget, recovery; `make evals` |
+| Versioned production evaluation datasets and baselines | Planned | Layer 10 |
 | Online quality, safety, latency, and cost signals | Planned | Layer 7 |
 | Model span/metric content redaction | Implemented | bounded catalog labels; no prompt/tenant/request labels |
+| Specialist span/metric content redaction | Implemented | fixed operation/role labels; no evidence/prompt/tenant/run labels |
+| Authorized investigation status/task/artifact APIs | Implemented | tenant authorization, redacted cursor pages |
+| Tenant-RLS specialist projections and rebuild | Implemented | migration `0006`, live PostgreSQL test |
 | End-to-end trace/event correlation | Planned | Layer 8 |
 | SLOs, alerts, runbooks, backup, and restore evidence | Planned | Layer 8 |
 | HA deployment and capacity evidence | Planned | Layer 8 |

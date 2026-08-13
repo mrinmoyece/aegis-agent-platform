@@ -12,6 +12,7 @@ from typing import Any, Protocol
 from urllib.parse import parse_qs
 from uuid import UUID, uuid4
 
+from aegis_agent_platform.agents.operations import AgentOperations
 from aegis_agent_platform.audit import (
     AuditEvent,
     AuditEventType,
@@ -91,6 +92,7 @@ class ControlPlaneApp:
         storage_ready: Callable[[], Awaitable[bool]] | None = None,
         gateway_operations: GatewayOperations | None = None,
         evidence_operations: EvidenceOperations | None = None,
+        agent_operations: AgentOperations | None = None,
     ) -> None:
         self._authentication = authentication
         self._authorization = authorization or AuthorizationService()
@@ -102,6 +104,7 @@ class ControlPlaneApp:
         self._storage_ready = storage_ready
         self._gateway_operations = gateway_operations
         self._evidence_operations = evidence_operations
+        self._agent_operations = agent_operations
 
     async def __call__(
         self,
@@ -217,6 +220,29 @@ class ControlPlaneApp:
                 tenant_id,
                 segments[5],
                 correlation_id=correlation_id,
+            )
+            return
+        if (
+            method == "GET"
+            and len(segments) in {5, 6}
+            and segments[3] == "investigations"
+        ):
+            view = "status" if len(segments) == 5 else segments[5]
+            if view not in {"status", "tasks", "artifacts"}:
+                await _respond(send, 404, {"status": "not-found"})
+                return
+            try:
+                investigation_cursor = _cursor_parameter(scope)
+            except ValueError:
+                await _respond(send, 400, {"error": {"code": "invalid_cursor"}})
+                return
+            await self._get_investigation_view(
+                send,
+                principal,
+                tenant_id,
+                segments[4],
+                view,
+                cursor=investigation_cursor,
             )
             return
         if (
@@ -480,6 +506,80 @@ class ControlPlaneApp:
                 if result is not None
                 else {"error": {"code": "bundle_not_found"}}
             ),
+        )
+
+    async def _get_investigation_view(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+        run_id: str,
+        view: str,
+        *,
+        cursor: int,
+    ) -> None:
+        if not await self._authorize(
+            send,
+            principal,
+            tenant_id,
+            Permission.INVESTIGATION_READ,
+            resource=f"tenant/{tenant_id}/investigations/{view}",
+        ):
+            return
+        if self._agent_operations is None:
+            await _respond(
+                send,
+                503,
+                {"error": {"code": "investigation_not_configured"}},
+            )
+            return
+        try:
+            identifier = UUID(run_id)
+        except ValueError:
+            await _respond(send, 400, {"error": {"code": "invalid_run_id"}})
+            return
+        context = TenantContext(tenant_id)
+        at = datetime.now(UTC)
+        if view == "status":
+            result = await self._agent_operations.status(
+                principal,
+                context,
+                identifier,
+                at=at,
+            )
+            await _respond(
+                send,
+                200 if result is not None else 404,
+                (
+                    dict(result)
+                    if result is not None
+                    else {"error": {"code": "investigation_not_found"}}
+                ),
+            )
+            return
+        if view == "tasks":
+            items, task_cursor = await self._agent_operations.tasks(
+                principal,
+                context,
+                identifier,
+                at=at,
+                after_ordinal=cursor - 1,
+                limit=100,
+            )
+            next_cursor = task_cursor + 1 if task_cursor is not None else None
+        else:
+            items, next_cursor = await self._agent_operations.artifacts(
+                principal,
+                context,
+                identifier,
+                at=at,
+                after_position=cursor,
+                limit=100,
+            )
+        await _respond(
+            send,
+            200,
+            {view: items, "next_cursor": next_cursor},
         )
 
     async def _readiness(self, send: Send) -> None:

@@ -8,11 +8,11 @@
   certified by this repository.
 - GitHub/Dynatrace webhook intake, Kubernetes watches, incident-management, and
   remediation adapters do not exist.
-- Agent roles, artifacts, and plans are types only. There is no specialist
-  scheduler, deterministic aggregation, critic enforcement, approval workflow,
-  or specialist execution. Model invocation and model-call budgets are
-  implemented independently of that future orchestration.
-- Sandbox, tools, memory, and evaluation packages are boundaries only.
+- Fixed agent roles, typed artifacts, deterministic DAG scheduling, critic gates,
+  and fake specialist execution are implemented. There is no approval workflow,
+  remediation execution, post-action verification, or dynamic agent creation.
+- Sandbox, write-capable tools, memory, and production evaluation packages are
+  boundaries only. Layer 7 includes deterministic behavioral regression evals.
 - Runtime spans and bounded metric instruments exist, but no production
   collector dashboards, alert rules, or SLO evidence are claimed.
 - Three-tier memory is a documented design only. No pgvector retrieval,
@@ -82,6 +82,38 @@
   Kubernetes watch continuity, encrypted object storage, deletion/legal hold,
   external capability probes, dashboards/alerts, and credential rotation drills
   remain gaps.
+
+## Current Layer 7 implementation (governed specialist DAG)
+
+- One immutable bounded investigation plan declares ten canonical checkout tasks
+  across eight fixed roles. Code-defined capability and artifact-transition
+  policies deny undeclared authority; specialists cannot spawn agents or peer
+  chat.
+- The pure fold rebuilds run/task/artifact state only from additive ledger events
+  and rejects sequence gaps, duplicate IDs/keys, cycles, premature dispatch,
+  invalid role transitions, unavailable provenance, critic bypass, and corrupt
+  linkage.
+- The coordinator records dispatch/start intent before execution, uses the
+  existing work lease and event-store fence for every result, reserves global
+  token capacity deterministically, and contains timeout, cancellation, provider,
+  malformed-output, and implementation failures.
+- Typed redacted artifacts include evidence assessment, primary/alternative
+  hypothesis, contradiction/critique, causal/timeline references, proposal-only
+  remediation, verification plan, coordinator decision, and final assessment.
+  Finalization requires a cited above-threshold hypothesis and accepted critic;
+  otherwise the result abstains or escalates.
+- PostgreSQL run/task/artifact projections use forced RLS, expected versions,
+  indexes, and maintenance-only rebuild. Authorized APIs expose only bounded
+  redacted status, task, and artifact cursor pages. Metrics/spans have fixed
+  names and role labels without prompt, evidence, tenant, run, or secret content.
+- `python -m aegis_agent_platform.agents` and `make evals` use deterministic fake
+  providers/connectors only. They prove success, ambiguity/abstention,
+  contradiction/critic rejection, budget exhaustion, and crash recovery without
+  live network or credentials.
+- These controls do not prove that a model's semantic conclusion is correct.
+  There is no live connector/model verification, approval service, remediation
+  execution, sandbox, memory/RAG, operator UI, MCP/A2A adapter, production
+  deployment, HA, backup/restore, or operational SLO evidence.
 
 ## Current Layer 2 implementation (identity, tenancy, and governance)
 
@@ -165,7 +197,7 @@
 
 ## Claims deliberately not made
 
-Aegis does not currently diagnose checkout failures, protect production data,
+Aegis does not currently diagnose live checkout failures, protect production data,
 guarantee exactly-once effects or provider billing, provide a secure code
 sandbox, satisfy a
 compliance framework, meet an SLO, or support multi-region recovery. Live local

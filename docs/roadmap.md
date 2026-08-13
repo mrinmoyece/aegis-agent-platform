@@ -78,9 +78,9 @@ RLS, immutable rows, audit redaction, replay, and projection rebuild.
 
 **Acceptance gate:** persistence and replay mechanics are done. No external effect
 path is implemented yet; later layers must consume
-`effect.intent_recorded.v1` before adding any effect. Deterministic incident state
-transitions, fixture-backed investigation behavior, and agent execution remain
-future work. Redis workers are implemented separately in Layer 4.
+`effect.intent_recorded.v1` before adding any effect. Layer 7 now supplies the
+incident-specific deterministic fold and typed artifact replay on top of this
+ledger. Redis workers are implemented separately in Layer 4.
 
 ## Layer 4 — Workers and leases
 
@@ -96,8 +96,8 @@ remediation are intentionally deferred.
 publisher restart windows, cancellation races, timeout/retry exhaustion, poison
 messages, and DLQ operations have deterministic or live-service evidence.
 Provider controls and ambiguous-outcome recording are implemented separately in
-Layer 5. Connector fixtures and deterministic specialist aggregation remain
-future work and are not claimed by this worker layer.
+Layer 5. Connector fixtures are Layer 6 and deterministic specialist aggregation
+is Layer 7; neither changes the worker layer's at-least-once semantics.
 
 ## Layer 5 — Provider-neutral model gateway
 
@@ -136,19 +136,42 @@ explicit; ambiguity/conflict survives deterministic correlation; no vendor type,
 credential, unrestricted source content, or unbounded payload enters core
 contracts/events.
 
-## Layer 7 — Tools, policy, and sandbox
+## Layer 7 — Governed durable specialist DAG
 
-Add typed tool contracts, policy decisions, approvals, capability-scoped
-credentials, an incident proposal/approval workflow, and isolated execution with
-resource and network controls. Add controlled rollback/remediation adapters for
-the demo only after approval is durable.
+Implement the Incident Coordinator and fixed Telemetry, Change, Runtime,
+Knowledge, Critic, Remediation Planner, and Verification roles. Persist the
+bounded immutable plan, scheduling intent, typed reasoning artifacts, task
+outcomes, coordinator decision, and final assessment in the existing event
+ledger. Enforce code-defined capabilities, DAG bounds, citations, provenance,
+budgets, timeouts, cancellation, retries, fencing, deterministic ordering,
+critic review, confidence thresholds, and safe abstention.
 
-**Acceptance gate:** prompt injection or hostile runbook content cannot bypass
-authorization; sandbox escape and egress tests fail closed; every effect is
-attributable to an approved intent; the checkout rollback cannot execute before
-valid approval.
+**Status:** implemented in `agents`, migration
+`0006_specialist_orchestration.sql`, authorized investigation read APIs, the
+fake-only checkout CLI, deterministic unit/integration tests, and CI-gated
+behavioral evals.
 
-## Layer 8 — Memory and retrieval
+**Acceptance gate:** cycles, premature dispatch, duplicate events/artifacts,
+role escalation, unknown citations, stale workers, malformed/hostile model
+output, prompt injection in evidence, cancellation, timeout/retry, provider
+budget denial, critic rejection, contradictions, projection rebuild, tenant
+isolation, and completion-order variance fail closed or reach the same explicit
+terminal state. Finalization requires a cited above-threshold hypothesis and an
+accepted critique. Remediation remains proposal-only.
+
+## Layer 8 — Approvals, tools, policy, and sandbox
+
+Add typed tool contracts, exact approvals, capability-scoped credentials, an
+incident proposal/approval workflow, and isolated execution with resource and
+network controls. Add controlled rollback/remediation adapters only after
+approval is durable.
+
+**Acceptance gate:** prompt injection or hostile runbook/model content cannot
+bypass authorization; sandbox escape and egress tests fail closed; every effect
+is attributable to an approved intent; the checkout rollback cannot execute
+before valid approval.
+
+## Layer 9 — Memory and retrieval
 
 Add tenant-scoped short- and long-term memory, pgvector retrieval, provenance,
 classification, retention, export, and deletion workflows. Index runbooks and
@@ -168,6 +191,10 @@ Add versioned datasets, offline and online evaluation, release gates, traces,
 metrics, logs, cost accounting, and safe content handling. Score hypothesis
 evidence coverage, unsupported claims, remediation choice, approval compliance,
 and recovery verification on checkout-failure variants.
+
+Layer 7 includes only a bounded deterministic behavioral regression matrix; this
+layer adds production datasets, semantic quality measurement, and operational
+release gates.
 
 **Acceptance gate:** a reproducible evaluation blocks a known regression;
 event-to-trace correlation works; telemetry contains no disallowed content or

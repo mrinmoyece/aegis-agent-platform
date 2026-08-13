@@ -46,6 +46,20 @@
 | Source cursor race | Fenced compare-and-advance fails | Preserve the winner; stale generation cannot overwrite progress |
 | Runbook trust/schema failure | Digest/signature/front-matter validation | Reject or quarantine; never execute retrieved instructions |
 | Correlation tie or contradiction | Ambiguous or source-conflict link | Preserve every candidate/conflict; do not fabricate causality |
+| Investigation DAG cycle, unknown dependency, or excessive depth/fan-out | Plan validation error before request | Reject the plan; no work or projection is created |
+| Specialist dispatch before dependency completion | Replay corruption error | Stop replay/supervision; never infer readiness from task completion messages |
+| Duplicate event, idempotency key, assignment, or artifact ID | Replay/append uniqueness rejection | Preserve the first committed identity and investigate producer corruption |
+| Specialist requests undeclared capability or artifact transition | Deny-by-default role-policy error | Record invalid output/failure within retry bounds; never broaden authority |
+| Unknown or mismatched evidence citation | Artifact-policy rejection | Reject the claim; require a new cited artifact rather than repairing silently |
+| Hostile evidence/model output contains instructions | Bounded untrusted-data context plus strict structured decoder | Treat as data, enforce runtime policy/citations, and fail malformed output |
+| Specialist/model implementation raises | Coordinator exception boundary | Append classified failure, retry within assignment bound, keep supervisor alive |
+| Specialist timeout | Runtime `wait_for` and durable timed-out task event | Release reservation, retry within bound, then fail explicitly |
+| Investigation token budget cannot reserve a ready node | Deterministic global reservation check | Append `investigation.budget_exhausted.v1`; make no model call |
+| Parallel specialists complete in a different order | Stable assignment ordinal and artifact-kind/ID ordering | Append/fold the same deterministic order |
+| Unsupported or low-confidence hypothesis | Critic/finalization gate | Abstain or escalate with unresolved questions; emit no success-shaped conclusion |
+| Unresolved contradiction | Typed contradiction and critique references | Preserve the conflict and block finalization |
+| Specialist projection loss/corruption | Projection/ledger version mismatch or missing rows | Rebuild under maintenance authority from the tenant event stream |
+| Stale specialist result after lease reclaim | Existing token/generation event-store fence | Reject the entire event/projection transaction |
 
 Global event positions order commits but may contain numbers unused after a
 rolled-back PostgreSQL identity allocation. That is not corruption. A per-

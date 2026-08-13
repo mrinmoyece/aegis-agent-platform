@@ -6,13 +6,21 @@ import asyncio
 import json
 import threading
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
 import pytest
 
+from aegis_agent_platform.agents import (
+    CanonicalCheckoutEngine,
+    DurableCoordinator,
+    InMemoryAgentRepository,
+    canonical_checkout_citations,
+    canonical_checkout_plan,
+)
+from aegis_agent_platform.agents.operations import AgentOperations
 from aegis_agent_platform.audit import REDACTED, AuditEventType, InMemoryAuditStore
 from aegis_agent_platform.config import Environment
 from aegis_agent_platform.control_plane.api import ControlPlaneApp, application
@@ -24,6 +32,7 @@ from aegis_agent_platform.domain import (
     ModelIdentity,
     PartialResult,
     PricingVersion,
+    WorkLease,
 )
 from aegis_agent_platform.event_store import (
     EventPage,
@@ -173,6 +182,7 @@ def secured_app(
     event_store: EventStore | None = None,
     gateway_operations: GatewayOperations | None = None,
     evidence_operations: EvidenceOperations | None = None,
+    agent_operations: AgentOperations | None = None,
 ) -> tuple[ControlPlaneApp, str, InMemoryAuditStore]:
     signing = signing_fixture()
     audit = InMemoryAuditStore()
@@ -184,6 +194,7 @@ def secured_app(
         event_store=event_store,
         gateway_operations=gateway_operations,
         evidence_operations=evidence_operations,
+        agent_operations=agent_operations,
     )
     return app, token(signing), audit
 
@@ -924,3 +935,89 @@ def test_evidence_page_cursor_round_trips_highwater_and_position() -> None:
         _evidence_cursor_parameter({"query_string": b"cursor=a&cursor=b"})
     with pytest.raises(ValueError, match="cursor is invalid"):
         _evidence_cursor_parameter({"query_string": b"cursor=not-base64"})
+
+
+def test_investigation_views_are_authorized_redacted_and_paginated() -> None:
+    async def seed() -> tuple[InMemoryAgentRepository, str]:
+        now = datetime.now(UTC)
+        run_id = uuid4()
+        repository = InMemoryAgentRepository()
+        coordinator = DurableCoordinator(
+            repository,
+            CanonicalCheckoutEngine(clock=lambda: now),
+            clock=lambda: now,
+        )
+        plan = canonical_checkout_plan(
+            tenant_id=str(TENANT_ID),
+            incident_id="checkout-api",
+            run_id=run_id,
+            created_at=now,
+        )
+        await coordinator.request(
+            TenantContext(TENANT_ID),
+            plan,
+            actor_id="api-test",
+            idempotency_key=f"api-investigation:{run_id}",
+        )
+        lease = WorkLease(
+            run_id,
+            str(TENANT_ID),
+            uuid4(),
+            1,
+            "api-worker",
+            1,
+            now,
+            now,
+            now + timedelta(minutes=5),
+        )
+        repository.register_lease(lease)
+        await coordinator.execute(
+            TenantContext(TENANT_ID),
+            run_id,
+            lease,
+            canonical_checkout_citations(),
+        )
+        return repository, str(run_id)
+
+    repository, run_id = asyncio.run(seed())
+    app, encoded, _audit = secured_app(
+        agent_operations=AgentOperations(repository),
+    )
+    prefix = f"/v1/tenants/{TENANT_ID}/investigations/{run_id}"
+
+    status, body, _headers = request(
+        prefix,
+        app=app,
+        authorization=bearer(encoded),
+    )
+    assert status == 200
+    assert body["status"] == "succeeded"
+
+    tasks_status, tasks, _headers = request(
+        prefix + "/tasks",
+        app=app,
+        authorization=bearer(encoded),
+        query_string="cursor=0",
+    )
+    assert tasks_status == 200
+    assert len(tasks["tasks"]) == 10
+    assert tasks["tasks"][0]["ordinal"] == 0
+
+    artifacts_status, artifacts, _headers = request(
+        prefix + "/artifacts",
+        app=app,
+        authorization=bearer(encoded),
+    )
+    assert artifacts_status == 200
+    assert artifacts["artifacts"]
+    assert all(item["redacted"] is True for item in artifacts["artifacts"])
+    assert all("artifact_content" not in item for item in artifacts["artifacts"])
+
+    invalid_status, invalid, _headers = request(
+        prefix + "/artifacts",
+        app=app,
+        authorization=bearer(encoded),
+        query_string="cursor=-1",
+    )
+    assert invalid_status == 400
+    assert invalid["error"]["code"] == "invalid_cursor"

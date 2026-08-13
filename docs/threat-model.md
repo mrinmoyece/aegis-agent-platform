@@ -7,7 +7,8 @@ Layer 1 established contracts; Layers 2–3 added governance and the ledger.
 Layer 4 adds Redis delivery plus PostgreSQL leases/fencing and live race evidence.
 Layer 5 adds the provider-neutral model gateway and fenced cost governance.
 Layer 6 adds read-only evidence adapters, bounded immutable ingestion, and
-deterministic correlation.
+deterministic correlation. Layer 7 adds the fixed specialist DAG, durable typed
+reasoning artifacts, and deterministic critic/finalization gates.
 The system assumes model output, tool output, retrieved
 content, and tenant input can be hostile. Cloud, identity provider, model
 provider, and operator accounts can be compromised. Prompt instructions are
@@ -43,7 +44,7 @@ never trusted as controls.
 | --- | --- | --- | --- |
 | Tenant confusion | Cross-tenant reads or work claims | Explicit tenant context, database policy, negative tests | PostgreSQL repositories use transaction-local context; forced RLS and confused-deputy denial are proven against PostgreSQL 16 |
 | Identity spoofing | Attacker acts as an operator | OIDC validation, key rotation, audience checks | Standards-correct JWT signature/issuer/audience/expiry/algorithm verification implemented against deterministic fixtures and a Keycloak-compatible JWKS config, with a committed negative-test suite for malformed/expired/wrong-issuer/wrong-audience/unsupported-algorithm tokens; live-IdP key-rotation drills against a running Keycloak remain a deployment-time check |
-| Prompt injection | Model invokes unauthorized tool | Typed tool allowlist, runtime policy, approval | Boundary only |
+| Prompt injection | Evidence/model content changes authority or bypasses review | Treat content as untrusted data, strict schemas, code-enforced roles/citations; later tool approval | Layer 7 reasoning boundary implemented; no tool execution exists |
 | Confused deputy | Tool uses broader platform privilege | Scoped capability token per invocation | Planned |
 | Duplicate delivery | Repeated work or external effect | Intent event, deterministic message identity, inbox, reconciliation | Redis publication and inbox deduplication implemented; future target reconciliation remains required |
 | Stale lease holder | Old worker overwrites a reclaimed result | PostgreSQL token/generation fence on every write | Implemented and live-tested |
@@ -64,11 +65,11 @@ never trusted as controls.
 | Remediation escalation | Rollback tool mutates unrelated services | Capability-scoped tool input and target allowlist | Planned |
 | False recovery | Incident closes after a transient metric dip | Defined verification window and multi-signal checks | Planned |
 | Connector token theft | Dynatrace or GitHub authority is exfiltrated | Brokered read-only credentials, rotation, redaction | Typed secret references and redaction implemented; vault brokering/rotation drills planned |
-| Agent authority creep | Specialist spawns workers or obtains broader tools | Fixed roles, coordinator-owned DAG, capability allowlist | Contracts only |
-| Opaque collusion | Peer chat creates uncited consensus | Ledger-only typed artifacts and independent critic | Contracts only |
-| Runaway swarm | Recursive agents exhaust tokens or capacity | No specialist spawning, hard budgets, deadlines, global quota | Contracts only |
-| Aggregation race | Completion order changes the chosen hypothesis | Stable ledger order and deterministic conflict policy | Planned |
-| Critic bypass | Unsupported hypothesis reaches remediation | Required reviewer dependency and cited confidence gate | Planned |
+| Agent authority creep | Specialist spawns workers or obtains broader tools | Fixed roles, coordinator-owned DAG, deny-by-default capability/output policy | Implemented and negative-tested |
+| Opaque collusion | Peer chat creates uncited consensus | No peer channel; ledger-only typed artifacts and independent critic | Implemented |
+| Runaway swarm | Recursive agents exhaust tokens or capacity | No specialist spawning; hard depth/fan-out/iteration/token/time bounds | Implemented |
+| Aggregation race | Completion order changes the chosen hypothesis | Plan ordinal/ID ordering and deterministic artifact append/fold | Implemented |
+| Critic bypass | Unsupported hypothesis reaches remediation | Required critic dependency, citations, confidence threshold, contradiction gate | Implemented for proposal/final assessment |
 | Memory poisoning | Hostile or stale knowledge biases incident response | Provenance, source quality, recency, critique, deletion | Planned |
 | Compaction loss | Summary drops conflict, approval, or safety limits | Citation-preserving compaction invariants and tests | Planned |
 | Cross-tenant embedding leak | Semantic search returns another tenant's data | Tenant partitioning, authorization, adversarial retrieval tests | Planned |
@@ -107,9 +108,10 @@ shown to the operator rather than averaged into false certainty. Remediation is
 a separate typed proposal and cannot grant tool authority. Human approval is
 bound to the exact proposal, and verification is performed by a distinct role.
 
-Layer 1 encodes only types and interfaces for these controls. Scheduling,
-capability enforcement, budgets, deterministic aggregation, approval, and
-verification are planned and must not be inferred from the skeleton.
+Layer 7 implements scheduling, capability/output enforcement, budgets,
+deterministic aggregation, critique, and safe abstention. Approval, tool
+execution, sandboxing, and post-action verification remain planned and must not
+be inferred from a remediation recommendation or verification plan.
 
 ## Canonical scenario security questions
 
@@ -207,3 +209,18 @@ external object reference is valid. Correlation preserves uncertainty and makes
 no diagnosis. Specialist reasoning, approval, remediation, sandboxing,
 memory/RAG, deletion/legal hold, and production alerting remain outside this
 layer.
+
+## Layer 7 residual risk
+
+The checkout workflow is proven with deterministic fake providers/connectors and
+bounded committed evidence, not a live model or external incident. Strict
+structured output, citations, role transitions, critic review, and supervisor
+containment reduce model risk but cannot prove semantic correctness. The
+coordinator may abstain or escalate; it must not invent missing evidence.
+
+The PostgreSQL event stream remains authoritative and specialist projections are
+rebuildable. Live PostgreSQL tests prove RLS, fencing, pagination, and rebuild in
+a disposable database, not backup/restore, HA, regional failover, or production
+capacity. Remediation is proposal-only. No approval service, write-capable tool,
+sandbox, memory/RAG, operator UI, MCP/A2A, production deployment, or live
+connector/model certification exists.

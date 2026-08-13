@@ -230,6 +230,42 @@ DomainEventType.CORRELATION_FAILED = DomainEventType._define(
 DomainEventType.SOURCE_CURSOR_ADVANCED = DomainEventType._define(
     "evidence.source_cursor_advanced.v1"
 )
+DomainEventType.INVESTIGATION_PLAN_RECORDED = DomainEventType._define(
+    "investigation.plan_recorded.v1"
+)
+DomainEventType.INVESTIGATION_CANCEL_REQUESTED = DomainEventType._define(
+    "investigation.cancel_requested.v1"
+)
+DomainEventType.INVESTIGATION_BUDGET_EXHAUSTED = DomainEventType._define(
+    "investigation.budget_exhausted.v1"
+)
+DomainEventType.SPECIALIST_TASK_DISPATCH_REQUESTED = DomainEventType._define(
+    "specialist.dispatch_requested.v1"
+)
+DomainEventType.SPECIALIST_TASK_STARTED = DomainEventType._define(
+    "specialist.started.v1"
+)
+DomainEventType.SPECIALIST_TASK_SUCCEEDED = DomainEventType._define(
+    "specialist.succeeded.v1"
+)
+DomainEventType.SPECIALIST_TASK_FAILED = DomainEventType._define(
+    "specialist.failed.v1"
+)
+DomainEventType.SPECIALIST_TASK_TIMED_OUT = DomainEventType._define(
+    "specialist.timed_out.v1"
+)
+DomainEventType.SPECIALIST_TASK_CANCELLED = DomainEventType._define(
+    "specialist.cancelled.v1"
+)
+DomainEventType.REASONING_ARTIFACT_RECORDED = DomainEventType._define(
+    "reasoning.artifact_recorded.v1"
+)
+DomainEventType.COORDINATOR_DECISION_RECORDED = DomainEventType._define(
+    "coordinator.decision_recorded.v1"
+)
+DomainEventType.INVESTIGATION_FINALIZED = DomainEventType._define(
+    "investigation.finalized.v1"
+)
 
 
 @dataclass(frozen=True, slots=True)
