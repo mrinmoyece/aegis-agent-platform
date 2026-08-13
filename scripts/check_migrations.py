@@ -54,6 +54,13 @@ def main() -> None:
         "create table remediation_effect_claims",
         "create table remediation_quota_projection",
         "remediation_approval_decisions_tenant_isolation",
+        "create table sandbox_projection",
+        "create table sandbox_artifact_projection",
+        "create table sandbox_execution_claims",
+        "create table sandbox_quota_projection",
+        "create table sandbox_cleanup_projection",
+        "create table sandbox_attestations",
+        "sandbox_attestations_tenant_isolation",
     )
     missing = [control for control in required if control not in schema]
     if missing:

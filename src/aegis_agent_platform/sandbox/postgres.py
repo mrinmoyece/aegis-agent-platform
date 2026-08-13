@@ -741,6 +741,7 @@ async def _apply_side_tables(
                     content_digest, size_bytes, media_type, quarantined,
                     retention_until, created_at
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (tenant_id, artifact_id) DO NOTHING
                 """,
                 (
                     event.tenant_id,

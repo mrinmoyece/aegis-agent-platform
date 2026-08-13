@@ -62,7 +62,35 @@ enforce again at persistence and tool boundaries.
 capabilities. A typed immutable proposal passes deny-by-default runtime policy,
 exact human approval, current-fence checks, intent persistence, fixed-shape
 adapter validation, reconciliation, and explicit verification. Layer 8 exposes
-no general sandbox, arbitrary command, or model-selected credential.
+no arbitrary production command or model-selected credential. Layer 9 analysis
+uses a separate exact-approval sandbox boundary and cannot mutate production.
+
+### Why is a Kubernetes Job manifest not proof of sandbox isolation?
+
+**Answer outline:** workload security context is only one layer. Admission must
+reject weakening mutations; the runtime class/node boundary must isolate the
+kernel; PID and resource controllers must enforce limits; network policy and an
+egress/DNS boundary must prevent metadata/private-network/rebinding attacks; and
+content/artifact drivers must preserve tenant scope. Layer 9 therefore generates
+a locked-down suspended Job but reports readiness false until those environment
+controls are independently verified.
+
+### How does sandbox redelivery avoid duplicate or orphaned workloads?
+
+**Answer outline:** it does not claim exactly once. A stable tenant/sandbox name
+and spec digest form the provider identity. The current fenced worker commits
+provision/cleanup intent, observes before create/delete retry, records explicit
+reconciliation, and continues only for a matching scope. Unknown or conflicting
+state remains ambiguous or quarantined. Redis acknowledgement is irrelevant to
+the authoritative decision.
+
+### Why reject shell strings even when execution is isolated?
+
+**Answer outline:** isolation reduces impact but does not make command
+construction safe. Provider-neutral contracts preserve argv token boundaries;
+canonical validation rejects shell families, interpolation/control operators,
+control characters, and policy-escaping Unicode. No adapter may use
+`shell=True`, `eval`, or a host subprocess fallback.
 
 ### How can specialists communicate safely?
 

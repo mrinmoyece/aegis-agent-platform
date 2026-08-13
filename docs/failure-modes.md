@@ -70,6 +70,18 @@
 | Provider accepts action but postcondition fails | Fresh verification result is failure, partial, or unknown | Keep incident unresolved; invoke approved reversal only through a new durable intent |
 | Cancellation races action | Cancellation recheck before intent and fenced terminal append | Cancel before effect where possible; reconcile an already-requested attempt |
 | Projection loses Layer 8 rows | Ledger/projection mismatch | Rebuild forced-RLS read models under maintenance authority |
+| Sandbox policy/spec/purpose/risk/approval changed while queued | Runtime digest or current approval recheck fails | Append no execution intent and require a newly reviewed exact scope |
+| Sandbox approval expires after lifecycle intent | New execution remains denied | Reconcile existing identity, terminate active work, and redrive cleanup under the current fence |
+| Output collection transport is transiently unavailable | Completed evidence could be lost by premature cleanup | Persist collection reconciliation, observe the stable workload, and retry within the approved bound before cleanup |
+| Sandbox worker fence is stale | PostgreSQL token/generation check fails before backend readiness/provision/start/result/cleanup | Make no backend call and append no stale outcome |
+| Crash before/after sandbox provision | Provisioning intent exists without a terminal observation | Observe stable backend name before create/retry; record reconciliation |
+| Ambiguous sandbox create/delete | Backend timeout/unavailable after request | Reconcile presence/spec digest or absence; never assume success or exactly once |
+| Mutable/privileged sandbox request | Canonical validation rejects image tag, shell/meta token, host path/socket/namespace, capability, or weakened isolation | Deny before durable work/backend access |
+| Sandbox timeout/OOM/output/file/resource limit | Runtime result or enforced deadline/limit event | Terminate, persist explicit terminal class, request cleanup, preserve bounded evidence |
+| Malicious archive or symlink/device | Pre-publication archive validator | Delete atomic staging, quarantine bounded metadata, publish no snapshot |
+| Artifact malware/secret scan | Scanner returns redact/quarantine | Store content-addressed redacted/quarantine reference; never treat output as instructions |
+| Sandbox cleanup repeatedly fails | Cleanup projection/attempt ceiling | Reconcile and redrive within bounds, then quarantine and escalate |
+| Sandbox projection loss | Ledger/projection version mismatch | Rebuild forced-RLS sandbox/artifact/claim/cleanup views; never edit authoritative state |
 
 Global event positions order commits but may contain numbers unused after a
 rolled-back PostgreSQL identity allocation. That is not corruption. A per-

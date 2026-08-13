@@ -182,24 +182,37 @@ durable intent; every effect is attributable to that intent; ambiguous effects
 are reconciled before retry; fresh evidence, not adapter acceptance, determines
 verification. Exactly-once is not claimed.
 
-General sandbox/code execution, arbitrary commands, capability credential
-brokering, broad autonomous remediation, production credentials, and live
-external verification remain deferred.
+Arbitrary commands, capability credential brokering, broad autonomous
+remediation, production credentials, and live external verification remain
+deferred. Layer 9 adds a separate approval-bound analysis sandbox; it does not
+expand remediation authority.
 
-## Layer 9 — Sandbox, memory, and retrieval
+## Layer 9 — Hardened ephemeral sandbox execution
 
-Add policy-isolated general code execution plus tenant-scoped short- and
-long-term memory, pgvector retrieval, provenance,
-classification, retention, export, and deletion workflows. Index runbooks and
-past incident evidence without turning retrieved text into authority. Implement
-three explicit tiers: bounded working state/context, authoritative episodic event
-history, and derived semantic incident knowledge. Add PII controls,
-relevance/recency policy, and citation-preserving context compaction.
+Add policy-isolated, purpose-bounded execution for code/config analysis, tests,
+patch preparation, and evidence production. Bind every request to the exact
+tenant, Layer 7 task, Layer 8 plan/action/approval, immutable OCI image,
+content-addressed inputs, canonical spec/policy digests, resource ceilings,
+expected outputs, and cleanup policy. Persist request and each external lifecycle
+intent before using a provider-neutral backend. Default network to none and
+require an exact reviewed exception plus an enforceable broker boundary.
 
-**Acceptance gate:** adversarial cross-tenant retrieval tests pass; every
-retrieved item has provenance; deletion and retention behavior is auditable.
-Compaction tests preserve material evidence, uncertainty, conflict, approval
-state, and budgets, and semantic retrieval cannot cross tenants.
+**Status:** implemented in `domain.sandbox`, `sandbox`, migration
+`0008_hardened_sandbox_execution.sql`, authenticated redacted APIs, deterministic
+fake CLI/evals, safe archive/artifact handling, and an official-client Kubernetes
+Job adapter. The adapter fails readiness closed unless deployment-supplied
+admission, runtime, PID, artifact, and default-deny network controls are verified.
+
+**Acceptance gate:** malicious argv/environment/path/archive/image/mount inputs
+deny; policy/spec/purpose/risk changes invalidate approval; stale fences cannot call a
+backend; ambiguous create/delete reconcile before retry; limits, timeout, OOM,
+cancellation, quarantine, cleanup redrive, RLS, quota claims, and projection
+rebuild have deterministic or environment-gated evidence. Exactly-once execution
+and cluster-level isolation are not claimed.
+
+Memory/RAG, pgvector retrieval, PII-aware compaction, retention/export/deletion,
+and semantic knowledge are explicitly deferred to a later layer rather than
+being coupled to sandbox authority.
 
 ## Layer 10 — Evaluation and observability
 

@@ -29,7 +29,11 @@ from aegis_agent_platform.domain import (
     JsonValue,
     PaginationCursor,
     QueryWindow,
+    SandboxApprovalBinding,
+    SandboxPurpose,
+    SandboxRisk,
     plan_from_payload,
+    sandbox_request_from_payload,
 )
 from aegis_agent_platform.event_store import EventStore
 from aegis_agent_platform.evidence import EvidenceQuery
@@ -56,6 +60,10 @@ from aegis_agent_platform.remediation import (
     ApprovalDeniedError,
     RemediationIdempotencyConflictError,
     RemediationOperations,
+)
+from aegis_agent_platform.sandbox import (
+    SandboxIdempotencyConflictError,
+    SandboxOperations,
 )
 from aegis_agent_platform.tenancy import (
     InMemoryTenantRepository,
@@ -99,6 +107,7 @@ class ControlPlaneApp:
         evidence_operations: EvidenceOperations | None = None,
         agent_operations: AgentOperations | None = None,
         remediation_operations: RemediationOperations | None = None,
+        sandbox_operations: SandboxOperations | None = None,
     ) -> None:
         self._authentication = authentication
         self._authorization = authorization or AuthorizationService()
@@ -112,6 +121,7 @@ class ControlPlaneApp:
         self._evidence_operations = evidence_operations
         self._agent_operations = agent_operations
         self._remediation_operations = remediation_operations
+        self._sandbox_operations = sandbox_operations
 
     async def __call__(
         self,
@@ -153,7 +163,12 @@ class ControlPlaneApp:
                 and post_segments[5] == "approvals"
                 and post_segments[7] in {"decisions", "revocations"}
             )
-            if not evidence_post and not remediation_post:
+            sandbox_post = (
+                len(post_segments) == 4
+                and post_segments[:2] == ["v1", "tenants"]
+                and post_segments[3] == "sandboxes"
+            )
+            if not evidence_post and not remediation_post and not sandbox_post:
                 await _respond(send, 405, {"error": {"code": "method_not_allowed"}})
                 return
         principal = await self._authenticate(scope, send)
@@ -199,6 +214,77 @@ class ControlPlaneApp:
                 receive,
                 principal,
                 tenant_id,
+            )
+            return
+        if method == "POST" and len(segments) == 4 and segments[3] == "sandboxes":
+            await self._request_sandbox(
+                send,
+                receive,
+                principal,
+                tenant_id,
+            )
+            return
+        if method == "GET" and len(segments) == 4 and segments[3] == "sandboxes":
+            try:
+                sandbox_cursor = _uuid_cursor_parameter(
+                    scope,
+                    "after_sandbox_id",
+                )
+            except ValueError:
+                await _respond(send, 400, {"error": {"code": "invalid_cursor"}})
+                return
+            await self._get_sandboxes(
+                send,
+                principal,
+                tenant_id,
+                after_sandbox_id=sandbox_cursor,
+            )
+            return
+        if (
+            method == "GET"
+            and len(segments) == 5
+            and segments[3:] == ["sandboxes", "cleanup"]
+        ):
+            try:
+                cleanup_cursor = _uuid_cursor_parameter(
+                    scope,
+                    "after_sandbox_id",
+                )
+            except ValueError:
+                await _respond(send, 400, {"error": {"code": "invalid_cursor"}})
+                return
+            await self._get_sandbox_cleanup(
+                send,
+                principal,
+                tenant_id,
+                after_sandbox_id=cleanup_cursor,
+            )
+            return
+        if (
+            method == "GET"
+            and len(segments) == 6
+            and segments[3] == "sandboxes"
+            and segments[5] == "artifacts"
+        ):
+            try:
+                artifact_cursor = _cursor_parameter(scope)
+            except ValueError:
+                await _respond(send, 400, {"error": {"code": "invalid_cursor"}})
+                return
+            await self._get_sandbox_artifacts(
+                send,
+                principal,
+                tenant_id,
+                segments[4],
+                after_position=artifact_cursor,
+            )
+            return
+        if method == "GET" and len(segments) == 5 and segments[3] == "sandboxes":
+            await self._get_sandbox(
+                send,
+                principal,
+                tenant_id,
+                segments[4],
             )
             return
         if method == "GET" and len(segments) == 4 and segments[3] == "remediations":
@@ -417,6 +503,234 @@ class ControlPlaneApp:
                 "query_id": str(result.query_id),
                 "accepted": result.created,
                 "status": "requested" if result.created else "duplicate",
+            },
+        )
+
+    async def _request_sandbox(
+        self,
+        send: Send,
+        receive: Receive,
+        principal: Principal,
+        tenant_id: TenantId,
+    ) -> None:
+        if self._sandbox_operations is None:
+            await _respond(
+                send,
+                503,
+                {"error": {"code": "sandbox_not_configured"}},
+            )
+            return
+        try:
+            body = await _request_json(receive)
+            request_value = body.get("request")
+            approval_value = body.get("approval")
+            if not isinstance(request_value, Mapping) or not isinstance(
+                approval_value,
+                Mapping,
+            ):
+                raise ValueError("request and approval are required")
+            sandbox_request = sandbox_request_from_payload(
+                cast(Mapping[str, JsonValue], request_value)
+            )
+            if sandbox_request.linkage.tenant_id != str(tenant_id):
+                raise PermissionError("sandbox_request_tenant_mismatch")
+            approval = _sandbox_approval_binding(
+                cast(Mapping[str, JsonValue], approval_value)
+            )
+            decision = await self._sandbox_operations.request(
+                principal,
+                TenantContext(tenant_id),
+                sandbox_request,
+                approval,
+            )
+        except SandboxIdempotencyConflictError:
+            await _respond(
+                send,
+                409,
+                {"error": {"code": "sandbox_idempotency_conflict"}},
+            )
+            return
+        except PermissionError as error:
+            await _respond(
+                send,
+                403,
+                {"error": {"code": "sandbox_denied", "reason": str(error)}},
+            )
+            return
+        except (KeyError, TypeError, ValueError):
+            await _respond(
+                send,
+                400,
+                {"error": {"code": "invalid_sandbox_request"}},
+            )
+            return
+        await _respond(
+            send,
+            202 if decision.result.created else 200,
+            {
+                "accepted": decision.result.created,
+                "policy_reasons": decision.policy.reasons,
+                "redacted": True,
+                "sandbox_id": str(decision.result.sandbox_id),
+                "spec_digest": decision.state.request.spec.digest,
+                "status": decision.state.status.value,
+            },
+        )
+
+    async def _get_sandboxes(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+        *,
+        after_sandbox_id: UUID | None,
+    ) -> None:
+        if self._sandbox_operations is None:
+            await _respond(
+                send,
+                503,
+                {"error": {"code": "sandbox_not_configured"}},
+            )
+            return
+        try:
+            rows, cursor = await self._sandbox_operations.page(
+                principal,
+                TenantContext(tenant_id),
+                at=datetime.now(UTC),
+                after_sandbox_id=after_sandbox_id,
+                limit=100,
+            )
+        except PermissionError:
+            await _respond(send, 403, {"error": {"code": "permission_denied"}})
+            return
+        await _respond(
+            send,
+            200,
+            {
+                "next_cursor": str(cursor) if cursor is not None else None,
+                "redacted": True,
+                "sandboxes": tuple(dict(row) for row in rows),
+            },
+        )
+
+    async def _get_sandbox(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+        sandbox_id: str,
+    ) -> None:
+        if self._sandbox_operations is None:
+            await _respond(
+                send,
+                503,
+                {"error": {"code": "sandbox_not_configured"}},
+            )
+            return
+        try:
+            result = await self._sandbox_operations.status(
+                principal,
+                TenantContext(tenant_id),
+                UUID(sandbox_id),
+                at=datetime.now(UTC),
+            )
+        except ValueError:
+            await _respond(
+                send,
+                400,
+                {"error": {"code": "invalid_sandbox_id"}},
+            )
+            return
+        except PermissionError:
+            await _respond(send, 403, {"error": {"code": "permission_denied"}})
+            return
+        if result is None:
+            await _respond(
+                send,
+                404,
+                {"error": {"code": "sandbox_not_found"}},
+            )
+            return
+        await _respond(send, 200, dict(result))
+
+    async def _get_sandbox_artifacts(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+        sandbox_id: str,
+        *,
+        after_position: int,
+    ) -> None:
+        if self._sandbox_operations is None:
+            await _respond(
+                send,
+                503,
+                {"error": {"code": "sandbox_not_configured"}},
+            )
+            return
+        try:
+            rows, cursor = await self._sandbox_operations.artifacts(
+                principal,
+                TenantContext(tenant_id),
+                UUID(sandbox_id),
+                at=datetime.now(UTC),
+                after_position=after_position,
+                limit=100,
+            )
+        except ValueError:
+            await _respond(
+                send,
+                400,
+                {"error": {"code": "invalid_sandbox_id"}},
+            )
+            return
+        except PermissionError:
+            await _respond(send, 403, {"error": {"code": "permission_denied"}})
+            return
+        await _respond(
+            send,
+            200,
+            {
+                "artifacts": tuple(dict(row) for row in rows),
+                "next_cursor": cursor,
+                "redacted": True,
+            },
+        )
+
+    async def _get_sandbox_cleanup(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+        *,
+        after_sandbox_id: UUID | None,
+    ) -> None:
+        if self._sandbox_operations is None:
+            await _respond(
+                send,
+                503,
+                {"error": {"code": "sandbox_not_configured"}},
+            )
+            return
+        try:
+            rows, cursor = await self._sandbox_operations.cleanup_queue(
+                principal,
+                TenantContext(tenant_id),
+                at=datetime.now(UTC),
+                after_sandbox_id=after_sandbox_id,
+                limit=100,
+            )
+        except PermissionError:
+            await _respond(send, 403, {"error": {"code": "permission_denied"}})
+            return
+        await _respond(
+            send,
+            200,
+            {
+                "cleanup": tuple(dict(row) for row in rows),
+                "next_cursor": str(cursor) if cursor is not None else None,
+                "redacted": True,
             },
         )
 
@@ -1254,6 +1568,28 @@ def _cursor_parameter(scope: AsgiMessage) -> int:
     return int(values[0])
 
 
+def _uuid_cursor_parameter(
+    scope: AsgiMessage,
+    name: str,
+) -> UUID | None:
+    raw_query = scope.get("query_string", b"")
+    if not isinstance(raw_query, bytes):
+        raise ValueError("query string must be bytes")
+    try:
+        parameters = parse_qs(
+            raw_query.decode("ascii"),
+            keep_blank_values=True,
+        )
+    except UnicodeDecodeError as error:
+        raise ValueError("query string must be ASCII") from error
+    values = parameters.get(name)
+    if values is None:
+        return None
+    if len(values) != 1 or not values[0]:
+        raise ValueError("UUID cursor must occur once")
+    return UUID(values[0])
+
+
 def _remediation_cursor_parameter(scope: AsgiMessage) -> UUID | None:
     raw_query = scope.get("query_string", b"")
     if not isinstance(raw_query, bytes):
@@ -1271,6 +1607,37 @@ def _remediation_cursor_parameter(scope: AsgiMessage) -> UUID | None:
     if len(values) != 1 or not values[0]:
         raise ValueError("remediation cursor must occur once")
     return UUID(values[0])
+
+
+def _sandbox_approval_binding(
+    value: Mapping[str, JsonValue],
+) -> SandboxApprovalBinding:
+    approver_values = value["approver_ids"]
+    if not isinstance(approver_values, (list, tuple)) or any(
+        not isinstance(item, str) for item in approver_values
+    ):
+        raise ValueError("sandbox approver identifiers are invalid")
+    schema_version = value.get("schema_version", 1)
+    if not isinstance(schema_version, int) or isinstance(schema_version, bool):
+        raise ValueError("sandbox approval schema is invalid")
+    risk = value["risk"]
+    if not isinstance(risk, int) or isinstance(risk, bool):
+        raise ValueError("sandbox approval risk is invalid")
+    return SandboxApprovalBinding(
+        approval_id=UUID(str(value["approval_id"])),
+        plan_id=UUID(str(value["plan_id"])),
+        action_id=UUID(str(value["action_id"])),
+        plan_digest=str(value["plan_digest"]),
+        action_digest=str(value["action_digest"]),
+        policy_digest=str(value["policy_digest"]),
+        spec_digest=str(value["spec_digest"]),
+        purpose=SandboxPurpose(str(value["purpose"])),
+        risk=SandboxRisk(risk),
+        approver_ids=tuple(cast(str, item) for item in approver_values),
+        issued_at=datetime.fromisoformat(str(value["issued_at"])),
+        expires_at=datetime.fromisoformat(str(value["expires_at"])),
+        schema_version=schema_version,
+    )
 
 
 def _evidence_cursor_parameter(

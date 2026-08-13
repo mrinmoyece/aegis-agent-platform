@@ -11,7 +11,9 @@ deterministic correlation. Layer 7 adds the fixed specialist DAG, durable typed
 reasoning artifacts, and deterministic critic/finalization gates. Layer 8 adds
 immutable remediation scope, deny-by-default policy, authenticated
 separation-of-duties approval, fenced controlled effects, reconciliation, and
-explicit postcondition verification.
+explicit postcondition verification. Layer 9 adds strict untrusted execution
+contracts, approval-bound sandbox policy, fenced provider lifecycle intents,
+safe artifacts, default-deny egress, and cleanup reconciliation.
 The system assumes model output, tool output, retrieved
 content, and tenant input can be hostile. Cloud, identity provider, model
 provider, and operator accounts can be compromised. Prompt instructions are
@@ -54,7 +56,12 @@ never trusted as controls.
 | Queue tenant spoofing | Work executes under another tenant | Tenant-bound envelope plus trusted context and RLS | Implemented; malformed/mismatched envelopes fail closed |
 | Poison queue payload | Parser exploit or supervisor crash | Size/schema bounds and quarantine | Safe decoder and supervisor containment implemented |
 | Event tampering | False state or missing audit evidence | Append controls, hashes/retention, restricted roles | Event/audit update-delete rejected by grants and live-tested triggers; retention and access review remain planned |
-| Sandbox escape | Host or network compromise | Strong isolation, deny-by-default egress, quotas | Planned Layer 9 boundary; Layer 8 permits no general code execution |
+| Sandbox escape | Host or network compromise | Non-root isolated runtime, immutable image, dropped capabilities, seccomp/AppArmor, no host namespaces/socket, deny-by-default network, quotas | Layer 9 contracts, manifest, validation, and fail-closed readiness implemented; production admission/runtime/network enforcement is unverified |
+| Shell/path injection | Prompt-generated command escapes intended operation | argv tokens only, canonical Unicode/path validation, no shell/eval, immutable workspace | Implemented and adversarially tested |
+| Malicious archive/artifact | Traversal, symlink/device escape, decompression bomb, malware or secret exfiltration | validate all members, atomic staging, size/count/ratio bounds, scanning/redaction/quarantine | Implemented with pluggable production scanner boundary |
+| Sandbox approval drift | Changed image/spec/policy/risk reuses stale authority | dedicated Layer 8 sandbox action digest contains exact spec, policy, purpose, and risk; current approval is rechecked | Implemented; PostgreSQL authority compares the reviewed action scope under RLS |
+| Ambiguous sandbox create/delete | Duplicate orphan or leaked workload | stable name, observe-before-create, intent event, reconciliation-before-retry, cleanup redrive | Implemented without exactly-once claim |
+| DNS/private-network bypass | Metadata, loopback, private/link-local, rebinding, or Unix socket access | network none default, exact canonical DNS allowlist, broker/admission enforcement | Contract denial implemented; production proxy and DNS-rebinding enforcement remain unverified |
 | Secret exfiltration | Credentials in prompts or telemetry | Brokered secrets, redaction, content policy | Secret-reference abstraction, redacted `SecretValue`, and audit-detail redaction implemented; only a local environment-variable provider exists, no vault-backed broker |
 | Provider data leakage | Sensitive content retained externally | Provider policy, classification, regional routing | Retention/residency policy and routing implemented; provider account verification and encrypted content artifacts remain planned |
 | Resource exhaustion | Runaway work or noisy tenant | Deadlines, queue backpressure, global and tenant quotas | Worker and provider concurrency, timeouts, request/token limits, circuits, and fenced model budgets implemented |
@@ -244,7 +251,24 @@ credential rotation, and operator escalation.
 
 At-least-once delivery means a provider effect may remain ambiguous after a
 network partition or crash. Stable idempotency and reconciliation reduce blind
-duplicates but cannot prove exactly once. General sandbox/code execution,
-arbitrary commands, memory/RAG, operator UI, MCP/A2A, broad autonomous
+duplicates but cannot prove exactly once. Unrestricted interactive sandboxing,
+arbitrary production commands, memory/RAG, operator UI, MCP/A2A, broad autonomous
 remediation, live external verification, production deployment, HA/DR, and
 multi-region operation remain absent.
+
+## Layer 9 residual risk
+
+The sandbox contracts, policy, validation, event lifecycle, fake backend,
+workspace/artifact handling, RLS schema, APIs, and Kubernetes workload generator
+are executable. The fake never runs untrusted code, and official-client tests do
+not establish cluster isolation.
+
+A production deployment must independently prove admission policy, isolated
+runtime class and node posture, PID/cgroup limits, default-deny network policy,
+egress proxy and DNS-rebinding defense, metadata/private-address blocking,
+trusted content/artifact drivers, scanner behavior, retention/cleanup, and
+operator quarantine response. Secrets and writable seeded inputs fail closed
+because their broker/copy-on-write boundaries are not implemented. Image
+signature/SBOM policy and remote attestation remain planned. Provider create/
+delete can still be ambiguous; stable naming and reconciliation do not make it
+exactly once.

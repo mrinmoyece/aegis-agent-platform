@@ -131,6 +131,30 @@ success.
    rejection as expected containment first; repair only through current durable
    work ownership.
 
+## Sandbox lifecycle, quarantine, or cleanup incident
+
+1. Stop new sandbox claims for the tenant and inspect bounded redacted status.
+   PostgreSQL events and the current lease are authoritative; Redis, pod phase,
+   logs, and projections are not.
+2. Confirm request, policy decision, exact approval binding, dispatch,
+   provisioning intent, start intent, terminal result, and cleanup intent order.
+   A backend call without its preceding durable intent is an integrity incident.
+3. For a provisioning gap, observe the stable backend name and spec digest before
+   create/retry. For a cleanup gap, observe absence/presence before delete/retry.
+   Record reconciliation and never invent success or claim exactly once.
+4. For timeout, OOM, cancellation, output limit, or backend failure, preserve the
+   explicit terminal event and drive cleanup under the current fence. Do not let
+   a stale worker terminate or append.
+5. For artifact quarantine, inspect only tenant, sandbox/artifact ID, digest,
+   media type, size, scanner reason, and provenance. Never open raw bytes on an
+   operator workstation or treat output as instructions.
+6. Redrive cleanup within the declared attempt bound. Exhaustion remains
+   quarantined and requires escalation; do not delete a provider object without
+   durable intent or edit cleanup projections.
+7. If readiness reports verified controls that are not deployed (admission,
+   runtime class, PID, default-deny networking, artifact driver), disable the
+   backend and treat it as a security incident.
+
 ## Integrity or RLS incident
 
 Stop writers if an aggregate sequence gap, event mutation, or cross-tenant row is
@@ -142,7 +166,7 @@ drills remain Layer 11 work.
 ## Rollback policy
 
 Migrations `0002_durable_ledger.sql` through
-`0007_remediation_approvals.sql` are forward-only.
+`0008_hardened_sandbox_execution.sql` are forward-only.
 They create authoritative
 facts and security roles; automated downgrade would destroy evidence or weaken
 isolation. Roll forward with an additive corrective migration. Disaster restore

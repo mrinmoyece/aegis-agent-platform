@@ -14,7 +14,7 @@ deployments, Kubernetes/runtime changes, and runbooks. This narrow story makes
 durability, evidence provenance, authorization, and safe effects testable end
 to end.
 
-> **Current status: Layer 8 — Approval-gated controlled remediation.** Layers 1–4 add
+> **Current status: Layer 9 — Hardened ephemeral sandbox execution.** Layers 1–4 add
 > tenant-bound work events, a crash-reconcilable PostgreSQL outbox publisher,
 > Redis Streams consumer groups, inbox deduplication, PostgreSQL renewable
 > leases and fencing, fair bounded supervision, quota enforcement, cancellation,
@@ -30,8 +30,13 @@ to end.
 > deny-by-default action policy, expiring separation-of-duties approvals, fenced
 > intent-before-effect execution, at-least-once reconciliation, explicit
 > postcondition verification, forced-RLS projections, and a bounded Kubernetes
-> rollout-restart adapter. External environments are unconfigured and unverified;
-> general sandbox/code execution, memory/RAG, operator UI, MCP/A2A, broad
+> rollout-restart adapter. Layer 9 adds immutable provider-neutral sandbox
+> contracts, strict command/path/archive validation, exact Layer 7/8 linkage,
+> current approval and policy rechecks, fenced intent-before-backend execution,
+> content-addressed artifacts, default-deny egress, bounded telemetry,
+> forced-RLS projections, deterministic fake scenarios, and a hardened suspended
+> Kubernetes Job adapter. External environments are unconfigured and unverified;
+> memory/RAG, operator UI, MCP/A2A, broad
 > autonomous remediation, production deployment, and tested HA remain planned. See
 > [Limitations and production gaps](docs/limitations.md) for the complete,
 > honest gap list.
@@ -62,9 +67,11 @@ to end.
    redaction, and deterministic correlation.
 7. **Specialist orchestration:** fixed roles, durable artifacts,
    deterministic DAG scheduling, critic gates, and safe abstention.
-8. **Controlled remediation (current):** exact approvals, fenced effects,
+8. **Controlled remediation:** exact approvals, fenced effects,
    reconciliation, and explicit verification.
-9. **Sandbox, memory, and retrieval:** isolated code plus tenant-safe context.
+9. **Hardened sandbox execution (current):** bounded analysis/test/patch
+   preparation with isolation, exact approval, artifacts, and cleanup. Memory and
+   retrieval remain separate future work.
 10. **Evaluation and observability:** production quality gates and signals.
 11. **Enterprise operations:** resilience, governance, and deployment evidence.
 
@@ -115,6 +122,7 @@ Run the deterministic checkout investigation with fake providers and connectors:
 ```bash
 python -m aegis_agent_platform.agents --scenario success
 python -m aegis_agent_platform.remediation --scenario approved-success
+python -m aegis_agent_platform.sandbox --scenario approved-analysis
 make evals
 ```
 

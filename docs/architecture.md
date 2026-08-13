@@ -13,8 +13,9 @@ adds durable read-only evidence acquisition, immutable ingestion, and
 deterministic correlation. Layer 7 adds governed specialist execution,
 ledger-only typed reasoning artifacts, deterministic fan-out/fan-in, and critic
 gates. Layer 8 adds exact-scope approval, controlled action execution,
-reconciliation, and explicit postcondition verification. General sandbox/code
-execution and memory arrive later.
+reconciliation, and explicit postcondition verification. Layer 9 adds a separate
+fenced, approval-bound ephemeral sandbox for bounded analysis and change
+preparation. Memory arrives later.
 
 ```mermaid
 flowchart LR
@@ -33,6 +34,8 @@ flowchart LR
   W --> RB[Runbook source]
   W --> Policy[Policy engine]
   Policy --> R[Approval-gated remediation]
+  Policy --> S[Hardened analysis sandbox]
+  S --> ES
   W --> M[Memory]
   CP -. telemetry .-> O[Observability]
   W -. telemetry .-> O
@@ -44,7 +47,9 @@ implemented. Connector acquisition and deterministic correlation are also
 implemented. Governed specialist reasoning and approval-gated controlled
 remediation are implemented with deterministic fake acceptance scenarios. The
 only official write adapter is a fixed-shape Kubernetes deployment
-rollout-restart; production connectivity is not configured or verified.
+rollout-restart. The sandbox has a deterministic fake backend and a hardened
+Kubernetes Job adapter, but production cluster controls and connectivity are not
+configured or verified.
 
 ## Model gateway data flow
 
@@ -378,8 +383,55 @@ updates the incident record with the action and result.
 Layers 6–7 supply evidence acquisition/correlation and the governed hypothesis
 workflow. Layer 8 supplies exact-scope approval, fake-only end-to-end execution,
 one bounded official Kubernetes rollout-restart adapter, reconciliation, and
-postcondition verification. It does not supply a sandbox, arbitrary code or
-commands, production credentials, operator UI, or incident-system writer.
+postcondition verification. Layer 9 may run only validated argv-token commands
+inside an approval-bound analysis sandbox; it is not an arbitrary interactive
+shell and cannot mutate production or bypass Layer 8.
+
+## Hardened sandbox execution
+
+The canonical request digest binds tenant, run, task, remediation
+plan/action/approval, purpose, risk, canonical spec digest, exact immutable image
+digest, content-addressed
+inputs, mounts, environment and secret references, egress, limits, expected
+outputs, retry, and cleanup. The pure fold rejects illegal lifecycle transitions
+and remains authoritative; projections, claims, quotas, artifacts, cleanup rows,
+and attestations are disposable views of the ledger.
+
+Layer 8 approves a dedicated `sandbox.change_preparation.v1` action whose
+immutable action digest contains the reviewed Layer 9 spec digest, policy digest,
+purpose, and risk. The PostgreSQL approval authority compares those projected fields
+under forced RLS; caller-supplied approver identifiers alone never establish
+sandbox authority.
+
+```mermaid
+sequenceDiagram
+  participant C as Control plane
+  participant L as PostgreSQL ledger
+  participant W as Fenced worker
+  participant B as Sandbox backend
+  C->>L: request + policy decision + exact approval binding
+  W->>L: dispatch + provisioning intent under current fence
+  W->>B: observe before create
+  W->>B: provision suspended workload
+  W->>L: provisioned + start intent
+  W->>B: start and collect bounded output/artifacts
+  W->>L: result + attestation + cleanup intent
+  W->>B: cleanup/reconcile
+  W->>L: cleanup completed/failed/quarantined
+```
+
+Network is none by default. Artifact and archive paths are canonicalized before
+atomic staging; links, devices, traversal, bombs, conflicts, and oversized
+content deny. Raw output is untrusted data and only redacted bounded metadata
+enters events/APIs. The Kubernetes adapter emits a suspended digest-pinned Job
+with non-root identity, read-only root filesystem, dropped capabilities, no
+privilege escalation, RuntimeDefault seccomp, disabled service-account token,
+no host namespaces, explicit resources/deadline, and ephemeral volumes. Admission
+policy, authoritative lease-fence validation, runtime isolation, PID enforcement,
+artifact collection, and default-deny networking are environment controls:
+readiness is false until separately verified. See
+[Hardened sandbox execution](sandbox-execution.md) and
+[ADR 0016](adr/0016-hardened-ephemeral-sandbox-boundary.md).
 
 ## Multi-agent investigation topology
 
