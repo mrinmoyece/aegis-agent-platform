@@ -28,10 +28,10 @@ automated negative-test suite: `tests/test_identity_security.py`,
    JWT, and verify it with `JwtVerifier` against a `StaticJwksProvider`.
 2. Mutate the token's audience, issuer, `exp`, or `kid` header one at a time
    and confirm the specific `AuthenticationErrorCode` returned for each case.
-3. Register a subject once under tenant A in `InMemoryIdentityDirectory`, then
-   call `AuthorizationService.decide` for tenant B and confirm
-   `cross_tenant_access_denied` is returned before any permission is considered.
-   Attempting to register the same `(issuer, subject)` twice now fails closed.
+3. Register the same subject under two different tenants in
+   `InMemoryIdentityDirectory`, then call `AuthorizationService.decide` with
+   the wrong `tenant_id` and confirm `cross_tenant_access_denied` is returned
+   before any permission is even considered.
 4. Give a `RoleBinding` a past `expires_at` or a `revoked_at`, call
    `is_active` with a time after it, and confirm the authorization decision
    changes from allow to deny.

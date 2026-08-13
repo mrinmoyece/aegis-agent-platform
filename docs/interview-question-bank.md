@@ -94,8 +94,8 @@ runs in code the permission table cannot influence.
 
 **Answer outline:** correctness of signature/issuer/audience/expiry
 verification is a property of the verifier and the key material, not of the
-network. An ephemeral test keypair with stable claim shape and identifiers makes
-tests reproducible, offline, and fast, and lets negative cases
+network. A deterministic fixture (a fixed RSA keypair, fixed `kid`, fixed
+claims) makes tests reproducible, offline, and fast, and lets negative cases
 (wrong `kid`, wrong issuer, expired token) be constructed exactly rather than
 raced against a live IdP's clock and rotation schedule. `RemoteJwksProvider`
 exists specifically so the *same* `JwtVerifier` code path also works against a
@@ -116,7 +116,7 @@ tenant/role source of truth. The directory is the single place authority is
 looked up, so revoking a user or changing tenant membership takes effect
 immediately without waiting for token expiry.
 
-### Why is `PolicyEvaluator.evaluate` a pure function over a tenant-bound, caller-supplied `QuotaUsage` instead of querying live usage itself?
+### Why is `PolicyEvaluator.evaluate` a pure function over a caller-supplied `QuotaUsage` instead of querying live usage itself?
 
 **Answer outline:** keeping the evaluator pure — no I/O, no wall clock, no
 hidden lookups — makes every policy decision a deterministic, unit-testable

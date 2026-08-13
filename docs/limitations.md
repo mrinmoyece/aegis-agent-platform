@@ -49,7 +49,7 @@
   `tests/test_migrations.py`, but no adapter connects the in-memory ports to a
   running Postgres yet — state does not survive a process restart.
 - `PolicyEvaluator` deterministically evaluates quota *limits* against a
-  tenant-bound, caller-supplied `QuotaUsage` snapshot; there is no authoritative usage
+  caller-supplied `QuotaUsage` snapshot; there is no authoritative usage
   accounting yet, since that requires the durable runtime planned for Layers
   3–4.
 - Secrets are handled only by `EnvironmentSecretProvider`, a local-development

@@ -168,7 +168,7 @@ philosophy used for incident specialists elsewhere in the platform.
 
 `policy.PolicyEvaluator` is a pure function: given a tenant's `TenantPolicy`
 (allowlists, risk ceiling, approval threshold, quotas) and a proposed
-`PolicyRequest`, plus a tenant-bound `QuotaUsage` snapshot, it returns a
+`PolicyRequest`, plus a caller-supplied `QuotaUsage` snapshot, it returns a
 deterministic `PolicyDecision`:
 
 ```python
@@ -199,12 +199,7 @@ request = PolicyRequest(
     environment="prod", risk=RiskLevel.HIGH,
     estimated_tokens=200, estimated_cost_usd=Decimal("1"),
 )
-usage = QuotaUsage(
-    tenant_id=tenant,
-    tenant_tokens_used=0,
-    tenant_cost_usd=Decimal("0"),
-    active_runs=0,
-)
+usage = QuotaUsage(tenant_tokens_used=0, tenant_cost_usd=Decimal("0"), active_runs=0)
 
 decision = PolicyEvaluator().evaluate(policy, request, usage)
 print(decision.decision, decision.reasons, decision.required_approver_roles)
@@ -266,12 +261,9 @@ from aegis_agent_platform.secrets_boundary import (
 from aegis_agent_platform.identity import TenantId
 from aegis_agent_platform.tenancy import TenantContext
 
+provider = EnvironmentSecretProvider({"AEGIS_SECRET_DYNATRACE_TOKEN": "local-only-example"})
 tenant_id = TenantId("tenant-alpha")
 context = TenantContext(tenant_id)
-provider = EnvironmentSecretProvider(
-    tenant_id,
-    {"AEGIS_SECRET_DYNATRACE_TOKEN": "local-only-example"},
-)
 reference = SecretReference(
     tenant_id=tenant_id,
     provider="env",
@@ -286,18 +278,14 @@ print(value.reveal())     # b'local-only-example'
 `EnvironmentSecretProvider` deliberately requires the `AEGIS_SECRET_` prefix so
 a typo cannot accidentally resolve an unrelated environment variable. This is a
 local-development provider; every resolution also requires a matching trusted
-`TenantContext`, and each provider instance is bound to one tenant so the same
-environment-variable name cannot be resolved for a different tenant. It is not
-a secret broker — there is no rotation,
+`TenantContext`. It is not a secret broker — there is no rotation,
 versioning, or centralized access audit yet; see
 [Limitations](limitations.md).
 
-## 8. The authenticated inspection slice behind one API
+## 8. The whole slice behind one API
 
-`control_plane.api.ControlPlaneApp` wires authentication, tenant authorization,
-tenant/policy repositories, and audit behind a small read-only route set.
-`PolicyEvaluator` and secret providers remain standalone boundaries and are not
-invoked by these routes. `/healthz` and `/health/live` (liveness) and `/readyz` and
+`control_plane.api.ControlPlaneApp` wires every piece above behind a small
+route set. `/healthz` and `/health/live` (liveness) and `/readyz` and
 `/health/ready` (configuration readiness) stay unauthenticated, matching Layer
 1. Everything under `/v1/` requires a valid bearer token:
 
@@ -307,15 +295,11 @@ invoked by these routes. `/healthz` and `/health/live` (liveness) and `/readyz` 
 | `/v1/tenants/{tenant_id}` | `tenant:read` in that tenant | the tenant record |
 | `/v1/tenants/{tenant_id}/policy` | `policy:read` in that tenant | the tenant's governance policy and quotas |
 
-Once authentication is configured, every authentication outcome is recorded as
-an audit event. Tenant and policy routes also record their authorization
-decision with the same request correlation ID; `/v1/me` requires authentication
-but no additional permission decision. Construct a `ControlPlaneApp` with an `AuthenticationService`,
-populated tenant and policy repositories, and an audit store, as
-`tests/test_api.py::secured_app` does, to see this end to end. The exported
-default app intentionally has no identity adapter and returns
-`503 authentication_not_configured` for protected routes rather than providing
-a fake success path.
+Every authentication attempt and every authorization decision is recorded as
+an audit event before a response is returned — a 401 or 403 is not a silent
+failure. Construct a `ControlPlaneApp` with the pieces above (or its
+in-memory defaults) and drive it directly, the same way
+`tests/test_api.py` drives the Layer 1 health surface, to see this end to end.
 
 ## What this tutorial does not prove
 
