@@ -32,6 +32,7 @@ REQUIRED_DOCUMENTS = {
     ROOT / "docs" / "model-gateway.md",
     ROOT / "docs" / "evidence-connectors.md",
     ROOT / "docs" / "adr" / "0013-durable-evidence-ingestion.md",
+    ROOT / "docs" / "adr" / "0014-governed-durable-specialist-dag.md",
     ROOT / "docs" / "adr" / "0012-fenced-model-budgeting.md",
     ROOT / "docs" / "adr" / "0011-shared-redis-stream.md",
     ROOT / "docs" / "adr" / "0009-tenant-governance-audit-and-secrets.md",
@@ -80,7 +81,7 @@ def main() -> None:
         raise SystemExit("broken documentation links:\n" + "\n".join(failures))
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    if "Current status: Layer 6" not in readme:
+    if "Current status: Layer 7" not in readme:
         raise SystemExit("README must state the current implementation layer")
 
 

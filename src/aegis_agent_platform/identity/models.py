@@ -97,6 +97,7 @@ class Permission(StrEnum):
     MODEL_DIAGNOSTIC = "model:diagnostic"
     EVIDENCE_READ = "evidence:read"
     EVIDENCE_QUERY = "evidence:query"
+    INVESTIGATION_READ = "investigation:read"
 
 
 @dataclass(frozen=True, slots=True)

@@ -10,7 +10,7 @@ from enum import StrEnum
 from typing import TypedDict
 from uuid import UUID
 
-from aegis_agent_platform.domain import JsonValue, require_aware_datetime
+from aegis_agent_platform.domain import JsonValue
 
 MAX_ARTIFACT_SUMMARY_BYTES = 4_096
 MAX_ARTIFACT_TEXT_BYTES = 16_384
@@ -26,7 +26,7 @@ class AgentRole(StrEnum):
     RUNTIME_INVESTIGATOR = "runtime_investigator"
     KNOWLEDGE_INVESTIGATOR = "knowledge_investigator"
     CRITIC_REVIEWER = "critic_reviewer"
-    HYPOTHESIS_REVIEWER = "hypothesis_reviewer"
+    HYPOTHESIS_REVIEWER = "critic_reviewer"
     REMEDIATION_PLANNER = "remediation_planner"
     VERIFICATION_AGENT = "verification_agent"
 
@@ -542,12 +542,12 @@ def artifact_from_payload(value: Mapping[str, JsonValue]) -> DurableAgentArtifac
             **metadata,
             claim=str(body["claim"]),
             counterclaim=str(body["counterclaim"]),
-            unresolved=_json_bool(body["unresolved"], "unresolved"),
+            unresolved=bool(body["unresolved"]),
         )
     if kind is ArtifactKind.CRITIQUE:
         return CritiqueArtifact(
             **metadata,
-            accepted=_json_bool(body["accepted"], "accepted"),
+            accepted=bool(body["accepted"]),
             unsupported_claims=_strings(body["unsupported_claims"]),
             evidence_gaps=_strings(body["evidence_gaps"]),
             unresolved_contradiction_ids=tuple(
@@ -578,7 +578,7 @@ def artifact_from_payload(value: Mapping[str, JsonValue]) -> DurableAgentArtifac
             risk=str(body["risk"]),
             rollback=str(body["rollback"]),
             hypothesis_id=UUID(str(body["hypothesis_id"])),
-            proposal_only=_json_bool(body["proposal_only"], "proposal_only"),
+            proposal_only=bool(body["proposal_only"]),
         )
     if kind is ArtifactKind.VERIFICATION_PLAN:
         return VerificationPlanArtifact(
@@ -618,9 +618,10 @@ class ArtifactMetadata:
     created_at: datetime
 
     def __post_init__(self) -> None:
-        if not self.tenant_id.strip() or not self.incident_id.strip():
+        if not self.tenant_id or not self.incident_id:
             raise ValueError("tenant_id and incident_id are required")
-        require_aware_datetime(self.created_at, field_name="created_at")
+        if self.created_at.tzinfo is None:
+            raise ValueError("created_at must be timezone-aware")
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -654,13 +655,6 @@ class VerificationArtifact(ArtifactMetadata):
     recovered: bool
     evidence_ids: tuple[UUID, ...]
     observation_window_seconds: int
-
-    def __post_init__(self) -> None:
-        ArtifactMetadata.__post_init__(self)
-        if not self.evidence_ids:
-            raise ValueError("verification requires evidence citations")
-        if self.observation_window_seconds <= 0:
-            raise ValueError("observation window must be positive")
 
 
 type AgentArtifact = (
@@ -718,7 +712,7 @@ def _metadata_values(value: Mapping[str, JsonValue]) -> _MetadataValues:
         ),
         "citations": tuple(citations),
         "schema_version": int(str(value["schema_version"])),
-        "redacted": _json_bool(value["redacted"], "redacted"),
+        "redacted": bool(value["redacted"]),
     }
 
 
@@ -749,12 +743,6 @@ def _strings(value: JsonValue) -> tuple[str, ...]:
 
 def _optional_uuid(value: JsonValue) -> UUID | None:
     return UUID(str(value)) if value is not None else None
-
-
-def _json_bool(value: JsonValue, field: str) -> bool:
-    if not isinstance(value, bool):
-        raise ValueError(f"{field} must be a JSON boolean")
-    return value
 
 
 def _validate_supported_claim(

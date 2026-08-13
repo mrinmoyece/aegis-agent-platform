@@ -82,6 +82,18 @@ class DomainEventType(StrEnum):
     CORRELATION_COMPLETED = "evidence.correlation_completed.v1"
     CORRELATION_FAILED = "evidence.correlation_failed.v1"
     SOURCE_CURSOR_ADVANCED = "evidence.source_cursor_advanced.v1"
+    INVESTIGATION_PLAN_RECORDED = "investigation.plan_recorded.v1"
+    INVESTIGATION_CANCEL_REQUESTED = "investigation.cancel_requested.v1"
+    INVESTIGATION_BUDGET_EXHAUSTED = "investigation.budget_exhausted.v1"
+    SPECIALIST_TASK_DISPATCH_REQUESTED = "specialist.dispatch_requested.v1"
+    SPECIALIST_TASK_STARTED = "specialist.started.v1"
+    SPECIALIST_TASK_SUCCEEDED = "specialist.succeeded.v1"
+    SPECIALIST_TASK_FAILED = "specialist.failed.v1"
+    SPECIALIST_TASK_TIMED_OUT = "specialist.timed_out.v1"
+    SPECIALIST_TASK_CANCELLED = "specialist.cancelled.v1"
+    REASONING_ARTIFACT_RECORDED = "reasoning.artifact_recorded.v1"
+    COORDINATOR_DECISION_RECORDED = "coordinator.decision_recorded.v1"
+    INVESTIGATION_FINALIZED = "investigation.finalized.v1"
 
 
 @dataclass(frozen=True, slots=True)

@@ -43,6 +43,10 @@ def main() -> None:
         "create table source_cursors",
         "create table evidence_bundle_projection",
         "evidence records are append-only",
+        "create table agent_run_projection",
+        "create table agent_task_projection",
+        "create table reasoning_artifact_projection",
+        "reasoning_artifact_projection_tenant_isolation",
     )
     missing = [control for control in required if control not in schema]
     if missing:

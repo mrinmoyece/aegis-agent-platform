@@ -10,6 +10,7 @@ MIGRATION = ROOT / "migrations" / "0001_identity_governance.sql"
 LEDGER_MIGRATION = ROOT / "migrations" / "0002_durable_ledger.sql"
 GATEWAY_MIGRATION = ROOT / "migrations" / "0004_model_gateway.sql"
 EVIDENCE_MIGRATION = ROOT / "migrations" / "0005_evidence_connectors.sql"
+AGENT_MIGRATION = ROOT / "migrations" / "0006_specialist_orchestration.sql"
 
 
 def test_identity_governance_schema_has_tenant_constraints_and_indexes() -> None:
@@ -132,3 +133,26 @@ def test_evidence_schema_is_tenant_scoped_bounded_and_append_only() -> None:
     assert "evidence records are append-only" in schema
     assert "lease_generation bigint not null" in schema
     assert "revoke update, delete, truncate on evidence_records" in schema
+
+
+def test_specialist_schema_is_tenant_scoped_fenced_and_rebuildable() -> None:
+    schema = AGENT_MIGRATION.read_text(encoding="utf-8").lower()
+    for table in (
+        "agent_run_projection",
+        "agent_task_projection",
+        "reasoning_artifact_projection",
+    ):
+        assert f"alter table {table} force row level security" in schema
+        assert f"{table}_tenant_isolation" in schema
+    assert "grant select, insert, update, delete on agent_run_projection," in schema
+    maintenance_grant = (
+        "agent_task_projection, reasoning_artifact_projection to aegis_maintenance"
+    )
+    assert maintenance_grant in schema
+    assert "aggregate_version bigint not null" in schema
+    assert "lease_generation bigint" in schema
+    assert "octet_length(artifact_content::text) <= 65536" in schema
+    assert "octet_length(summary) <= 4096" in schema
+    assert "unique (tenant_id, run_id, ledger_sequence)" in schema
+    assert "revoke delete, truncate on agent_run_projection" in schema
+    assert "revoke update on reasoning_artifact_projection" in schema
