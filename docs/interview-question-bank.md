@@ -243,9 +243,52 @@ and persist evidence. Tool success is not service recovery.
 ### What should be deterministic in evaluation?
 
 **Answer outline:** schemas, authorization, tenant isolation, citations,
-budgets, transition legality, approval binding, and effect guards. Use
-statistical or model grading only for semantic quality, calibrated against human
-labels and never as the sole security assertion.
+budgets, transition legality, approval binding, effect guards, and named crash
+cuts. Fix fixtures, clocks, IDs, and seeds. Use statistical or model grading only
+for semantic quality, calibrated against human labels and never as the sole
+security assertion.
+
+### Why are evaluation results not production truth?
+
+**Answer outline:** a result describes one versioned dataset, implementation,
+policy, fixture, grader, and execution class. It can support a release decision
+but cannot authorize an action, reconstruct run state, or prove a live provider
+behaved identically. The event ledger remains runtime truth; authorization,
+budgets, sandboxing, approval, intent, reconciliation, and safety limits remain
+code-enforced even after a perfect score.
+
+### Why split hermetic CI, integration, live/statistical, and production evidence?
+
+**Answer outline:** they answer different questions. Required CI must reproduce
+contract and safety behavior without secrets, network, judge, or effects.
+Integration checks disposable infrastructure. Live/statistical runs qualify
+dedicated non-production providers with repeated samples and uncertainty.
+Production evidence detects drift through bounded redacted observations but is
+not a baseline or replay source by itself.
+
+### How can a baseline or waiver hide a regression?
+
+**Answer outline:** automatically accepting current output turns every regression
+into the new normal; a broad or permanent waiver removes the gate. Baselines are
+reviewed immutable versions. A waiver binds exact case/gate, candidate and
+baseline digests, release scope, reason, compensating control, owner, reviewer,
+and expiry. Mismatch or expiry fails closed, and runtime safety never changes.
+
+### When is a model-as-judge acceptable?
+
+**Answer outline:** only for optional semantic evidence behind an isolated
+provider-neutral adapter with minimized redacted inputs, versioned rubric/model/
+prompt, repeated samples, uncertainty, and calibration against reviewed labels.
+It is disabled in required CI, has no tools or production authority, and cannot
+be the sole safety, tenancy, authorization, approval, or effect gate.
+
+### What happens when an evaluation dataset is tampered with or deleted?
+
+**Answer outline:** provenance/schema/digest failure quarantines the exact
+version and blocks promotion; tamper becomes a release/security incident rather
+than an in-place repair. Deletion checks legal hold, records approval and a
+tombstone, purges source and derived judge/report data, and marks historical
+evidence unavailable while retaining only allowed non-sensitive audit metadata.
 
 ## Scale and operations
 

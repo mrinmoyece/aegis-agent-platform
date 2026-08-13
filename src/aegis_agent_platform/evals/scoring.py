@@ -95,7 +95,7 @@ class ScoringObservation:
 
 
 def default_scorers() -> tuple[ScorerDefinition, ...]:
-    """Return the fixed deterministic scorer registry."""
+    """Return the fixed Layer 11 deterministic scorer registry."""
     rate_edge = "zero denominator is not_applicable and has a null value"
     return (
         _definition(

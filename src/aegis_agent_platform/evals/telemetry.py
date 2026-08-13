@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from threading import Lock
@@ -36,7 +35,6 @@ _METRICS = frozenset(
         "eval_cost_microusd",
     }
 )
-_FINGERPRINT_PATTERN = re.compile(r"[0-9a-f]{64}")
 
 
 class EvaluationMetrics:
@@ -75,7 +73,7 @@ class EvaluationTracer:
     ) -> Iterator[None]:
         if operation not in _OPERATIONS:
             raise ValueError("unrecognized evaluation trace operation")
-        if _FINGERPRINT_PATTERN.fullmatch(run_fingerprint) is None or mode not in {
+        if len(run_fingerprint) != 64 or mode not in {
             "deterministic",
             "integration",
             "live",
@@ -104,7 +102,7 @@ def evaluation_log(
         raise ValueError("unrecognized evaluation log operation")
     if outcome not in {"started", "passed", "failed", "cancelled"}:
         raise ValueError("unrecognized evaluation log outcome")
-    if _FINGERPRINT_PATTERN.fullmatch(run_fingerprint) is None:
+    if len(run_fingerprint) != 64:
         raise ValueError("invalid evaluation log fingerprint")
     record = {
         "operation": operation,

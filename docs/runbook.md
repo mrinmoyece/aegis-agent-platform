@@ -176,13 +176,46 @@ success.
    index/cache, erase the referenced blob, and record completion. Immutable
    identifier/digest events and unexpired backups are not claimed erased.
 
+## Evaluation gate, dataset, or report incident
+
+The Layer 11 CLI is `python -m aegis_agent_platform.evals`; `make evals` runs
+the required fake-only gates. Use `check-fixtures`, `run`, `replay`, and
+`compare`, or focused `make eval-fixtures`, `eval-deterministic`, and
+`eval-baseline` targets for triage. `update-baseline` and `write-manifest`
+require explicit `--yes`;
+baseline updates also require `--review-reference`.
+
+1. Stop release promotion, identify the dataset/case/gate, baseline/candidate
+   digests, execution class, contract/grader versions, and bounded error code.
+   Evaluator output is release evidence, not runtime or production truth.
+2. If required CI attempted network, secret access, a model judge, or an external
+   effect, fail the run and investigate the hermetic boundary. Never add live
+   credentials to make a required gate pass.
+3. On provenance/schema/digest mismatch or suspected leakage/poisoning,
+   quarantine the dataset version. Preserve bounded hashes and review metadata;
+   do not edit the manifest or historical result.
+4. Replay only with recorded fixed inputs and named fault cut points. If replay
+   differs, preserve both redacted results and investigate nondeterminism before
+   changing a baseline.
+5. A baseline change requires a complete passing run and a review reference. Hard
+   safety failures are non-waivable. A non-safety waiver must match exact
+   case/metric scope, owner, reason, and expiry; missing, broadened, or expired
+   waivers block comparison.
+6. For sensitive report output, quarantine/delete derived copies, rotate exposed
+   material when applicable, and retain only approved identifiers/digests. Never
+   paste raw prompts, evidence, credentials, tenant data, or judge transcripts
+   into a ticket.
+7. For dataset deletion, check legal hold, record approval/tombstone, purge
+   source and derived evaluator/judge/report data, and mark historical evidence
+   unavailable rather than rewriting it.
+
 ## Integrity or RLS incident
 
 Stop writers if an aggregate sequence gap, event mutation, or cross-tenant row is
 observed. Preserve database logs and transaction IDs, verify the application is
 not using a bypass-RLS role, and escalate as a security incident. Restore from a
 tested backup only after identifying the bad boundary; production backup/restore
-drills remain Layer 11 work.
+drills remain Layer 12 work.
 
 ## Rollback policy
 

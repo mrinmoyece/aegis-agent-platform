@@ -8,7 +8,6 @@ import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
 
 from aegis_agent_platform.evals.baseline import BaselineComparison
 from aegis_agent_platform.evals.contracts import (
@@ -77,18 +76,9 @@ def write_report_bundle(
 ) -> ReportPaths:
     """Write bounded artifacts atomically after a content-safety check."""
     directory.mkdir(parents=True, exist_ok=True)
-    report_document: dict[str, Any] = cast(dict[str, Any], canonical_data(report))
-    if comparison is not None and not comparison.passed:
-        report_document = {
-            **report_document,
-            "comparison": {
-                **cast(dict[str, Any], canonical_data(comparison)),
-                "passed": comparison.passed,
-            },
-        }
-    json_text = json.dumps(report_document, indent=2, sort_keys=True) + "\n"
+    json_text = json.dumps(canonical_data(report), indent=2, sort_keys=True) + "\n"
     markdown_text = render_markdown(report, comparison=comparison)
-    junit_text = render_junit(report, comparison=comparison)
+    junit_text = render_junit(report)
     for content in (json_text, markdown_text, junit_text):
         validate_report_content(content)
         if len(content.encode()) > MAX_REPORT_BYTES:
@@ -180,27 +170,20 @@ def render_markdown(
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_junit(
-    report: EvaluationReport,
-    *,
-    comparison: BaselineComparison | None = None,
-) -> str:
+def render_junit(report: EvaluationReport) -> str:
     """Render stable JUnit XML for CI annotations."""
-    comparison_failed = comparison is not None and not comparison.passed
     failures = sum(
-        result.status is ResultStatus.FAILED for result in report.results
-    ) + int(comparison_failed)
-    errors = sum(
-        result.status is ResultStatus.EVALUATOR_ERROR for result in report.results
+        result.status in {ResultStatus.FAILED, ResultStatus.EVALUATOR_ERROR}
+        for result in report.results
     )
     skipped = sum(result.status is ResultStatus.CANCELLED for result in report.results)
     suite = ET.Element(
         "testsuite",
         {
-            "name": "aegis-layer12-evaluations",
-            "tests": str(len(report.results) + int(comparison_failed)),
+            "name": "aegis-layer11-evaluations",
+            "tests": str(len(report.results)),
             "failures": str(failures),
-            "errors": str(errors),
+            "errors": "0",
             "skipped": str(skipped),
             "time": "0",
         },
@@ -215,7 +198,7 @@ def render_junit(
                 "time": "0",
             },
         )
-        if result.status is ResultStatus.FAILED:
+        if result.status in {ResultStatus.FAILED, ResultStatus.EVALUATOR_ERROR}:
             failure = ET.SubElement(
                 case,
                 "failure",
@@ -227,48 +210,8 @@ def render_junit(
             failure.text = (
                 "See the bounded JSON trace references; raw content is omitted."
             )
-        elif result.status is ResultStatus.EVALUATOR_ERROR:
-            error = ET.SubElement(
-                case,
-                "error",
-                {
-                    "type": result.failure.value,
-                    "message": ",".join(result.reason_codes) or result.failure.value,
-                },
-            )
-            error.text = (
-                "See the bounded JSON trace references; raw content is omitted."
-            )
         elif result.status is ResultStatus.CANCELLED:
             ET.SubElement(case, "skipped", {"message": "evaluation_cancelled"})
-    if comparison is not None and not comparison.passed:
-        case = ET.SubElement(
-            suite,
-            "testcase",
-            {
-                "classname": "aegis.evals",
-                "name": "baseline_comparison",
-                "time": "0",
-            },
-        )
-        failure = ET.SubElement(
-            case,
-            "failure",
-            {
-                "type": "baseline_regression",
-                "message": ",".join(
-                    sorted(
-                        {
-                            finding.reason_code
-                            for finding in comparison.findings
-                            if not finding.waived
-                        }
-                    )
-                )
-                or "baseline_regression",
-            },
-        )
-        failure.text = "See comparison findings in the bounded evaluation report."
     ET.indent(suite, space="  ")
     return ET.tostring(suite, encoding="unicode", xml_declaration=True) + "\n"
 

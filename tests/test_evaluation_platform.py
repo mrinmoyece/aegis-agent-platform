@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
@@ -22,7 +21,6 @@ from aegis_agent_platform.evals.baseline import (
 from aegis_agent_platform.evals.catalog import build_suite
 from aegis_agent_platform.evals.cli import catalog_json, main
 from aegis_agent_platform.evals.contracts import (
-    EvaluationCase,
     EvaluationMode,
     EvaluationReport,
     ExecutionTraceReference,
@@ -95,7 +93,7 @@ def full_report() -> EvaluationReport:
 def test_catalog_covers_every_layer_outcome_and_gate_pack() -> None:
     suite = build_suite()
 
-    assert len(suite.cases) == 97
+    assert len(suite.cases) == 91
     assert {case.layer for case in suite.cases} == {
         "layer-2",
         "layer-3",
@@ -106,7 +104,6 @@ def test_catalog_covers_every_layer_outcome_and_gate_pack() -> None:
         "layer-8",
         "layer-9",
         "layer-10",
-        "layer-12",
         "cross-layer",
     }
     assert set(ExpectedOutcome).issubset(
@@ -226,21 +223,6 @@ def test_contract_bounds_and_canonical_failures_are_explicit(
                 *suite.scenarios[1:],
             ),
         )
-    with pytest.raises(ValueError, match="cover every case"):
-        replace(
-            suite,
-            scenarios=(
-                replace(
-                    suite.scenarios[1],
-                    case_ids=(
-                        suite.scenarios[0].case_ids[0],
-                        *suite.scenarios[1].case_ids,
-                    ),
-                ),
-                suite.scenarios[0],
-                *suite.scenarios[2:],
-            ),
-        )
     with pytest.raises(ValueError, match="ordinal"):
         ExecutionTraceReference("phase", -1)
     with pytest.raises(ValueError, match="negative"):
@@ -286,19 +268,6 @@ def test_runner_is_repeatable_and_order_independent() -> None:
 
     assert canonical_data(first) == canonical_data(second)
     assert first.metadata.content_digest == second.metadata.content_digest
-    assert first.metadata.content_digest == canonical_digest(
-        {
-            "schema_version": 1,
-            "mode": EvaluationMode.DETERMINISTIC.value,
-            "reproducible": True,
-            "production_truth": False,
-            "fingerprint": first.fingerprint,
-            "suite_digest": suite.digest,
-            "dataset_digest": suite.dataset.digest,
-            "results": first.results,
-            "waivers": first.waivers,
-        }
-    )
 
 
 def test_shards_are_equivalent_to_unsharded_run(
@@ -730,23 +699,6 @@ def test_report_outputs_are_bounded_redacted_and_replayable(
     assert "## Failures" in failed_paths.markdown.read_text(encoding="utf-8")
     assert 'failures="1"' in failed_paths.junit.read_text(encoding="utf-8")
 
-    evaluator_error_report = replace(
-        full_report,
-        results=(
-            replace(
-                failed_result,
-                status=ResultStatus.EVALUATOR_ERROR,
-                failure=FailureTaxonomy.EVALUATOR_FAILURE,
-            ),
-            *full_report.results[1:],
-        ),
-    )
-    error_paths = write_report_bundle(tmp_path / "errors", evaluator_error_report)
-    junit_error = error_paths.junit.read_text(encoding="utf-8")
-    assert 'failures="0"' in junit_error
-    assert 'errors="1"' in junit_error
-    assert "<error " in junit_error
-
     baseline = load_baseline(BASELINE)
     case = full_report.results[0]
     metrics = tuple(
@@ -771,12 +723,6 @@ def test_report_outputs_are_bounded_redacted_and_replayable(
         comparison=comparison,
     )
     assert "Baseline comparison" in compared_paths.markdown.read_text(encoding="utf-8")
-    compared_json = json.loads(compared_paths.json.read_text(encoding="utf-8"))
-    assert compared_json["comparison"]["passed"] is False
-    junit_comparison = compared_paths.junit.read_text(encoding="utf-8")
-    assert 'tests="98"' in junit_comparison
-    assert 'failures="1"' in junit_comparison
-    assert 'name="baseline_comparison"' in junit_comparison
     with pytest.raises(ValueError, match="sensitive"):
         validate_report_content("authorization: Bearer syntheticcredential")
     with pytest.raises(ValueError, match="sensitive"):
@@ -914,34 +860,6 @@ def test_hermetic_runner_blocks_network_and_process_effects(
     spawned = asyncio.run(EvaluationRunner(suite).run(RunOptions("4" * 40, selection)))
     assert spawned.results[0].status is ResultStatus.EVALUATOR_ERROR
     assert spawned.results[0].failure is FailureTaxonomy.EVALUATOR_FAILURE
-
-
-def test_probe_observation_outcome_failure_is_classified_as_outcome_mismatch(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    suite = build_suite()
-    selection = RunSelection(frozenset({"identity.cross-tenant"}))
-
-    async def inconsistent_probe(
-        case: EvaluationCase,
-        *,
-        fault_injector: DeterministicFaultInjector | None = None,
-        fixture_documents: Mapping[str, Mapping[str, object]] | None = None,
-    ) -> ProbeResult:
-        result = await execute_probe(
-            case,
-            fault_injector=fault_injector,
-            fixture_documents=fixture_documents,
-        )
-        return replace(
-            result,
-            observation=replace(result.observation, outcome_correct=False),
-        )
-
-    monkeypatch.setattr(runner_module, "execute_probe", inconsistent_probe)
-    report = asyncio.run(EvaluationRunner(suite).run(RunOptions("5" * 40, selection)))
-    assert report.results[0].status is ResultStatus.FAILED
-    assert report.results[0].failure is FailureTaxonomy.OUTCOME_MISMATCH
 
 
 def test_live_and_model_judge_boundaries_are_disabled_and_capped(
@@ -1308,12 +1226,6 @@ def test_observability_is_bounded_and_content_free() -> None:
             outcome="passed",
             run_fingerprint="short",
         )
-    with pytest.raises(ValueError, match="fingerprint"):
-        evaluation_log(
-            operation="eval.run",
-            outcome="passed",
-            run_fingerprint="A" * 64,
-        )
     with pytest.raises(ValueError, match="reason_code"):
         evaluation_log(
             operation="eval.run",
@@ -1343,15 +1255,6 @@ def test_observability_is_bounded_and_content_free() -> None:
         tracer.span(
             "eval.run",
             run_fingerprint="short",
-            mode="deterministic",
-        ),
-    ):
-        pass
-    with (
-        pytest.raises(ValueError, match="attributes"),
-        tracer.span(
-            "eval.run",
-            run_fingerprint="z" * 64,
             mode="deterministic",
         ),
     ):

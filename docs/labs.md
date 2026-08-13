@@ -157,6 +157,38 @@ This lab does not verify a live model, production encrypted blob/key store,
 external DLP/malware service, backup expiry, HA/DR, multi-region cache
 coherence, or production load.
 
+## Layer 11 lab: layered evaluation gates
+
+**Implemented with a hermetic 91-case suite and 22 evaluator meta-tests.**
+
+1. Run `python -m aegis_agent_platform.evals list`, then
+   `check-fixtures`; inspect provenance, schema, classification, review,
+   disposition, sensitive-content checks, and digests.
+2. Run `make evals`, focused `make eval-deterministic`, `eval-adversarial`, and
+   `eval-recovery` targets, or the CLI `run`; confirm the catalog contains 91
+   cases, including 12 adversarial cases and all 22 named fault cut points.
+3. Filter with `run --tag adversarial` and repeatable `--case` options. Inspect
+   tenant, citation, approval, effect-before-intent, sandbox, ambiguity, and
+   false-recovery hard gates.
+4. Run `compare`, then `replay .aegis-evals/report.json`; compare content
+   fingerprints and stable case ordering. Baseline updates require
+   `update-baseline --review-reference REVIEW-ID --yes`.
+5. Inspect the quarantine fixture and the meta-tests for manifest tamper,
+   missing/new cases, expired waivers, and hard-safety non-waivability. Manifest
+   regeneration is explicit through `write-manifest --yes`.
+6. Confirm required execution uses fixed clocks, IDs, seeds, fakes, bounded
+   concurrency/timeouts, no live secret/network, and no production effect.
+7. Inspect `LiveEvaluationConfig`/`LiveEvaluationExecutor` and
+   `ModelJudgeConfig`: CI prohibits live execution, no adapter is registered by
+   default, and no model judge execution is implemented.
+8. Inspect `.aegis-evals/report.json`, `report.md`, and `junit.xml`; disallowed
+   credentials, tenant labels, and oversized content block publication.
+
+This lab does not establish full production model/connector qualification,
+independent penetration testing, large-scale human labeling, operator UI,
+MCP/A2A, observability/SLOs, HA/DR/multi-region, or final load/chaos
+certification.
+
 ## Planned labs by layer
 
 | Layer | Lab | Failure injection and evidence |
@@ -164,8 +196,8 @@ coherence, or production load.
 | 2 | Live-database and live-Keycloak drill | Run the row-level-security policies and the append-only trigger against a running Postgres instance, and exercise `RemoteJwksProvider` against a real Keycloak realm with rotated keys — both are currently only asserted statically or against mocked transports |
 | 3 | Schema evolution | Replay old checkout fixtures through additive upcasters |
 | 4 | Connector ambiguity | Rate-limit and truncate Dynatrace/GitHub responses; preserve provenance and partial status |
-| 11 | Production adversarial evaluation | Add versioned datasets, semantic graders, and release baselines beyond the deterministic Layers 7–10 matrices |
-| 11 | Telemetry privacy | Send sensitive/high-cardinality content; prove collector/backend redaction and rejection |
+| 11 | Production model/connector qualification | Run reviewed statistical suites against dedicated non-production accounts; never make this required CI |
+| 12 | Telemetry privacy | Send sensitive/high-cardinality content; prove collector/backend redaction and rejection |
 | 12 | Capacity | Load hot and broad tenants while measuring queue lag and projection delay |
 | 12 | Regional failure | Lose a region and restore authoritative state within documented objectives |
 | 12 | Supply chain | Attempt unsigned promotion and dependency/action tampering |

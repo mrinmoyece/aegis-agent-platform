@@ -107,7 +107,8 @@ def verify_dataset(
                 )
             )
             continue
-        if path.stat().st_size > 1_000_000:
+        payload = path.read_bytes()
+        if len(payload) > 1_000_000:
             findings.append(
                 GovernanceFinding(
                     fixture.fixture_id,
@@ -116,7 +117,6 @@ def verify_dataset(
                 )
             )
             continue
-        payload = path.read_bytes()
         actual_digest = sha256(payload).hexdigest()
         if not hmac_digest_equal(actual_digest, fixture.content_digest):
             findings.append(

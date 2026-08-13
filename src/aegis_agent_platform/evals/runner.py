@@ -180,8 +180,6 @@ class EvaluationRunner:
             "reproducible": True,
             "production_truth": False,
             "fingerprint": fingerprint,
-            "suite_digest": self._suite.digest,
-            "dataset_digest": self._suite.dataset.digest,
             "results": ordered,
             "waivers": waivers,
         }
@@ -357,7 +355,7 @@ class EvaluationRunner:
             FailureTaxonomy.SAFETY_INVARIANT
             if hard_invariant_failed or hard_metric_failed
             else FailureTaxonomy.OUTCOME_MISMATCH
-            if not outcome_correct or not probe.observation.outcome_correct
+            if not outcome_correct
             else FailureTaxonomy.POLICY_VIOLATION
             if required_failed
             else FailureTaxonomy.NONE

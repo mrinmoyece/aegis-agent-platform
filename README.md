@@ -14,7 +14,7 @@ deployments, Kubernetes/runtime changes, and runbooks. This narrow story makes
 durability, evidence provenance, authorization, and safe effects testable end
 to end.
 
-> **Current status: Layer 10 — Event-grounded memory and RAG.** Layers 1–4 add
+> **Current status: Layer 11 — Layered deterministic evaluation gates.** Layers 1–4 add
 > tenant-bound work events, a crash-reconcilable PostgreSQL outbox publisher,
 > Redis Streams consumer groups, inbox deduplication, PostgreSQL renewable
 > leases and fencing, fair bounded supervision, quota enforcement, cancellation,
@@ -39,9 +39,15 @@ to end.
 > durable scan/embed/index/retrieval/compaction lifecycle, tenant quotas,
 > forced-RLS pgvector/lexical retrieval, exact provenance/citations,
 > contradiction-aware bounded context, retention/legal hold/deletion, deterministic
-> demos/evals, and rebuildable indexes/caches. External environments are
-> unconfigured and unverified; operator UI, MCP/A2A, broad
-> autonomous remediation, production deployment, and tested HA remain planned. See
+> demos/evals, and rebuildable indexes/caches. Layer 11 adds immutable
+> provider-neutral evaluation contracts, a governed 91-case synthetic corpus
+> including 12 adversarial cases and all 22 named fault cuts, hermetic execution,
+> hard safety gates, canonical baselines, scoped expiring non-safety waivers,
+> fixture governance, bounded reports/telemetry, and a developer CLI. Evaluation
+> is release evidence, never runtime truth. Live model/connector qualification,
+> model-judge execution, independent penetration testing, human labeling,
+> observability/SLOs, operator UI, MCP/A2A, production deployment, HA/DR/
+> multi-region, and final load/chaos certification remain deferred. See
 > [Limitations and production gaps](docs/limitations.md) for the complete,
 > honest gap list.
 
@@ -75,10 +81,12 @@ to end.
    reconciliation, and explicit verification.
 9. **Hardened sandbox execution:** bounded analysis/test/patch preparation with
    isolation, exact approval, artifacts, and cleanup.
-10. **Memory and retrieval (current):** event-grounded three-tier memory,
+10. **Memory and retrieval:** event-grounded three-tier memory,
     provenance-preserving pgvector RAG, cited compaction, and privacy lifecycle.
-11. **Evaluation and observability:** production quality gates and signals.
-12. **Enterprise operations:** resilience, governance, and deployment evidence.
+11. **Evaluation (current):** deterministic release gates, governed synthetic
+    datasets, fault injection, baselines, waivers, and bounded reports.
+12. **Observability and enterprise operations:** production signals, resilience,
+    governance, and deployment evidence.
 
 Across these layers the checkout-failure demo grows from fixture-backed evidence
 to durable investigation, approval-gated rollback, recovery verification, and
@@ -128,12 +136,17 @@ Run the deterministic checkout investigation with fake providers and connectors:
 python -m aegis_agent_platform.agents --scenario success
 python -m aegis_agent_platform.remediation --scenario approved-success
 python -m aegis_agent_platform.sandbox --scenario approved-analysis
-make evals
+python -m aegis_agent_platform.evals check-fixtures
+python -m aegis_agent_platform.evals compare
+make eval-adversarial
+make eval-recovery
+make eval-baseline
 ```
 
-Both demos perform no live network call. The remediation demo executes only a
-deterministic fake action and explicitly reports that it does not use production
-credentials or claim exactly-once delivery.
+These commands perform no live network call. The remediation demo executes only
+a deterministic fake action and explicitly reports that it does not use
+production credentials or claim exactly-once delivery. Evaluation reports are
+release evidence only and do not replace event truth or runtime safety.
 
 To inspect the local infrastructure configuration:
 
@@ -158,6 +171,8 @@ ambiguity.
 [Evidence connectors and deterministic correlation](docs/evidence-connectors.md)
 covers live-adapter configuration, bounded ingestion, provenance/redaction,
 timeline correlation, webhook security requirements, and connector extension.
+[Evaluation and release evidence](docs/evaluation.md) covers the deterministic
+suite, fault cuts, governance, gates, reports, CLI, and explicit live gaps.
 
 ## Repository map
 
@@ -171,7 +186,9 @@ src/aegis_agent_platform/  Importable platform boundaries
   runtime/                 Fenced leases, supervisor, and operator controls
   gateway/                 Catalog, routing, budgets, resilience, and metering
   providers/               Neutral protocol plus OpenAI/Anthropic/mock adapters
+  evals/                   Layer 11 contracts, catalog, gates, and reporting
   persistence/             PostgreSQL identity/governance repositories
+evals/                     Governed fixtures, dataset, baseline, and waivers
 tests/                     Deterministic unit, adapter, API, and architecture tests
 docs/                      Architecture, threat model, roadmap, and ADRs
 deploy/                    Local observability configuration

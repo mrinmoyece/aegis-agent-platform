@@ -24,8 +24,11 @@ coordination, safe effects, evaluation, and operations.
 > implements approval-bound hardened ephemeral analysis, safe artifacts,
 > lifecycle reconciliation, fake evals, and a locked-down Kubernetes Job
 > adapter. Layer 10 implements event-grounded memory, pgvector RAG, cited
-> compaction, retention lifecycle, fake evals, and a deterministic demo. Live environments and production
-> operations remain unverified or planned.
+> compaction, retention lifecycle, fake evals, and a deterministic demo. Layer
+> 11 implements the unified deterministic harness, governed 91-case corpus,
+> release gates, bounded reports/telemetry, baseline/waiver and fixture
+> governance, CLI, and focused `make eval-*` targets.
+> Live environments and production operations remain unverified or planned.
 
 The curriculum is backed by the concrete delivery slices and acceptance
 evidence in `enterprise-implementation-plan.md`; the roadmap is not merely a
@@ -52,16 +55,16 @@ Implemented only when its document links executable code and tests.
 | Memory, RAG, and compaction (`memory-and-rag.md`, `protocols.md`, ADR 0017) | Design working, episodic, and semantic tiers with provenance, PII controls, retention, relevance/recency, and faithful compaction | 10 | Implemented; deterministic and live pgvector/RLS evidence |
 | Evidence connectors and correlation (`evidence-connectors.md`) | Translate Dynatrace, GitHub, Kubernetes, and runbooks into stable evidence; preserve provenance, partial results, ambiguity, and conflict | 6 | Implemented with mocked transports; live environments unverified |
 | Agent and tool protocols (`protocols.md`) | Distinguish internal correctness ports, MCP adapters, and external A2A interoperability | 6–8 | Position documented; MCP/A2A planned |
-| Evaluation strategy (`evaluation.md`) | Combine deterministic, live, adversarial, quality, safety, latency, and cost evaluation | 7/10 | Layers 7–9 deterministic behavior gates implemented; production harness planned |
-| Observability and SLOs (`observability-and-slos.md`) | Correlate events/traces safely, select SLIs, control cardinality, and operate alerting | 7–8 | Local topology scaffolded |
-| Threat model (`threat-model.md`) | Analyze tenant, evidence, model, swarm, tool, memory, sandbox, provider, and supply-chain threats | 1–10 | Layer 10 attacks and environment gaps documented |
-| Failure modes and runbooks (`failure-modes.md`, `runbook.md`) | Diagnose crashes, stale leases, partial effects, provider faults, poisoned memory/evidence, and regional failure | 3–10 | Storage, worker, provider, and memory failures implemented; regional sections planned |
+| Evaluation strategy (`evaluation.md`, ADR 0018) | Separate hermetic CI, integration, live/statistical qualification, and production evidence; govern datasets, gates, waivers, judges, reports, and lifecycle | 11 | Implemented deterministic suite/CLI; optional-live boundary limited and no production qualification |
+| Observability and SLOs (`observability-and-slos.md`) | Correlate events/traces safely, select SLIs, control cardinality, and operate alerting | 12 | Local topology scaffolded; production layer planned |
+| Threat model (`threat-model.md`) | Analyze tenant, evidence, model, swarm, tool, memory, sandbox, provider, evaluation, and supply-chain threats | 1–11 | Layer 11 evaluation controls and environment gaps documented |
+| Failure modes and runbooks (`failure-modes.md`, `runbook.md`) | Diagnose crashes, stale leases, partial effects, provider faults, poisoned memory/evidence/evaluation data, and regional failure | 3–12 | Runtime and Layer 11 evaluation responses documented; regional sections planned |
 | Scaling and multi-region (`scaling-and-multi-region.md`) | Estimate capacity, partition tenants, preserve ordering, and choose recovery objectives | 8 | Planned |
 | Privacy, retention, and compliance (`privacy-and-compliance.md`) | Classify data, minimize collection, enforce deletion/legal hold, and produce evidence | 6–8 | Planned |
 | Deployment and supply chain (`deployment-and-supply-chain.md`) | Build least-privilege releases with SBOM, provenance, signing, promotion, and rollback | 8 | CI/container baseline only |
-| Alternatives and ADR index (`adr/README.md`) | Compare orchestration, queues, identity, sandbox, provider, and evaluation choices | 1–9 | Planned index; eleven ADRs exist |
-| Interview question bank (`interview-question-bank.md`) | Communicate tradeoffs and defend design under follow-up pressure | 1–10 | Layer 10 memory boundary questions documented |
-| Hands-on labs (`labs.md`) | Turn each invariant into executable evidence and inject realistic failures | 1–12 | Layers 1–10 tests runnable |
+| Alternatives and ADR index (`adr/README.md`) | Compare orchestration, queues, identity, sandbox, provider, and evaluation choices | 1–11 | Planned index; eighteen ADRs exist |
+| Interview question bank (`interview-question-bank.md`) | Communicate tradeoffs and defend design under follow-up pressure | 1–11 | Layer 11 release-evidence boundary questions documented |
+| Hands-on labs (`labs.md`) | Turn each invariant into executable evidence and inject realistic failures | 1–12 | Layers 1–11 deterministic labs runnable |
 | Terminology (`glossary.md`) | Use durability, evidence, tenancy, evaluation, and operations terms precisely | 1 | Documented |
 | Limitations and production gaps (`limitations.md`) | State what is absent, unsafe, local-only, or not yet proven | Every layer | Documented and maintained |
 
