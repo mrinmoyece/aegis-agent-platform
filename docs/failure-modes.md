@@ -8,6 +8,18 @@
 | Process exits during append | Transaction rollback | Replay; no partial event batch or outbox row commits |
 | Duplicate incoming delivery | Inbox primary key | Return first committed version without reapplying |
 | Publisher dies while leased | Lease expiry | Claim again only below max attempts; otherwise dead-letter |
+| Publisher dies after Redis `XADD` | Outbox remains leased/pending | Republish deterministic message identity; inbox deduplicates |
+| Redis outage or timeout | Classified retryable queue error and publish-failure metric | Release outbox lease with bounded backoff; do not invent publication |
+| Poison Redis envelope | Size/schema decoder rejection | Quarantine/inspect bounded metadata; never pass payload to a handler |
+| Delivery committed to Redis but inbox transaction rolls back | Pending entry remains unacknowledged | Reclaim after idle threshold and retry the inbox transaction |
+| Two workers claim one item | PostgreSQL `FOR UPDATE SKIP LOCKED` and CAS state | One lease wins; the loser records a claim conflict and does not execute |
+| Heartbeat stops | PostgreSQL expiry and oldest-active-lease metric | Reconcile to retry state and publish again |
+| Stale worker resumes after reclaim | Token/generation mismatch in `append_fenced` | Reject every state-changing append; preserve conflict evidence |
+| Worker handler raises unexpectedly | Supervisor exception boundary | Append classified `worker_bug` failure; keep supervisor alive |
+| Retry limit exhausted | Durable attempt reaches max | Append failure and dead-letter events; require approved requeue |
+| Cancellation races success | Durable cancellation flag checked before outcome | Record cancelled; never let a late success overwrite it |
+| Graceful drain times out | Active-task count remains nonzero | Stop new claims, preserve leases, then allow expiry/recovery |
+| Orphan Redis pending entry | Pending idle age exceeds threshold | Bounded `XAUTOCLAIM`; PostgreSQL claim/fence still decides authority |
 | Outbox exhausts attempts | `dead_letter` projection row and bounded error code | Operator investigates; event truth is unchanged |
 | Projection crashes | Checkpoint remains at prior committed page | Resume or rebuild from ledger |
 | Sequence/cursor corruption | Replay gap/ordering exception | Stop consumption and invoke storage incident runbook |
@@ -18,3 +30,7 @@
 Global event positions order commits but may contain numbers unused after a
 rolled-back PostgreSQL identity allocation. That is not corruption. A per-
 aggregate sequence gap is corruption.
+
+The unresolved window is an external target accepting a future effect after its
+intent but before Aegis records the result. Target idempotency or explicit
+reconciliation is mandatory; Redis/inbox deduplication alone cannot solve it.

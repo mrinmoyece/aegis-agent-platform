@@ -28,6 +28,8 @@ REQUIRED_DOCUMENTS = {
     ROOT / "docs" / "durable-execution.md",
     ROOT / "docs" / "failure-modes.md",
     ROOT / "docs" / "runbook.md",
+    ROOT / "docs" / "worker-runtime.md",
+    ROOT / "docs" / "adr" / "0011-shared-redis-stream.md",
     ROOT / "docs" / "adr" / "0009-tenant-governance-audit-and-secrets.md",
 }
 LINK_PATTERN = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
@@ -74,7 +76,7 @@ def main() -> None:
         raise SystemExit("broken documentation links:\n" + "\n".join(failures))
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    if "Current status: Layer 3" not in readme:
+    if "Current status: Layer 4" not in readme:
         raise SystemExit("README must state the current implementation layer")
 
 

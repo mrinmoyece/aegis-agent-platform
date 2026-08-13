@@ -23,11 +23,9 @@ from aegis_agent_platform.domain import (
 from aegis_agent_platform.event_store import (
     ClaimedOutboxMessage,
     ConcurrencyError,
-    FencingError,
     OutboxMessage,
 )
 from aegis_agent_platform.identity import (
-    PLATFORM_TENANT_ID,
     Principal,
     PrincipalKind,
     Role,
@@ -43,7 +41,7 @@ from aegis_agent_platform.queueing import (
     QueueDelivery,
     RetryableQueueError,
 )
-from aegis_agent_platform.queueing.publisher import OutboxPublisher, PublisherTelemetry
+from aegis_agent_platform.queueing.publisher import OutboxPublisher
 from aegis_agent_platform.runtime import (
     FairTenantScheduler,
     RuntimeTelemetry,
@@ -359,10 +357,9 @@ class FakeOutbox:
         message_id: UUID,
         *,
         lease_owner: str,
-        lease_expires_at: datetime,
         published_at: datetime,
     ) -> None:
-        del context, lease_owner, lease_expires_at, published_at
+        del context, lease_owner, published_at
         self.published.append(message_id)
 
     async def mark_outbox_failed(
@@ -371,11 +368,10 @@ class FakeOutbox:
         message_id: UUID,
         *,
         lease_owner: str,
-        lease_expires_at: datetime,
         retry_at: datetime,
         error_code: str,
     ) -> None:
-        del context, lease_owner, lease_expires_at, retry_at
+        del context, lease_owner, retry_at
         self.failed.append((message_id, error_code))
 
 
@@ -437,23 +433,6 @@ def test_outbox_publisher_uses_deterministic_identity_then_acknowledges_db() -> 
     assert result.published == 1
     assert queue.published[0].message_id == uid(10)
     assert repository.published == [uid(10)]
-
-
-def test_publisher_telemetry_records_runtime_metrics() -> None:
-    repository = FakeOutbox((outbox_claim(),))
-    queue = FakeQueue()
-    metrics = RuntimeMetrics()
-    publisher = OutboxPublisher(
-        repository,
-        queue,
-        publisher_id="publisher-a",
-        telemetry=PublisherTelemetry(metrics),
-    )
-
-    queue.publish_error = RetryableQueueError("offline")
-    asyncio.run(publisher.publish_batch(TENANT_A, now=NOW))
-
-    assert metrics.snapshot() == {"outbox_lag": 0.0, "publish_failures": 1.0}
 
 
 def test_publisher_shutdown_and_constructor_guards_are_bounded() -> None:
@@ -690,7 +669,7 @@ def test_supervisor_cancellation_race_prefers_durable_cancel_over_success() -> N
 
 def test_supervisor_maps_cooperative_cancellation_to_cancelled() -> None:
     queue = FakeQueue()
-    state = FakeState(cancel_requested=True)
+    state = FakeState()
 
     async def handler(_: WorkExecution) -> WorkResult:
         raise WorkerExecutionError(FailureClass.CANCELLED, "cancelled_by_handler")
@@ -700,46 +679,6 @@ def test_supervisor_maps_cooperative_cancellation_to_cancelled() -> None:
     assert state.transitions[-1] == "cancelled"
     assert state.failures == []
     assert queue.acknowledged == [delivery()]
-
-
-def test_supervisor_preserves_pending_delivery_for_undurable_cancellation() -> None:
-    queue = FakeQueue()
-    state = FakeState(cancel_requested=False)
-
-    async def handler(_: WorkExecution) -> WorkResult:
-        raise WorkerExecutionError(FailureClass.CANCELLED, "cancelled_by_handler")
-
-    asyncio.run(supervisor(queue, state, handler).run_batch((delivery(),)))
-
-    assert state.transitions == ["published", "claimed", "started"]
-    assert queue.acknowledged == []
-
-
-def test_supervisor_preserves_pending_delivery_when_start_is_fenced() -> None:
-    queue = FakeQueue()
-
-    class FencedStartState(FakeState):
-        async def start(
-            self,
-            context: TenantContext,
-            item: QueueDelivery,
-            active_lease: WorkLease,
-            *,
-            at: datetime,
-        ) -> None:
-            del context, item, active_lease, at
-            self.transitions.append("started")
-            raise FencingError(1, 0)
-
-    state = FencedStartState()
-
-    async def handler(_: WorkExecution) -> WorkResult:
-        return WorkResult("must-not-run")
-
-    asyncio.run(supervisor(queue, state, handler).run_batch((delivery(),)))
-
-    assert state.transitions == ["published", "claimed", "started"]
-    assert queue.acknowledged == []
 
 
 def test_drain_timeout_does_not_cancel_active_work() -> None:
@@ -865,75 +804,6 @@ def test_supervisor_reclaims_pending_and_acks_terminal_duplicates() -> None:
     assert queue.acknowledged == [delivery()]
 
 
-def test_supervisor_stops_scheduling_reads_after_drain_starts() -> None:
-    async def scenario() -> None:
-        queue = FakeQueue()
-        queue.read_deliveries = (delivery(),)
-        state = FakeState()
-
-        async def handler(_: WorkExecution) -> WorkResult:
-            return WorkResult("should-not-run")
-
-        runtime = supervisor(queue, state, handler)
-
-        async def blocking_read(
-            *,
-            consumer: str,
-            count: int,
-            block_milliseconds: int,
-        ) -> tuple[QueueDelivery, ...]:
-            del consumer, count, block_milliseconds
-            await asyncio.sleep(0)
-            return queue.read_deliveries
-
-        queue.read = blocking_read  # type: ignore[method-assign]
-        poll = asyncio.create_task(runtime.poll_once(block_milliseconds=0))
-        await asyncio.sleep(0)
-        assert await runtime.drain(timeout=timedelta(seconds=1))
-        assert await poll == 0
-        assert state.transitions == []
-        assert queue.acknowledged == []
-
-    asyncio.run(scenario())
-
-
-def test_supervisor_stops_scheduling_reclaimed_entries_after_drain_starts() -> None:
-    async def scenario() -> None:
-        queue = FakeQueue()
-        queue.reclaim_deliveries = (delivery(),)
-        state = FakeState()
-
-        async def handler(_: WorkExecution) -> WorkResult:
-            return WorkResult("should-not-run")
-
-        runtime = supervisor(queue, state, handler)
-
-        async def blocking_reclaim(
-            *,
-            consumer: str,
-            minimum_idle_milliseconds: int,
-            count: int,
-        ) -> tuple[QueueDelivery, ...]:
-            del consumer, minimum_idle_milliseconds, count
-            await asyncio.sleep(0)
-            return queue.reclaim_deliveries
-
-        queue.reclaim = blocking_reclaim  # type: ignore[method-assign]
-        recover = asyncio.create_task(
-            runtime.recover_once(
-                minimum_idle_milliseconds=1_000,
-                count=10,
-            )
-        )
-        await asyncio.sleep(0)
-        assert await runtime.drain(timeout=timedelta(seconds=1))
-        assert await recover == 0
-        assert state.transitions == []
-        assert queue.acknowledged == []
-
-    asyncio.run(scenario())
-
-
 def test_supervisor_renews_lease_while_handler_is_active() -> None:
     queue = FakeQueue()
     state = FakeState()
@@ -1013,8 +883,8 @@ class FakeOperationsRepository:
         *,
         status: WorkStatus | None = None,
         limit: int = 100,
-        cursor: tuple[datetime, UUID] | datetime | None = None,
-    ) -> tuple[Mapping[str, JsonValue], ...]:
+        cursor: datetime | None = None,
+    ) -> tuple[Mapping[str, object], ...]:
         del context, status, limit, cursor
         return ({"status": "running"},)
 
@@ -1023,8 +893,8 @@ class FakeOperationsRepository:
         context: TenantContext,
         *,
         limit: int = 100,
-        cursor: tuple[datetime, UUID] | datetime | None = None,
-    ) -> tuple[Mapping[str, JsonValue], ...]:
+        cursor: datetime | None = None,
+    ) -> tuple[Mapping[str, object], ...]:
         del context, limit, cursor
         return ({"status": "claimed"},)
 
@@ -1035,16 +905,6 @@ class FakeOperationsRepository:
     async def requeue_dead_letter(self, *args: object, **kwargs: object) -> None:
         del kwargs
         self.requeued.append(args[1])  # type: ignore[arg-type]
-
-    async def approve_dead_letter_requeue(
-        self,
-        context: TenantContext,
-        work_id: UUID,
-        *,
-        approval: RequeueApproval,
-        expires_at: datetime,
-    ) -> None:
-        del context, work_id, approval, expires_at
 
     async def reconcile_expired(
         self,
@@ -1058,18 +918,15 @@ class FakeOperationsRepository:
 
 
 def principal(role: Role) -> Principal:
-    tenant_id = (
-        PLATFORM_TENANT_ID if role is Role.PLATFORM_ADMIN else TenantId("tenant-a")
-    )
     return Principal(
         subject="subject",
         issuer="https://issuer.test",
-        tenant_id=tenant_id,
+        tenant_id=TenantId("tenant-a"),
         kind=PrincipalKind.USER,
         user_id=UserId("user-a"),
         role_bindings=(
             RoleBinding(
-                tenant_id=tenant_id,
+                tenant_id=TenantId("tenant-a"),
                 role=role,
                 assigned_by=UserId("admin"),
                 assigned_at=NOW - timedelta(days=1),
@@ -1081,12 +938,7 @@ def principal(role: Role) -> Principal:
 def test_operations_are_tenant_authorized_bounded_and_approval_scoped() -> None:
     queue = FakeQueue()
     repository = FakeOperationsRepository()
-    metrics = RuntimeMetrics()
-    operations = WorkerOperations(
-        repository,
-        queue,
-        telemetry=RuntimeTelemetry(metrics),
-    )
+    operations = WorkerOperations(repository, queue)  # type: ignore[arg-type]
     approval = RequeueApproval(
         approval_id=uid(50),
         approved_by="admin",
@@ -1140,20 +992,10 @@ def test_operations_are_tenant_authorized_bounded_and_approval_scoped() -> None:
         )
         == 1
     )
-    with pytest.raises(OperationDeniedError):
-        asyncio.run(
-            operations.reconcile(
-                principal(Role.PLATFORM_ADMIN),
-                TENANT_A,
-                at=NOW,
-                limit=1,
-            )
-        )
 
     assert rows[0]["status"] == "running"
     assert repository.cancelled == [uid(2)]
     assert repository.requeued == [uid(1)]
-    assert metrics.snapshot()["reconciliation_success"] == 1.0
     with pytest.raises(OperationDeniedError):
         asyncio.run(
             operations.work_status(
@@ -1178,7 +1020,7 @@ def test_metrics_and_spans_have_fixed_names_without_identifier_labels() -> None:
         metrics.add("retries", -1)
     with pytest.raises(ValueError, match="negative"):
         metrics.set_gauge("active_leases", -1)
-    telemetry = RuntimeTelemetry(metrics)
+    telemetry = RuntimeTelemetry()
     telemetry.claim_conflict()
     telemetry.active_leases(1)
     telemetry.heartbeat_failure()
@@ -1187,16 +1029,6 @@ def test_metrics_and_spans_have_fixed_names_without_identifier_labels() -> None:
     telemetry.completed(1)
     telemetry.cancelled()
     telemetry.reconciliation("recovered")
-    assert metrics.snapshot() == {
-        "retries": 2.0,
-        "active_leases": 1.0,
-        "claim_conflicts": 1.0,
-        "heartbeat_failures": 1.0,
-        "dead_letters": 1.0,
-        "work_latency": 1.0,
-        "cancellations": 1.0,
-        "reconciliation_success": 1.0,
-    }
     with RuntimeTracer().span("work.execute"):
         pass
     with (

@@ -89,6 +89,10 @@ class Permission(StrEnum):
     SECRET_REFERENCE_MANAGE = "secret_reference:manage"  # noqa: S105
     PLATFORM_TENANT_CREATE = "platform:tenant:create"
     PLATFORM_AUDIT_READ = "platform:audit:read"
+    QUEUE_READ = "queue:read"
+    WORK_CANCEL = "work:cancel"
+    DLQ_REQUEUE = "dlq:requeue"
+    WORK_RECONCILE = "work:reconcile"
 
 
 @dataclass(frozen=True, slots=True)

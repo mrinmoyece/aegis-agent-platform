@@ -39,6 +39,19 @@ class DomainEventType(StrEnum):
     SIDE_EFFECT_FAILED = "effect.failed.v1"
     OUTBOX_DEAD_LETTERED = "delivery.outbox_dead_lettered.v1"
     TENANT_REGISTERED = "tenant.registered.v1"
+    WORK_REQUESTED = "work.requested.v1"
+    WORK_PUBLISHED = "work.published.v1"
+    WORK_CLAIMED = "work.claimed.v1"
+    WORK_STARTED = "work.started.v1"
+    WORK_HEARTBEAT = "work.heartbeat.v1"
+    WORK_LEASE_EXPIRED = "work.lease_expired.v1"
+    WORK_SUCCEEDED = "work.succeeded.v1"
+    WORK_FAILED = "work.failed.v1"
+    WORK_RETRY_SCHEDULED = "work.retry_scheduled.v1"
+    WORK_CANCEL_REQUESTED = "work.cancel_requested.v1"
+    WORK_CANCELLED = "work.cancelled.v1"
+    WORK_DEAD_LETTERED = "work.dead_lettered.v1"
+    WORK_RECONCILED = "work.reconciled.v1"
 
 
 @dataclass(frozen=True, slots=True)

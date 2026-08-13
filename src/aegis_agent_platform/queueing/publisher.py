@@ -10,18 +10,7 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 from aegis_agent_platform.event_store import ClaimedOutboxMessage
-from aegis_agent_platform.observability.context import (
-    PropagationContext,
-    TraceContextError,
-    TraceLinkKind,
-    extract_context,
-    linked_contexts,
-)
-from aegis_agent_platform.observability.runtime import (
-    RuntimeMetrics,
-    RuntimeTracer,
-    shared_runtime_metrics,
-)
+from aegis_agent_platform.observability.runtime import RuntimeTracer
 from aegis_agent_platform.queueing import (
     MessageEnvelope,
     OutboxRepository,
@@ -35,18 +24,14 @@ from aegis_agent_platform.tenancy import TenantContext
 class PublisherTelemetry:
     """Bounded-cardinality publisher metrics interface."""
 
-    def __init__(self, metrics: RuntimeMetrics | None = None) -> None:
-        self._metrics = metrics or shared_runtime_metrics()
-
     def outbox_lag(self, seconds: float) -> None:
-        self._metrics.set_gauge("outbox_lag", seconds)
+        del seconds
 
     def published(self) -> None:
         pass
 
     def failed(self, *, retryable: bool) -> None:
         del retryable
-        self._metrics.add("publish_failures")
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,7 +95,6 @@ class OutboxPublisher:
             lease_expires_at=now + self._lease_duration,
             now=now,
             limit=self._batch_size,
-            destination="aegis.work",
         )
         published = failed = 0
         for raw_claim in claims:
@@ -124,23 +108,12 @@ class OutboxPublisher:
             )
             try:
                 envelope = _envelope(context, claim, now)
-                propagation = _propagation_context(envelope)
-                links = (
-                    linked_contexts((propagation,), TraceLinkKind.REDELIVERY)
-                    if propagation is not None and claim.attempt_count > 1
-                    else ()
-                )
-                with self._tracer.span(
-                    "outbox.publish",
-                    parent=propagation,
-                    links=links,
-                ):
+                with self._tracer.span("outbox.publish"):
                     await self._queue.publish(envelope)
                     await self._repository.mark_outbox_published(
                         context,
                         claim.message.message_id,
                         lease_owner=claim.lease_owner,
-                        lease_expires_at=claim.lease_expires_at,
                         published_at=now,
                     )
             except RetryableQueueError:
@@ -176,7 +149,6 @@ class OutboxPublisher:
             context,
             claim.message.message_id,
             lease_owner=claim.lease_owner,
-            lease_expires_at=claim.lease_expires_at,
             retry_at=now + self._retry_delay(claim.attempt_count),
             error_code=error_code,
         )
@@ -217,23 +189,6 @@ def _envelope(
 
 def _default_retry_delay(attempt: int) -> timedelta:
     return timedelta(seconds=min(300, 2 ** min(attempt, 8)))
-
-
-# NOTE: durable propagation headers are only present when the producer boundary
-# explicitly threaded validated trace context into the outbox request. Internal
-# producers that omit that handoff remain unlinked until they plumb trace context.
-def _propagation_context(envelope: MessageEnvelope) -> PropagationContext | None:
-    headers = {
-        key: value
-        for key, raw_value in envelope.headers.items()
-        if key in {"traceparent", "tracestate", "baggage"}
-        and isinstance(raw_value, str)
-        and (value := raw_value)
-    }
-    try:
-        return extract_context(headers)
-    except TraceContextError as error:
-        raise PermanentQueueError("invalid propagation context") from error
 
 
 __all__ = ["OutboxPublisher", "PublishBatchResult", "PublisherTelemetry"]

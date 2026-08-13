@@ -1,17 +1,18 @@
-# Getting started with Layers 1–3
+# Getting started with Layers 1–4
 
 This repository teaches the less visible part of agent engineering: deciding
 where durability, security, and vendor boundaries live before writing
 orchestration logic. Layer 1 built the package contracts and local
 infrastructure. Layer 2 adds identity, tenancy, and governance. Layer 3 adds a
-durable PostgreSQL ledger, inbox/outbox, projections, and production repositories
-without adding workers or agent execution.
+durable PostgreSQL ledger, inbox/outbox, projections, and production repositories.
+Layer 4 adds Redis Streams delivery and fenced worker execution, but not agent
+reasoning.
 
 ## What you will inspect
 
 - `domain` owns immutable, provider-neutral event data.
 - `event_store` defines ports plus the PostgreSQL ledger, inbox/outbox, and
-  projection adapters; `queueing` remains a future worker port.
+  projection adapters; `queueing` and `runtime` implement delivery and workers.
 - `identity` verifies bearer JWTs and resolves authoritative, tenant-scoped
   principals; `identity.authorization` makes deny-by-default access decisions.
 - `tenancy` carries validated tenant context through every tenant-scoped port.
@@ -22,13 +23,13 @@ without adding workers or agent execution.
   material, through general application code.
 - `control_plane` composes the above behind an authenticated `/v1/*` API plus
   liveness/readiness routes.
-- migrations `0001` and `0002` define identity/governance and the durable ledger,
+- migrations `0001`–`0003` define governance, ledger, work state, leases, DLQ,
   roles, grants, triggers, forced RLS, inbox/outbox, and projections.
 - `compose.yaml` describes the local dependencies later layers will integrate.
 - architecture tests prevent infrastructure from leaking into the pure domain.
 
-The durable store is implemented. No Redis queue worker, model call, agent
-execution, external effect, or live Dynatrace/GitHub connector runs yet.
+The durable store and Redis worker substrate are implemented. No model call,
+specialist reasoning, external effect, or live Dynatrace/GitHub connector runs.
 
 ## Run the fast checks
 
@@ -48,10 +49,11 @@ migration validation. They do not require network services or a running
 identity provider — JWT verification is exercised against deterministic
 fixtures, not a live Keycloak realm.
 
-Run the live PostgreSQL suite against a disposable database:
+Run the live PostgreSQL/Redis suite against disposable services:
 
 ```bash
 AEGIS_TEST_DATABASE_URL=postgresql://... \
+AEGIS_TEST_REDIS_URL=redis://... \
   python -m pytest tests/integration
 ```
 
@@ -93,7 +95,7 @@ demonstrates the expected configuration shape (issuer, JWKS URL, audience) for
 `RemoteJwksProvider` rather than a ready-to-use login flow. Calling `/v1/me`
 without a bearer token returns `401 missing_token`; obtaining a real token
 against this realm and wiring it through `RemoteJwksProvider` is a deployment
-exercise, not something the fast local checks assume works. PostgreSQL initializes both forward migrations. Production composition must
+exercise, not something the fast local checks assume works. PostgreSQL initializes all forward migrations. Production composition must
 explicitly inject the PostgreSQL repositories and event store; the module-level
 demo application remains fail-closed and does not invent development identities.
 
@@ -102,5 +104,6 @@ you intentionally want to delete local data.
 
 ## Read next
 
-Read `durable-execution.md`, ADR 0010, `failure-modes.md`, and `runbook.md`, then
+Read `durable-execution.md`, `worker-runtime.md`, ADR 0010/0011,
+`failure-modes.md`, and `runbook.md`, then
 compare roadmap gates with `enterprise-checklist.md`.

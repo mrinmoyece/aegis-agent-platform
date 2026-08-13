@@ -16,7 +16,6 @@ from aegis_agent_platform.identity import (
     Role,
 )
 from aegis_agent_platform.queueing import WorkQueue
-from aegis_agent_platform.runtime import RuntimeTelemetry
 from aegis_agent_platform.tenancy import TenantContext
 
 
@@ -49,7 +48,7 @@ class OperationsRepository(Protocol):
         *,
         status: WorkStatus | None = None,
         limit: int = 100,
-        cursor: tuple[datetime, UUID] | datetime | None = None,
+        cursor: datetime | None = None,
     ) -> tuple[Mapping[str, JsonValue], ...]: ...
 
     async def pending_status(
@@ -57,7 +56,7 @@ class OperationsRepository(Protocol):
         context: TenantContext,
         *,
         limit: int = 100,
-        cursor: tuple[datetime, UUID] | datetime | None = None,
+        cursor: datetime | None = None,
     ) -> tuple[Mapping[str, JsonValue], ...]: ...
 
     async def cancel_by_id(
@@ -105,12 +104,10 @@ class WorkerOperations:
         repository: OperationsRepository,
         queue: WorkQueue,
         authorization: AuthorizationService | None = None,
-        telemetry: RuntimeTelemetry | None = None,
     ) -> None:
         self._repository = repository
         self._queue = queue
         self._authorization = authorization or AuthorizationService()
-        self._telemetry = telemetry or RuntimeTelemetry()
 
     async def work_status(
         self,
@@ -120,7 +117,7 @@ class WorkerOperations:
         at: datetime,
         status: WorkStatus | None = None,
         limit: int = 100,
-        cursor: tuple[datetime, UUID] | datetime | None = None,
+        cursor: datetime | None = None,
     ) -> tuple[Mapping[str, JsonValue], ...]:
         self._require(principal, context, Permission.QUEUE_READ, at)
         return await self._repository.status(
@@ -137,7 +134,7 @@ class WorkerOperations:
         *,
         at: datetime,
         limit: int = 100,
-        cursor: tuple[datetime, UUID] | datetime | None = None,
+        cursor: datetime | None = None,
     ) -> tuple[Mapping[str, JsonValue], ...]:
         self._require(principal, context, Permission.QUEUE_READ, at)
         return await self._repository.pending_status(
@@ -226,17 +223,11 @@ class WorkerOperations:
             Role.PLATFORM_ADMIN,
         }.intersection(decision.active_roles):
             raise OperationDeniedError("operator or administrator permission required")
-        try:
-            result = await self._repository.reconcile_expired(
-                context,
-                now=at,
-                limit=limit,
-            )
-        except Exception:
-            self._telemetry.reconciliation("failure")
-            raise
-        self._telemetry.reconciliation("success")
-        return result
+        return await self._repository.reconcile_expired(
+            context,
+            now=at,
+            limit=limit,
+        )
 
     def _require(
         self,

@@ -40,6 +40,10 @@ class ReplayCorruptionError(PermanentStorageError):
     """Committed ordering violates the gapless aggregate contract."""
 
 
+class FencingError(ConcurrencyError):
+    """A worker write used a stale, released, or expired lease token."""
+
+
 class OutboxStatus(StrEnum):
     """Delivery projection states; event history remains authoritative."""
 
@@ -143,3 +147,19 @@ class EventStore(Protocol):
     ) -> EventPage:
         """Read a bounded tenant page in global commit order."""
         ...
+
+
+__all__ = [
+    "AppendResult",
+    "ClaimedOutboxMessage",
+    "ConcurrencyError",
+    "EventPage",
+    "EventStore",
+    "FencingError",
+    "OutboxMessage",
+    "OutboxStatus",
+    "PermanentStorageError",
+    "ReplayCorruptionError",
+    "StorageError",
+    "TransientStorageError",
+]

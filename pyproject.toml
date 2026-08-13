@@ -19,8 +19,10 @@ classifiers = [
 ]
 dependencies = [
   "cryptography>=45,<49",
+  "opentelemetry-api>=1.36,<2",
   "psycopg[binary]>=3.2.9,<4",
   "pyjwt>=2.10,<3",
+  "redis>=6.4,<7",
   "uvicorn>=0.35,<1",
 ]
 
@@ -70,6 +72,7 @@ addopts = "--strict-config --strict-markers -q"
 testpaths = ["tests"]
 markers = [
   "integration: requires a live PostgreSQL test database",
+  "redis_integration: requires live PostgreSQL and Redis test services",
 ]
 
 [tool.coverage.run]
@@ -78,6 +81,8 @@ source = ["aegis_agent_platform"]
 omit = [
   "src/aegis_agent_platform/event_store/postgres.py",
   "src/aegis_agent_platform/persistence/postgres.py",
+  "src/aegis_agent_platform/runtime/postgres.py",
+  "src/aegis_agent_platform/queueing/redis_streams.py",
 ]
 
 [tool.coverage.report]

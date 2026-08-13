@@ -1,17 +1,16 @@
 # Limitations and production gaps
 
-## Foundation capabilities and remaining runtime gaps
+## Remaining platform gaps
 
-- No queue backend, renewal implementation, fencing enforcement, retry, or
-  reconciliation exists.
 - Dynatrace and GitHub packages are interfaces, not working connectors.
 - Kubernetes, runbook, incident-management, and remediation adapters do not
   exist.
 - Agent roles, artifacts, plans, budgets, and ledger are types only. There is no
   scheduler, model invocation, deterministic aggregation, critic enforcement,
   approval workflow, or specialist execution.
-- Sandbox, tools, memory, evaluation, and observability packages are
-  boundaries only.
+- Sandbox, tools, memory, and evaluation packages are boundaries only.
+- Runtime spans and bounded metric instruments exist, but no production
+  collector dashboards, alert rules, or SLO evidence are claimed.
 - Three-tier memory is a documented design only. No pgvector retrieval,
   provenance pipeline, PII handling, retention/deletion, or context compaction
   is implemented.
@@ -63,9 +62,9 @@
   six-test PostgreSQL 16 suite executes migrations and those adapters in CI.
 - Global positions provide ordering, not a no-gap promise after rolled-back
   identity allocations. Aggregate sequence is gapless.
-- The outbox is delivery state only. There is no publisher/Redis notifier,
-  worker lifecycle, model/provider call, live connector, agent execution,
-  approval service, or external effect adapter.
+- The outbox remains delivery state only. Layer 4 publishes it to Redis, but
+  model/provider calls, live connectors, agent execution, approval, and external
+  effect adapters do not exist.
 - Exactly-once effects are not claimed. Intent/result contracts and idempotency
   keys exist, but later adapters must implement idempotency or reconciliation.
 - Projections cover generic run status, artifacts, approvals, usage, and tenant
@@ -73,6 +72,32 @@
 - Backup/restore, retention, partitioning, high availability, maintenance-role
   brokering, and migration downgrade automation are not implemented. Security
   migrations are forward-only; correction uses additive migrations.
+
+## Current Layer 4 implementation (distributed work)
+
+- `work.*.v1` events, deterministic transport envelopes, one shared Redis
+  Stream/consumer group, explicit acknowledgement, pending inspection/reclaim,
+  poison rejection, and deterministic inbox message identity are implemented.
+- `work_items`, `work_leases`, `work_dead_letters`, and durable two-actor
+  `work_requeue_approvals` are tenant-RLS
+  projections. PostgreSQL CAS claims issue renewable UUID tokens plus monotonic
+  generations; `append_fenced` rejects stale, released, or expired workers.
+- The supervisor bounds global and per-tenant concurrency, schedules tenants
+  round-robin, drains gracefully, polls cooperative cancellation, contains
+  handler exceptions, enforces timeout, and records classified retry or DLQ
+  outcomes before acknowledgement.
+- Live tests prove two-worker claim exclusion, renewal/reclaim, stale fencing,
+  duplicate delivery/inbox behavior, ack ordering, poison handling, and RLS.
+- A shared stream bounds Redis key/group cardinality and preserves global
+  transport order. It does not provide strict tenant fairness across independent
+  worker processes; the in-process scheduler is round-robin.
+- Redis loss can delay delivery but cannot erase work truth. Reconciliation
+  releases expired PostgreSQL leases; a deployment must continuously run both
+  publisher and reconciliation loops. There is no tested Redis Sentinel/Cluster,
+  PostgreSQL failover, multi-region ordering, or HA claim.
+- No external side effect is implemented. The intent/result protocol represents
+  the crash window, but downstream adapters must use target idempotency keys or
+  reconcile target state; Aegis does not claim exactly-once effects.
 
 ## Claims deliberately not made
 

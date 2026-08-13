@@ -1,33 +1,13 @@
-"""OpenTelemetry runtime spans and bounded in-process metric instruments.
-
-TODO: queue-wide gauges such as ``stream_pending_depth``, ``oldest_pending_age``,
-and ``dlq_depth`` still need bounded transport snapshots from the runtime loop.
-The shared in-process registry below keeps those metric names reserved so future
-queue inspections can publish them without changing the public telemetry surface.
-"""
+"""OpenTelemetry runtime spans and bounded in-process metric instruments."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from threading import Lock
 
 from opentelemetry import trace
-from opentelemetry.trace import (
-    Link,
-    NonRecordingSpan,
-    SpanContext,
-    SpanKind,
-    TraceFlags,
-    TraceState,
-    set_span_in_context,
-)
-
-from aegis_agent_platform.observability.context import PropagationContext, TraceLink
-from aegis_agent_platform.observability.semantic import (
-    SEMANTIC_SCHEMA_VERSION,
-    require_operation,
-)
+from opentelemetry.trace import SpanKind
 
 
 class RuntimeMetrics:
@@ -43,7 +23,6 @@ class RuntimeMetrics:
             "active_leases",
             "heartbeat_failures",
             "retries",
-            "dead_letters",
             "dlq_depth",
             "work_latency",
             "cancellations",
@@ -77,14 +56,6 @@ class RuntimeMetrics:
             return dict(self._values)
 
 
-_SHARED_RUNTIME_METRICS = RuntimeMetrics()
-
-
-def shared_runtime_metrics() -> RuntimeMetrics:
-    """Return the process-wide bounded runtime metric registry."""
-    return _SHARED_RUNTIME_METRICS
-
-
 class RuntimeTracer:
     """Small OTel adapter that records operation classes, never identifiers."""
 
@@ -92,61 +63,20 @@ class RuntimeTracer:
         self._tracer = trace.get_tracer(instrumentation_name)
 
     @contextmanager
-    def span(
-        self,
-        operation: str,
-        *,
-        parent: PropagationContext | None = None,
-        links: Sequence[TraceLink] = (),
-    ) -> Iterator[None]:
-        """Start a fixed-name span with validated provider-neutral causal metadata."""
-        require_operation(operation)
-        parent_context = (
-            set_span_in_context(NonRecordingSpan(_span_context(parent)))
-            if parent is not None
-            else None
-        )
+    def span(self, operation: str) -> Iterator[None]:
+        if operation not in {
+            "outbox.publish",
+            "queue.consume",
+            "work.claim",
+            "work.execute",
+            "work.reconcile",
+        }:
+            raise ValueError("unrecognized runtime operation")
         with self._tracer.start_as_current_span(
             operation,
             kind=SpanKind.INTERNAL,
-            context=parent_context,
-            links=[
-                Link(
-                    _link_context(link),
-                    {"aegis.link.kind": link.kind.value},
-                )
-                for link in links
-            ],
-            attributes={"aegis.schema.version": SEMANTIC_SCHEMA_VERSION},
         ):
             yield
 
 
-def _span_context(context: PropagationContext) -> SpanContext:
-    return SpanContext(
-        trace_id=int(context.trace_id, 16),
-        span_id=int(context.parent_span_id, 16),
-        is_remote=True,
-        trace_flags=TraceFlags(
-            TraceFlags.SAMPLED if context.sampled else TraceFlags.DEFAULT
-        ),
-        trace_state=(
-            TraceState.from_header([context.tracestate])
-            if context.tracestate is not None
-            else TraceState()
-        ),
-    )
-
-
-def _link_context(link: TraceLink) -> SpanContext:
-    return SpanContext(
-        trace_id=int(link.trace_id, 16),
-        span_id=int(link.span_id, 16),
-        is_remote=True,
-        trace_flags=TraceFlags(
-            TraceFlags.SAMPLED if link.sampled else TraceFlags.DEFAULT
-        ),
-    )
-
-
-__all__ = ["RuntimeMetrics", "RuntimeTracer", "shared_runtime_metrics"]
+__all__ = ["RuntimeMetrics", "RuntimeTracer"]

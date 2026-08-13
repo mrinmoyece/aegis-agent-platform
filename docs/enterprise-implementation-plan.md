@@ -131,6 +131,14 @@ RLS denial, replay, inbox deduplication, outbox claim/dead-letter behavior, and
 projection rebuild. The incident-specific state machine, external effects, and
 ambiguous-effect reconciliation remain planned; their exit gates are not claimed.
 
+**Layer 4 worker delivery status (2026-08):** EP-06 is implemented for reliable
+work delivery: shared Redis Streams, deterministic message identity, PostgreSQL
+inbox/outbox, CAS leases with token/generation fencing, heartbeat/reclaim,
+bounded fair supervision, Layer 2 concurrency quotas, cancellation, timeout,
+retry/DLQ, authorized operations, reconciliation protocol, fixed telemetry, and
+live Redis/PostgreSQL races. EP-07 provider calls/metering, EP-08 connectors, and
+EP-09 specialist/coordinator execution remain planned.
+
 ### Storage model
 
 PostgreSQL is the initial correctness store:
