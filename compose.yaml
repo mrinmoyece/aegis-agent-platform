@@ -11,7 +11,7 @@ services:
       AEGIS_HOST: 0.0.0.0
       AEGIS_PORT: 8080
       AEGIS_LOG_LEVEL: ${AEGIS_LOG_LEVEL:-INFO}
-      AEGIS_DATABASE_URL: postgresql://${AEGIS_POSTGRES_USER}:${AEGIS_POSTGRES_PASSWORD}@postgres:5432/${AEGIS_POSTGRES_DB}
+      AEGIS_DATABASE_URL: postgresql://aegis_runtime:${AEGIS_POSTGRES_APP_PASSWORD}@postgres:5432/${AEGIS_POSTGRES_DB}
       AEGIS_REDIS_URL: redis://redis:6379/0
       AEGIS_OIDC_ISSUER: http://localhost:${AEGIS_KEYCLOAK_PORT:-8081}/realms/aegis
       AEGIS_OIDC_JWKS_URL: http://keycloak:8080/realms/aegis/protocol/openid-connect/certs
@@ -48,12 +48,15 @@ services:
       POSTGRES_USER: ${AEGIS_POSTGRES_USER}
       POSTGRES_PASSWORD: ${AEGIS_POSTGRES_PASSWORD}
       POSTGRES_DB: ${AEGIS_POSTGRES_DB}
+      AEGIS_POSTGRES_APP_PASSWORD: ${AEGIS_POSTGRES_APP_PASSWORD}
     ports:
       - "127.0.0.1:${AEGIS_POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
       - ./migrations/0001_identity_governance.sql:/docker-entrypoint-initdb.d/20-identity-governance.sql:ro
+      - ./migrations/0002_durable_ledger.sql:/docker-entrypoint-initdb.d/30-durable-ledger.sql:ro
+      - ./docker/postgres/40-create-app-user.sh:/docker-entrypoint-initdb.d/40-create-app-user.sh:ro
     healthcheck:
       test:
         - CMD-SHELL

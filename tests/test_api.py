@@ -4,10 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
-from aegis_agent_platform.audit import AuditEventType, InMemoryAuditStore
+from aegis_agent_platform.audit import REDACTED, AuditEventType, InMemoryAuditStore
 from aegis_agent_platform.control_plane.api import ControlPlaneApp, application
+from aegis_agent_platform.domain import DomainEventType, EventEnvelope
+from aegis_agent_platform.event_store import EventPage, EventStore
 from aegis_agent_platform.identity import PLATFORM_TENANT_ID
 from aegis_agent_platform.policy import InMemoryPolicyRepository
 from aegis_agent_platform.tenancy import (
@@ -32,6 +37,7 @@ def request(
     authorization: str | None = None,
     headers: list[tuple[bytes, bytes]] | None = None,
     method: str = "GET",
+    query_string: str = "",
 ) -> tuple[int, dict[str, Any], list[tuple[bytes, bytes]]]:
     messages: list[dict[str, Any]] = []
 
@@ -52,6 +58,7 @@ def request(
                 "method": method,
                 "path": path,
                 "headers": request_headers,
+                "query_string": query_string.encode(),
             },
             receive,
             send,
@@ -108,7 +115,9 @@ class PatchedEnvironment:
                 os.environ[key] = value
 
 
-def secured_app() -> tuple[ControlPlaneApp, str, InMemoryAuditStore]:
+def secured_app(
+    *, event_store: EventStore | None = None
+) -> tuple[ControlPlaneApp, str, InMemoryAuditStore]:
     signing = signing_fixture()
     audit = InMemoryAuditStore()
     app = ControlPlaneApp(
@@ -116,8 +125,46 @@ def secured_app() -> tuple[ControlPlaneApp, str, InMemoryAuditStore]:
         tenants=InMemoryTenantRepository((Tenant(TENANT_ID, "Tenant Alpha"),)),
         policies=InMemoryPolicyRepository((tenant_policy(),)),
         audit=audit,
+        event_store=event_store,
     )
     return app, token(signing), audit
+
+
+class TimelineEventStore:
+    def __init__(self, event: EventEnvelope) -> None:
+        self.event = event
+        self.after_position = -1
+        self.after_version = -1
+
+    async def append(self, *args: object, **kwargs: object) -> int:
+        del args, kwargs
+        raise NotImplementedError
+
+    async def append_from_inbox(self, *args: object, **kwargs: object) -> object:
+        del args, kwargs
+        raise NotImplementedError
+
+    async def read_stream(
+        self, *args: object, **kwargs: object
+    ) -> AsyncIterator[EventEnvelope]:
+        del args
+        after_version = kwargs["after_version"]
+        assert isinstance(after_version, int)
+        self.after_version = after_version
+        if self.event.aggregate_sequence > after_version:
+            yield self.event
+
+    async def read_all(self, *args: object, **kwargs: object) -> EventPage:
+        del args
+        after_position = kwargs["after_position"]
+        assert isinstance(after_position, int)
+        self.after_position = after_position
+        return EventPage(
+            (self.event,)
+            if (self.event.global_position or 0) > self.after_position
+            else (),
+            None,
+        )
 
 
 def test_liveness_and_compatibility_alias() -> None:
@@ -246,3 +293,96 @@ def test_method_and_unknown_routes_are_explicit() -> None:
     assert method_status == 405
     assert unknown_status == 404
     assert body == {"status": "not-found"}
+
+
+def test_authorized_ledger_and_timeline_are_bounded_and_redacted() -> None:
+    item = EventEnvelope(
+        event_id=uuid4(),
+        tenant_id=str(TENANT_ID),
+        aggregate_id="run-1",
+        event_type=DomainEventType.RUN_STARTED,
+        schema_version=1,
+        occurred_at=datetime(2025, 1, 1, tzinfo=UTC),
+        recorded_at=datetime(2025, 1, 1, tzinfo=UTC),
+        aggregate_sequence=1,
+        global_position=1,
+        payload={"api_token": "do-not-return", "status": "running"},
+    )
+    store = TimelineEventStore(item)
+    app, encoded, _ = secured_app(event_store=store)  # type: ignore[arg-type]
+
+    ledger_status, ledger, _ = request(
+        "/v1/tenants/tenant-alpha/ledger",
+        app=app,
+        authorization=f"Bearer {encoded}",
+        query_string="cursor=0",
+    )
+    timeline_status, timeline, _ = request(
+        "/v1/tenants/tenant-alpha/runs/run-1/timeline",
+        app=app,
+        authorization=f"Bearer {encoded}",
+        query_string="cursor=0",
+    )
+
+    assert ledger_status == timeline_status == 200
+    assert store.after_position == 0
+    assert store.after_version == 0
+    assert ledger["events"][0]["payload"]["api_token"] == REDACTED
+    assert timeline["events"][0]["aggregate_sequence"] == 1
+    assert timeline["next_cursor"] is None
+
+
+def test_storage_routes_fail_closed_when_adapter_is_not_configured() -> None:
+    app, encoded, _ = secured_app()
+    authorization = f"Bearer {encoded}"
+
+    ledger_status, ledger, _ = request(
+        "/v1/tenants/tenant-alpha/ledger",
+        app=app,
+        authorization=authorization,
+    )
+    projection_status, projection, _ = request(
+        "/v1/tenants/tenant-alpha/projections/run-status",
+        app=app,
+        authorization=authorization,
+    )
+
+    assert ledger_status == projection_status == 503
+    assert ledger["error"]["code"] == "storage_not_configured"
+    assert projection["error"]["code"] == "storage_not_configured"
+
+
+def test_ledger_rejects_invalid_cursor() -> None:
+    app, encoded, _ = secured_app()
+
+    status, body, _ = request(
+        "/v1/tenants/tenant-alpha/ledger",
+        app=app,
+        authorization=f"Bearer {encoded}",
+        query_string="cursor=-1",
+    )
+
+    assert status == 400
+    assert body["error"]["code"] == "invalid_cursor"
+
+
+def test_readiness_includes_configured_storage_dependency() -> None:
+    async def available() -> bool:
+        return True
+
+    async def unavailable() -> bool:
+        return False
+
+    ready_status, ready, _ = request(
+        "/health/ready",
+        app=ControlPlaneApp(storage_ready=available),
+    )
+    failed_status, failed, _ = request(
+        "/health/ready",
+        app=ControlPlaneApp(storage_ready=unavailable),
+    )
+
+    assert ready_status == 200
+    assert ready["checks"] == ["configuration", "storage"]
+    assert failed_status == 503
+    assert failed["reason"] == "storage_unavailable"

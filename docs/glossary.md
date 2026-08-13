@@ -33,6 +33,9 @@ evidence, distinct from a fact.
 **Idempotency key** — Stable identifier allowing duplicate requests to resolve
 to one logical effect where the external system supports it.
 
+**Inbox** — Tenant/source/message deduplication record committed in the same
+transaction as the events produced by an incoming delivery.
+
 **Intent event** — Durable record of an exact planned side effect written before
 attempting it.
 
@@ -43,7 +46,17 @@ claims embedded in the token itself.
 **Lease** — Time-bounded claim on durable work; expiry permits recovery but does
 not by itself fence stale writers.
 
+**Outbox** — Mutable delivery state committed atomically with causing events. It
+supports at-least-once publication but is not authoritative run state.
+
 **Projection** — Rebuildable query view derived from the event ledger.
+
+**Projection checkpoint** — Monotonic per-tenant cursor advanced atomically with
+a projection page; it can be deleted and recreated from the ledger.
+
+**Row-level security (RLS)** — PostgreSQL policy restricting visible/writable rows
+to transaction-local trusted tenant context. `FORCE ROW LEVEL SECURITY` also
+subjects table owners unless they have explicit bypass authority.
 
 **Provider-neutral type** — Core contract that does not expose a vendor SDK
 object.

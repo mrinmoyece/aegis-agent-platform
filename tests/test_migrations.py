@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "migrations" / "0001_identity_governance.sql"
+LEDGER_MIGRATION = ROOT / "migrations" / "0002_durable_ledger.sql"
 
 
 def test_identity_governance_schema_has_tenant_constraints_and_indexes() -> None:
@@ -37,3 +39,52 @@ def test_audit_records_are_database_append_only() -> None:
 
     assert "before update or delete on security_audit_events" in schema
     assert "security audit records are append-only" in schema
+
+
+def test_ledger_schema_is_append_only_tenant_scoped_and_indexed() -> None:
+    schema = LEDGER_MIGRATION.read_text(encoding="utf-8").lower()
+
+    for table in (
+        "events",
+        "event_stream_heads",
+        "tenant_event_commit_locks",
+        "inbox_messages",
+        "outbox_messages",
+        "projection_checkpoints",
+        "run_status_projection",
+        "artifact_index_projection",
+        "pending_approvals_projection",
+        "usage_quota_projection",
+        "tenant_listing_projection",
+    ):
+        assert f"alter table {table} force row level security" in schema
+        assert f"{table}_tenant_isolation" in schema
+    assert "unique (tenant_id, aggregate_id, aggregate_sequence)" in schema
+    assert "before update or delete on events" in schema
+    assert "event records are append-only" in schema
+    adapter = (
+        (ROOT / "src" / "aegis_agent_platform" / "event_store" / "postgres.py")
+        .read_text(encoding="utf-8")
+        .lower()
+    )
+    assert "from tenant_event_commit_locks" in adapter
+    assert "for update skip locked" in adapter
+
+
+def test_migration_declares_explicit_maintenance_role_boundary() -> None:
+    schema = LEDGER_MIGRATION.read_text(encoding="utf-8").lower()
+
+    assert "aegis_app nologin noinherit nobypassrls" in schema
+    assert "aegis_maintenance nologin noinherit bypassrls" in schema
+    assert "revoke update, delete, truncate on events" in schema
+
+
+def test_destructive_migration_guard_rejects_optional_truncate_syntax() -> None:
+    pattern = re.compile(
+        r"^\s*(?:drop\s+table|truncate)\b",
+        re.MULTILINE,
+    )
+
+    assert pattern.search("TRUNCATE events;".lower())
+    assert pattern.search("TRUNCATE TABLE events;".lower())
+    assert not pattern.search("REVOKE TRUNCATE ON events;".lower())

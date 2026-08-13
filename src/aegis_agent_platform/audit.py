@@ -94,7 +94,9 @@ class AuditStore(Protocol):
         """Append one event after validating tenant context."""
         ...
 
-    def query(self, context: TenantContext) -> tuple[AuditEvent, ...]:
+    def query(
+        self, context: TenantContext, *, limit: int = 100
+    ) -> tuple[AuditEvent, ...]:
         """Return only events owned by the supplied tenant."""
         ...
 
@@ -110,7 +112,11 @@ class InMemoryAuditStore:
             raise ValueError("audit event tenant does not match trusted context")
         self._events.append(event)
 
-    def query(self, context: TenantContext) -> tuple[AuditEvent, ...]:
+    def query(
+        self, context: TenantContext, *, limit: int = 100
+    ) -> tuple[AuditEvent, ...]:
+        if not 1 <= limit <= 1_000:
+            raise ValueError("audit query limit must be between 1 and 1000")
         return tuple(
             event for event in self._events if event.tenant_id == context.tenant_id
-        )
+        )[-limit:]

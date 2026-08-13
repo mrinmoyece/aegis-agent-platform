@@ -311,14 +311,12 @@ demonstrate, and you should not assume from it, any of the following:
   exists and is Keycloak-compatible, but whether a real realm is reachable,
   populated, and correctly rotated is a deployment concern validated
   separately — see `getting-started.md` and `limitations.md`.
-- Durable persistence. The tenant, identity, policy, quota, and audit stores
-  used above are in-memory; the Postgres schema and row-level security exist
-  in `migrations/0001_identity_governance.sql`, but no adapter connects them
-  yet.
+- This walkthrough uses in-memory stores. Layer 3 separately provides durable
+  PostgreSQL repositories and live forced-RLS tests; see `durable-execution.md`.
 - Quota *enforcement* against real usage. `QuotaUsage` was supplied by hand
   here; an authoritative usage source is durable-runtime work for later
   layers.
-- A live database or live Keycloak proof. A committed automated test suite
+- A live Keycloak proof. A committed automated test suite
   (`tests/test_identity_security.py`, `tests/test_policy_security.py`,
   `tests/test_audit_secrets.py`, `tests/test_migrations.py`) does prove
   cross-tenant denial, malformed/expired/rotated-key tokens, and revoked-role
