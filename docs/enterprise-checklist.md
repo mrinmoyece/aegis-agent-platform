@@ -93,10 +93,12 @@ Status meanings:
 | Hardened Kubernetes sandbox Job adapter | Implemented | official client boundary and locked-down suspended manifest; no live cluster certification |
 | Production sandbox admission/runtime/network verification | Planned | cluster policy, runtime class, PID limit, default-deny network and egress proxy deployment evidence |
 | Authenticated bounded sandbox APIs and fake CLI/evals | Implemented | request/status/artifact/cleanup cursor routes and deterministic scenarios |
-| Tenant-safe memory and retrieval provenance | Planned | Layer 6 |
-| Three-tier working/episodic/semantic memory | Planned | Layer 6, `docs/protocols.md` |
-| PII-safe compaction, retention, and deletion | Planned | Layer 6 |
-| Data retention, export, and erasure workflows | Planned | Layer 6 |
+| Tenant-safe memory and retrieval provenance | Implemented | `domain.memory`, `memory`, migration `0009`, deterministic and live pgvector/RLS tests |
+| Three-tier working/episodic/semantic memory | Implemented | `docs/memory-and-rag.md`, ADR 0017, replay and context tests |
+| PII-safe compaction, retention, and deletion | Implemented | scanner/redaction hooks, cited fallback, legal hold/tombstone/blob-erasure tests; production DLP/blob store unverified |
+| Data retention, export, and erasure workflows | Implemented | TTL/legal hold/deletion/derived purge; export and backup expiry remain planned |
+| Deterministic hybrid pgvector RAG | Implemented | filtered lexical/vector ranking, MMR, exact citations, tenant-safe cache and live pgvector test |
+| Memory quotas and fenced lifecycle recovery | Implemented | atomic tenant-period reservations, durable intent/results, reconciliation and rebuild tests |
 | Deterministic specialist behavioral evaluations | Implemented | success, ambiguity, contradiction, budget, recovery; `make evals` |
 | Deterministic remediation behavioral evaluations | Implemented | approval success/denial/stale, ambiguity, verification/rollback, policy attack, crash recovery |
 | Versioned production evaluation datasets and baselines | Planned | Layer 10 |

@@ -2,7 +2,7 @@
 
 ## Current implementation
 
-Layers 1–9 can demonstrate architecture contracts, local
+Layers 1–10 can demonstrate architecture contracts, local
 infrastructure, tests, and an authenticated control-plane vertical slice for
 identity, tenancy, and governance (JWT verification, deny-by-default
 authorization, policy/quota decisions, redacted audit events), plus live
@@ -21,6 +21,9 @@ Layer 9 CLI adds approval-bound analysis, malicious input denial, bounded
 resource outcomes, artifact quarantine, ambiguous provisioning, and cleanup
 recovery. The demos use fake providers/connectors/actions/sandboxes only and
 cannot update a real incident.
+Layer 10 adds curated memory ingestion, cited hybrid retrieval, contradiction/
+poisoning handling, bounded compaction, tenant isolation, and derived purge with
+deterministic providers.
 The identity/tenancy slice runs against deterministic fixtures rather than a
 live-network Keycloak realm. Those omissions are later-layer acceptance work.
 
@@ -98,6 +101,18 @@ intent ordering, stable reconciliation identity, bounded redacted outputs, and
 quarantine. State explicitly that the fake launches no process and that the
 Kubernetes manifest is not evidence of deployed cluster isolation.
 
+## Run the Layer 10 fake memory demo
+
+```bash
+python -m aegis_agent_platform.memory
+```
+
+Show proposal/acceptance and intent ordering, exact citations, deterministic
+hybrid ranking, injection-as-data delimiters, contradiction abstention,
+compaction fallback, cross-tenant denial, and deletion. State that the embedding
+profile is deterministic/eight-dimensional and no live provider or production
+blob store is used.
+
 ## 30-minute architecture interview demo
 
 - **0–5:** Product, current status, and canonical incident.
@@ -119,7 +134,8 @@ Kubernetes manifest is not evidence of deployed cluster isolation.
 - **57–60:** Show event replay, cost/evaluation results, and unresolved gaps.
 
 Investigation, critique, proposal, approval, fake controlled execution,
-reconciliation, postcondition verification, and bounded fake sandbox analysis
-are implemented. Live systems, production credentials/cluster sandbox controls,
-operator UI, memory, and incident update remain planned, so the full production
-narrative is not yet claimable.
+reconciliation, postcondition verification, bounded fake sandbox analysis, and
+event-grounded memory/RAG are implemented. Live systems, production credentials/
+cluster sandbox controls, live models, production encrypted blob/key storage,
+operator UI, and incident update remain planned, so the full production narrative
+is not yet claimable.

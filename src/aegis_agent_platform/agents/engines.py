@@ -770,6 +770,11 @@ def _specialist_prompt(context: SpecialistContext) -> str:
             ),
             "upstream_artifacts": upstream,
             "untrusted_evidence_data": evidence,
+            "untrusted_retrieved_memory": (
+                context.memory_context.render_untrusted_data()
+                if context.memory_context is not None
+                else None
+            ),
         },
         sort_keys=True,
         separators=(",", ":"),

@@ -1,4 +1,4 @@
-# Getting started with Layers 1–9
+# Getting started with Layers 1–10
 
 This repository teaches the less visible part of agent engineering: deciding
 where durability, security, and vendor boundaries live before writing
@@ -10,7 +10,9 @@ the model gateway and cost governance. Layer 6 adds bounded evidence connectors
 and deterministic correlation. Layer 7 adds the governed durable specialist DAG.
 Layer 8 adds exact-scope approval, fenced controlled effects, reconciliation,
 and explicit postcondition verification. Layer 9 adds approval-bound hardened
-ephemeral analysis, safe artifacts, reconciliation, and cleanup.
+ephemeral analysis, safe artifacts, reconciliation, and cleanup. Layer 10 adds
+event-grounded working/episodic/semantic memory, deterministic context
+compaction, and tenant-safe provenance-preserving pgvector RAG.
 
 ## What you will inspect
 
@@ -33,7 +35,9 @@ ephemeral analysis, safe artifacts, reconciliation, and cleanup.
   reconciliation, verification, operations, and the deterministic fake demo.
 - `sandbox` defines strict contracts, policy, fenced lifecycle orchestration,
   safe workspace/artifacts, fake/Kubernetes backends, and redacted operations.
-- migrations `0001`–`0008` define governance, ledger, work state, leases, DLQ,
+- `memory` defines authorized ingestion, neutral embedding/summarization, hybrid
+  retrieval, context construction, lifecycle, quotas, and redacted operations.
+- migrations `0001`–`0009` define governance, ledger, work state, leases, DLQ,
   model budgets, evidence, specialist projections, roles, grants, triggers,
   forced RLS, inbox/outbox, and projections.
 - `compose.yaml` describes the local dependencies later layers will integrate.
@@ -62,7 +66,7 @@ identity provider — JWT verification is exercised against deterministic
 fixtures, not a live Keycloak realm.
 
 `make check` also runs `make evals`, which gates the fake checkout
-investigation, remediation, and sandbox matrices, including approval
+investigation, remediation, sandbox, and memory matrices, including approval
 denial/expiry, policy attack, malicious input, ambiguous reconciliation,
 verification failure, cleanup recovery, and crash recovery.
 
@@ -121,6 +125,17 @@ Also try `malicious-archive`, `timeout`, `oom`, `cancellation`, and
 event ordering and redacted result, then read the
 [sandbox tutorial and runbook](sandbox-execution.md). The official Kubernetes
 adapter is not invoked and no cluster isolation is claimed.
+
+## Run the fake-only memory and RAG demo
+
+```bash
+python -m aegis_agent_platform.memory
+```
+
+Inspect cited prior-incident/runbook retrieval, contradiction and poisoning
+handling, untrusted context delimiters, compaction, tenant denial, and derived
+purge. The demo uses deterministic eight-dimensional embeddings and no network,
+credential, or live model. Continue with [memory and RAG](memory-and-rag.md).
 
 ## Try the identity, tenancy, and governance slice
 

@@ -76,7 +76,7 @@ jobs:
     timeout-minutes: 10
     services:
       postgres:
-        image: postgres:16-alpine
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_DB: aegis_test
           POSTGRES_PASSWORD: local-ci-only

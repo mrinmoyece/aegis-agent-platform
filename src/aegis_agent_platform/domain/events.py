@@ -155,6 +155,50 @@ class DomainEventType(_StringConstant):
     ACTION_CANCELLED: ClassVar[DomainEventType]
     ACTION_VERIFICATION_REQUESTED: ClassVar[DomainEventType]
     ACTION_VERIFICATION_COMPLETED: ClassVar[DomainEventType]
+    MEMORY_CANDIDATE_PROPOSED: ClassVar[DomainEventType]
+    MEMORY_CANDIDATE_ACCEPTED: ClassVar[DomainEventType]
+    MEMORY_CANDIDATE_REJECTED: ClassVar[DomainEventType]
+    MEMORY_SOURCE_SNAPSHOT_RECORDED: ClassVar[DomainEventType]
+    MEMORY_SCAN_REQUESTED: ClassVar[DomainEventType]
+    MEMORY_REDACTION_COMPLETED: ClassVar[DomainEventType]
+    MEMORY_CLASSIFICATION_COMPLETED: ClassVar[DomainEventType]
+    MEMORY_SCAN_COMPLETED: ClassVar[DomainEventType]
+    MEMORY_SCAN_FAILED: ClassVar[DomainEventType]
+    MEMORY_QUARANTINED: ClassVar[DomainEventType]
+    MEMORY_CHUNKING_REQUESTED: ClassVar[DomainEventType]
+    MEMORY_CHUNKING_COMPLETED: ClassVar[DomainEventType]
+    MEMORY_EMBEDDING_REQUESTED: ClassVar[DomainEventType]
+    MEMORY_EMBEDDING_COMPLETED: ClassVar[DomainEventType]
+    MEMORY_EMBEDDING_FAILED: ClassVar[DomainEventType]
+    MEMORY_INDEXING_REQUESTED: ClassVar[DomainEventType]
+    MEMORY_INDEXING_COMPLETED: ClassVar[DomainEventType]
+    MEMORY_INDEXING_FAILED: ClassVar[DomainEventType]
+    MEMORY_RETRIEVAL_REQUESTED: ClassVar[DomainEventType]
+    MEMORY_RETRIEVAL_COMPLETED: ClassVar[DomainEventType]
+    MEMORY_RETRIEVAL_FAILED: ClassVar[DomainEventType]
+    MEMORY_CONTEXT_SELECTED: ClassVar[DomainEventType]
+    MEMORY_CONTEXT_COMPACTED: ClassVar[DomainEventType]
+    MEMORY_SUMMARY_REQUESTED: ClassVar[DomainEventType]
+    MEMORY_SUMMARY_COMPLETED: ClassVar[DomainEventType]
+    MEMORY_SUMMARY_REJECTED: ClassVar[DomainEventType]
+    MEMORY_FEEDBACK_RECORDED: ClassVar[DomainEventType]
+    MEMORY_QUALITY_UPDATED: ClassVar[DomainEventType]
+    MEMORY_SUPERSESSION_REQUESTED: ClassVar[DomainEventType]
+    MEMORY_SUPERSEDED: ClassVar[DomainEventType]
+    MEMORY_TOMBSTONE_REQUESTED: ClassVar[DomainEventType]
+    MEMORY_TOMBSTONED: ClassVar[DomainEventType]
+    MEMORY_RETENTION_UPDATE_REQUESTED: ClassVar[DomainEventType]
+    MEMORY_RETENTION_UPDATED: ClassVar[DomainEventType]
+    MEMORY_LEGAL_HOLD_UPDATE_REQUESTED: ClassVar[DomainEventType]
+    MEMORY_LEGAL_HOLD_PLACED: ClassVar[DomainEventType]
+    MEMORY_LEGAL_HOLD_RELEASED: ClassVar[DomainEventType]
+    MEMORY_DELETION_REQUESTED: ClassVar[DomainEventType]
+    MEMORY_DELETION_COMPLETED: ClassVar[DomainEventType]
+    MEMORY_CRYPTO_ERASURE_REQUESTED: ClassVar[DomainEventType]
+    MEMORY_CRYPTO_ERASURE_COMPLETED: ClassVar[DomainEventType]
+    MEMORY_REBUILD_REQUESTED: ClassVar[DomainEventType]
+    MEMORY_REBUILD_COMPLETED: ClassVar[DomainEventType]
+    MEMORY_CHECKPOINT_RECORDED: ClassVar[DomainEventType]
     SANDBOX_REQUESTED: ClassVar[DomainEventType]
     SANDBOX_POLICY_EVALUATED: ClassVar[DomainEventType]
     SANDBOX_APPROVAL_BOUND: ClassVar[DomainEventType]
@@ -180,6 +224,130 @@ class DomainEventType(_StringConstant):
     SANDBOX_QUARANTINED: ClassVar[DomainEventType]
     SANDBOX_RECONCILIATION_REQUESTED: ClassVar[DomainEventType]
     SANDBOX_RECONCILED: ClassVar[DomainEventType]
+DomainEventType.MEMORY_CANDIDATE_PROPOSED = DomainEventType._define(
+    "memory.candidate_proposed.v1"
+)
+DomainEventType.MEMORY_CANDIDATE_ACCEPTED = DomainEventType._define(
+    "memory.candidate_accepted.v1"
+)
+DomainEventType.MEMORY_CANDIDATE_REJECTED = DomainEventType._define(
+    "memory.candidate_rejected.v1"
+)
+DomainEventType.MEMORY_SOURCE_SNAPSHOT_RECORDED = DomainEventType._define(
+    "memory.source_snapshot_recorded.v1"
+)
+DomainEventType.MEMORY_SCAN_REQUESTED = DomainEventType._define(
+    "memory.scan_requested.v1"
+)
+DomainEventType.MEMORY_REDACTION_COMPLETED = DomainEventType._define(
+    "memory.redaction_completed.v1"
+)
+DomainEventType.MEMORY_CLASSIFICATION_COMPLETED = DomainEventType._define(
+    "memory.classification_completed.v1"
+)
+DomainEventType.MEMORY_SCAN_COMPLETED = DomainEventType._define(
+    "memory.scan_completed.v1"
+)
+DomainEventType.MEMORY_SCAN_FAILED = DomainEventType._define("memory.scan_failed.v1")
+DomainEventType.MEMORY_QUARANTINED = DomainEventType._define("memory.quarantined.v1")
+DomainEventType.MEMORY_CHUNKING_REQUESTED = DomainEventType._define(
+    "memory.chunking_requested.v1"
+)
+DomainEventType.MEMORY_CHUNKING_COMPLETED = DomainEventType._define(
+    "memory.chunking_completed.v1"
+)
+DomainEventType.MEMORY_EMBEDDING_REQUESTED = DomainEventType._define(
+    "memory.embedding_requested.v1"
+)
+DomainEventType.MEMORY_EMBEDDING_COMPLETED = DomainEventType._define(
+    "memory.embedding_completed.v1"
+)
+DomainEventType.MEMORY_EMBEDDING_FAILED = DomainEventType._define(
+    "memory.embedding_failed.v1"
+)
+DomainEventType.MEMORY_INDEXING_REQUESTED = DomainEventType._define(
+    "memory.indexing_requested.v1"
+)
+DomainEventType.MEMORY_INDEXING_COMPLETED = DomainEventType._define(
+    "memory.indexing_completed.v1"
+)
+DomainEventType.MEMORY_INDEXING_FAILED = DomainEventType._define(
+    "memory.indexing_failed.v1"
+)
+DomainEventType.MEMORY_RETRIEVAL_REQUESTED = DomainEventType._define(
+    "memory.retrieval_requested.v1"
+)
+DomainEventType.MEMORY_RETRIEVAL_COMPLETED = DomainEventType._define(
+    "memory.retrieval_completed.v1"
+)
+DomainEventType.MEMORY_RETRIEVAL_FAILED = DomainEventType._define(
+    "memory.retrieval_failed.v1"
+)
+DomainEventType.MEMORY_CONTEXT_SELECTED = DomainEventType._define(
+    "memory.context_selected.v1"
+)
+DomainEventType.MEMORY_CONTEXT_COMPACTED = DomainEventType._define(
+    "memory.context_compacted.v1"
+)
+DomainEventType.MEMORY_SUMMARY_REQUESTED = DomainEventType._define(
+    "memory.summary_requested.v1"
+)
+DomainEventType.MEMORY_SUMMARY_COMPLETED = DomainEventType._define(
+    "memory.summary_completed.v1"
+)
+DomainEventType.MEMORY_SUMMARY_REJECTED = DomainEventType._define(
+    "memory.summary_rejected.v1"
+)
+DomainEventType.MEMORY_FEEDBACK_RECORDED = DomainEventType._define(
+    "memory.feedback_recorded.v1"
+)
+DomainEventType.MEMORY_QUALITY_UPDATED = DomainEventType._define(
+    "memory.quality_updated.v1"
+)
+DomainEventType.MEMORY_SUPERSESSION_REQUESTED = DomainEventType._define(
+    "memory.supersession_requested.v1"
+)
+DomainEventType.MEMORY_SUPERSEDED = DomainEventType._define("memory.superseded.v1")
+DomainEventType.MEMORY_TOMBSTONE_REQUESTED = DomainEventType._define(
+    "memory.tombstone_requested.v1"
+)
+DomainEventType.MEMORY_TOMBSTONED = DomainEventType._define("memory.tombstoned.v1")
+DomainEventType.MEMORY_RETENTION_UPDATE_REQUESTED = DomainEventType._define(
+    "memory.retention_update_requested.v1"
+)
+DomainEventType.MEMORY_RETENTION_UPDATED = DomainEventType._define(
+    "memory.retention_updated.v1"
+)
+DomainEventType.MEMORY_LEGAL_HOLD_UPDATE_REQUESTED = DomainEventType._define(
+    "memory.legal_hold_update_requested.v1"
+)
+DomainEventType.MEMORY_LEGAL_HOLD_PLACED = DomainEventType._define(
+    "memory.legal_hold_placed.v1"
+)
+DomainEventType.MEMORY_LEGAL_HOLD_RELEASED = DomainEventType._define(
+    "memory.legal_hold_released.v1"
+)
+DomainEventType.MEMORY_DELETION_REQUESTED = DomainEventType._define(
+    "memory.deletion_requested.v1"
+)
+DomainEventType.MEMORY_DELETION_COMPLETED = DomainEventType._define(
+    "memory.deletion_completed.v1"
+)
+DomainEventType.MEMORY_CRYPTO_ERASURE_REQUESTED = DomainEventType._define(
+    "memory.crypto_erasure_requested.v1"
+)
+DomainEventType.MEMORY_CRYPTO_ERASURE_COMPLETED = DomainEventType._define(
+    "memory.crypto_erasure_completed.v1"
+)
+DomainEventType.MEMORY_REBUILD_REQUESTED = DomainEventType._define(
+    "memory.rebuild_requested.v1"
+)
+DomainEventType.MEMORY_REBUILD_COMPLETED = DomainEventType._define(
+    "memory.rebuild_completed.v1"
+)
+DomainEventType.MEMORY_CHECKPOINT_RECORDED = DomainEventType._define(
+    "memory.checkpoint_recorded.v1"
+)
 
 
 DomainEventType.INVESTIGATION_REQUESTED = DomainEventType._define(
