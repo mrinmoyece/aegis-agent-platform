@@ -166,7 +166,8 @@ event-grounded memory/RAG and Layer 11 deterministic evaluation are implemented.
 Live systems, production credentials/cluster sandbox controls, live model/
 connector qualification, production encrypted blob/key storage, model-judge
 execution, independent penetration/accessibility testing, large-scale human
-labeling, live production identity/browser qualification, MCP/A2A, production SLO
+labeling, live production identity/browser qualification, public protocol federation,
+production PKI/token brokerage, production SLO
 attainment, HA/DR/multi-region, final load/chaos certification, and incident
 update remain planned, so the full production narrative is not yet claimable.
 
@@ -196,3 +197,22 @@ exporter-outage containment, time-travel diff, and a digested support report.
 8. Close with `production_ready: false` and the live identity/browser/deployment
    gaps in [operator-ui.md](operator-ui.md).
 State that SLOs are configured locally and no production attainment is claimed.
+
+## Layer 14 MCP/A2A demo
+
+1. Run `python -m aegis_agent_platform.protocols safe-retrieval` and show that
+   policy/request events precede the fake adapter call and raw content is absent.
+2. Run `artifact-exchange`; show the untrusted cited A2A artifact lifecycle and
+   internal `aegis-artifact://` reference.
+3. Run `remediation-proposal`; emphasize that no approval or execution capability
+   exists and the request only becomes a Layer 8 proposal.
+4. Run `ambiguous-reconciliation` and `cancellation`; show observe-before-retry
+   and explicit cancellation acknowledgement rather than exactly-once claims.
+5. Run `capability-drift`, `malicious-content`, `tenant-attack`, and `revocation`;
+   show quarantine/denial occurs before external authority is used.
+6. Open the operator **MCP & A2A trust** view. Review pinned protocol/version/
+   transport/digest, type the exact peer ID, and record a quarantine decision.
+7. Run `make protocol-check` and the eight `protocol.*` eval cases.
+8. Close with `production_ready: false`: no live external agents, network,
+   credentials, public federation, production PKI/mTLS, or partner qualification
+   are used by required tests.

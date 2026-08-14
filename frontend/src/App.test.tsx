@@ -63,6 +63,30 @@ describe('operator application', () => {
     expect(dialog).toHaveTextContent('not an action-success signal');
   });
 
+  it('binds protocol trust changes to the pinned peer scope', async () => {
+    const user = await signIn();
+    await user.click(screen.getByRole('link', { name: 'MCP & A2A trust' }));
+
+    expect(screen.getByText('Protocol peer registry')).toBeInTheDocument();
+    expect(screen.getAllByText(/fails closed outside local demo/i)).not.toHaveLength(0);
+    const [reviewTrust] = screen.getAllByRole('button', { name: 'Review trust' });
+    if (reviewTrust === undefined) {
+      throw new Error('missing trust review control');
+    }
+    await user.click(reviewTrust);
+
+    const confirmation = screen.getByLabelText(
+      /Type peer-mcp-deterministic to confirm/,
+    );
+    const submit = screen.getByRole('button', { name: 'Record quarantine' });
+    expect(submit).toBeDisabled();
+    await user.type(confirmation, 'peer-mcp-deterministic');
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+
+    expect(screen.getByText(/is quarantined/i)).toBeInTheDocument();
+  });
+
   it('clears tenant-scoped data before tenant re-authentication', async () => {
     const user = await signIn();
     await user.click(

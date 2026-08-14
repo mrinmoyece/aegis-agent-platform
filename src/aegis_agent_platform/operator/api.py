@@ -28,6 +28,7 @@ from aegis_agent_platform.operator.contracts import (
     ApprovalDecisionCommand,
     OperatorCommandService,
     OperatorViewService,
+    PeerTrustCommand,
 )
 from aegis_agent_platform.operator.session import InMemoryOperatorSessionStore
 from aegis_agent_platform.tenancy import TenantContext
@@ -281,6 +282,23 @@ class OperatorBffApp:
                 session,
             )
             return
+        if (
+            method == "POST"
+            and len(segments) == 8
+            and segments[4] == "protocol-peers"
+            and segments[6:] == ["trust", "record"]
+        ):
+            await self._change_peer_trust(
+                scope,
+                receive,
+                send,
+                request_id,
+                principal,
+                tenant_id,
+                segments[5],
+                session,
+            )
+            return
         await _respond(
             send, 404, _error("not_found", request_id), request_id=request_id
         )
@@ -511,6 +529,127 @@ class OperatorBffApp:
             details={
                 "approval_id": approval_id,
                 "decision_status": result.status,
+                "duplicate": result.duplicate,
+            },
+        )
+        await _respond(
+            send,
+            202,
+            result.to_dict(),
+            request_id=request_id,
+            extra_headers=[(b"etag", f'"{result.version}"'.encode())],
+        )
+
+    async def _change_peer_trust(
+        self,
+        scope: AsgiMessage,
+        receive: Receive,
+        send: Send,
+        request_id: str,
+        principal: Principal,
+        tenant_id: TenantId,
+        peer_id: str,
+        session: object,
+    ) -> None:
+        from aegis_agent_platform.operator.session import OperatorSession
+
+        if not isinstance(session, OperatorSession) or not self._mutation_guard(
+            scope, session
+        ):
+            await _respond(
+                send,
+                403,
+                _error("csrf_or_origin_denied", request_id),
+                request_id=request_id,
+            )
+            return
+        if not await self._authorized(
+            principal,
+            tenant_id,
+            Permission.PROTOCOL_TRUST_MANAGE,
+            "operator.protocol.trust",
+            request_id,
+        ):
+            await _respond(
+                send,
+                403,
+                _error("authorization_denied", request_id),
+                request_id=request_id,
+            )
+            return
+        if self._commands is None:
+            await _respond(
+                send,
+                503,
+                _error(
+                    "operator_commands_not_configured",
+                    request_id,
+                    retryable=True,
+                ),
+                request_id=request_id,
+            )
+            return
+        try:
+            body = await _request_json(receive)
+            idempotency_key = _single_header(scope, b"idempotency-key")
+            expected_version = _unquote_etag(_single_header(scope, b"if-match"))
+            if idempotency_key is None or expected_version is None:
+                raise KeyError("mutation headers are required")
+            if body.get("peer_id") != peer_id:
+                raise ValueError("protocol peer route and body differ")
+            command = PeerTrustCommand(
+                peer_id,
+                _required_string(body, "peer_digest"),
+                _required_string(body, "decision"),
+                _required_string(body, "rationale_code"),
+                expected_version,
+                idempotency_key,
+            )
+            result = await self._commands.change_peer_trust(
+                principal,
+                TenantContext(tenant_id),
+                command,
+                at=self._clock(),
+            )
+        except KeyError:
+            await _respond(
+                send,
+                422,
+                _error("invalid_or_stale_peer_scope", request_id),
+                request_id=request_id,
+            )
+            return
+        except LookupError:
+            await _respond(
+                send, 404, _error("not_found", request_id), request_id=request_id
+            )
+            return
+        except RuntimeError:
+            await _respond(
+                send,
+                409,
+                _error("concurrency_conflict", request_id, retryable=True),
+                request_id=request_id,
+            )
+            return
+        except (TypeError, ValueError, json.JSONDecodeError):
+            await _respond(
+                send,
+                422,
+                _error("invalid_or_stale_peer_scope", request_id),
+                request_id=request_id,
+            )
+            return
+        await self._audit_access(
+            principal,
+            tenant_id,
+            "operator.protocol.trust",
+            AuditOutcome.SUCCESS,
+            request_id,
+            event_type=AuditEventType.OPERATOR_MUTATION,
+            details={
+                "peer_id": peer_id,
+                "trust_status": result.status,
                 "duplicate": result.duplicate,
             },
         )

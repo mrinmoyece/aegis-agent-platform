@@ -23,8 +23,9 @@
   hooks, retention/deletion, and context compaction are implemented. Live model
   verification, encrypted production blob/key storage, external DLP/malware
   services, backup expiry, and production load evidence are not.
-- No MCP or A2A endpoint exists. Neither protocol currently provides discovery,
-  tool access, external task exchange, streaming, cancellation, or status.
+- MCP and A2A endpoints are deterministic/local interoperability boundaries,
+  not production federation. They provide curated tool/context and external
+  task/artifact/status/cancellation flows, but no live partners or credentials.
 - CI emits a frontend CycloneDX SBOM and builds images, but does not emit signed
   provenance, a promoted release artifact, or deployment evidence.
 
@@ -54,7 +55,8 @@
   human-label calibration do not exist.
 - Full production model/connector qualification, independent penetration/
   accessibility testing, large-scale human labeling, live production
-  identity/browser qualification, MCP/A2A, production SLO evidence, HA/DR and
+  identity/browser qualification, production protocol federation/PKI/token
+  brokerage, production SLO evidence, HA/DR and
   multi-region, and final load/chaos certification remain deferred.
 
 ## Current Layer 5 implementation (model gateway)
@@ -147,7 +149,7 @@
 - These controls do not prove that a model's semantic conclusion is correct.
   Layer 8 supplies the separate human approval and execution boundary. There is
   no live connector/model/action verification, production-qualified operator UI,
-  MCP/A2A adapter, broad autonomous remediation, production deployment, HA,
+  production protocol federation, broad autonomous remediation, production deployment, HA,
   backup/restore, or operational SLO evidence.
 
 ## Current Layer 8 implementation (approval-gated remediation)
@@ -179,7 +181,8 @@
   official client.
 - Unrestricted interactive sandboxing, capability credential brokering,
   arbitrary or destructive actions, live external verification,
-  production-qualified operator UI, MCP/A2A, production Kubernetes deployment,
+  production-qualified operator UI, production protocol federation/PKI,
+  production Kubernetes deployment,
   HA/DR, multi-region,
   and broad autonomous remediation remain deferred.
 
@@ -220,7 +223,7 @@
 - APIs expose only authenticated bounded redacted request/status/artifact/
   cleanup views. There is no attach, interactive exec, log streaming, raw
   artifact download, or production mutation endpoint.
-- Production-qualified operator UI, MCP/A2A, live external verification, HA/DR,
+- Production-qualified operator UI, public protocol federation, live external verification, HA/DR,
   multi-region, and broad autonomous production mutation remain deferred.
 
 ## Current Layer 10 implementation (event-grounded memory and RAG)
@@ -246,7 +249,8 @@
   erasure is not claimed.
 - APIs, CLI/demo, tests, and evals are deterministic and use no live external
   model. The implemented embedding profile is fixed at eight dimensions.
-- Production-qualified operator identity/browser deployment, MCP/A2A, live provider
+- Production-qualified operator identity/browser deployment, production protocol
+  federation/PKI/token brokerage, live provider
   verification, production encrypted blob/key management, advanced DLP/malware
   services, HA/DR, multi-region/global
   cache coherence, backup expiry, and final production load evidence remain
@@ -357,9 +361,17 @@ debugger, tests, and deterministic evals are implemented. The application does
 not yet provide qualified production OTel SDK/exporter evidence, a production
 trace/log backend, long-window production SLI history, external managed backend
 qualification, or a proven 24/7 on-call rotation. Local collector buffering is
-ephemeral. Live production identity/browser qualification, MCP/A2A, HA/DR/multi-region,
+ephemeral. Live production identity/browser qualification, public protocol
+federation and PKI/token brokerage, HA/DR/multi-region,
 final load/chaos, independent penetration/accessibility testing, and compliance
 certification remain deferred.
+
+Layer 14's MCP `2026-07-28` / `mcp==2.0.0` and A2A `1.0` specification
+`v1.0.1` / `a2a-sdk==1.1.2` compatibility is exercised with deterministic fake
+peers. This is not independent protocol conformance certification. Production
+readiness remains false without deployed PKI/mTLS, distributed token brokerage,
+credential rotation/revocation, egress qualification, external partner
+qualification, load/chaos, HA/DR, and multi-region evidence.
 
 ## Layer 13 limitations
 

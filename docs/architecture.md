@@ -548,18 +548,20 @@ approvals, or policy changes. See `memory-and-rag.md` and ADR 0017.
 
 ## Protocol positioning
 
-Internal typed domain ports and ledger events provide correctness. MCP may later
-adapt tools and context sources, but remains behind tenant authorization,
-runtime policy, schema validation, credential brokering, and
-intent-before-effect. A2A is planned only for external agent interoperability:
-Agent Card discovery, authenticated task/message/artifact exchange,
-streaming/status/cancellation, and tenant/policy propagation.
+Internal typed domain ports and ledger events provide correctness. Layer 14 MCP
+adapts curated tools and context sources behind tenant authorization, runtime
+policy, schema validation, credential references, and intent-before-effect. A2A
+supports only external interoperability: signed/digest-pinned Agent Card
+discovery, authenticated task/message/artifact exchange,
+streaming/status/cancellation, and tenant/policy binding.
 
 Every A2A lifecycle transition must map durably into the event ledger with
 idempotency, replay protection, deadlines, and reconciliation. External agents
 cannot become internal peers, spawn specialists, mutate incident state directly,
-or bypass approvals. See `protocols.md` for the complete boundary and planned
-conformance/security evidence.
+or bypass approvals. Exact peer/capability/request digests bind durable
+intent/result/ambiguity/reconciliation events, while forced-RLS projections stay
+rebuildable. See `protocols.md` for compatibility, controls, and production
+gaps.
 
 ## Durable run model
 

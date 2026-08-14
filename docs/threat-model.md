@@ -94,8 +94,10 @@ never trusted as controls.
 | Memory poisoning | Hostile or stale knowledge biases incident response | Acceptance, provenance, scanning, source quality, recency, critique, deletion | Implemented with deterministic scanner hooks; external DLP/malware service unverified |
 | Compaction loss | Summary drops conflict, approval, or safety limits | Citation-preserving validation, rejection, deterministic fallback, and tests | Implemented |
 | Cross-tenant embedding leak | Semantic search returns another tenant's data | Tenant/ACL filtering, forced RLS, tenant cache keys, adversarial retrieval tests | Implemented |
-| A2A peer spoofing/replay | External agent injects or repeats tasks/artifacts | Authenticated peers, task binding, idempotency, replay protection | Planned |
-| Protocol authority bypass | MCP/A2A message invokes tools outside policy | Treat as untrusted adapter input; enforce internal runtime controls | Planned |
+| A2A peer spoofing/replay | External agent injects or repeats tasks/artifacts | Authenticated tenant-bound peers, signed/pinned card, task binding, idempotency, replay protection | Implemented deterministic/local |
+| Protocol authority bypass | MCP/A2A message invokes tools outside policy | Treat as untrusted adapter input; enforce local RBAC/purpose/risk/budget/approval; remediation is proposal-only | Implemented deterministic/local |
+| Capability/card/schema drift | Trusted peer silently expands authority | Exact digest/revision review, immutable trust history, quarantine and emergency revocation | Implemented deterministic/local |
+| Protocol SSRF/poisoning/schema bombs | Peer redirects egress or injects instructions/oversized structures | HTTPS destination allowlist, DNS/IP/redirect guards, strict schema/depth/size/Unicode/MIME validation, provenance labels | Implemented deterministic/local |
 
 ## Abuse cases
 
@@ -264,7 +266,8 @@ credential rotation, and operator escalation.
 At-least-once delivery means a provider effect may remain ambiguous after a
 network partition or crash. Stable idempotency and reconciliation reduce blind
 duplicates but cannot prove exactly once. Unrestricted interactive sandboxing,
-arbitrary production commands, production-qualified operator UI, MCP/A2A, broad
+arbitrary production commands, production-qualified operator UI, public protocol
+federation and production PKI/token brokerage, broad
 autonomous remediation, live external verification, production deployment, HA/DR, and
 multi-region operation remain absent.
 
@@ -333,6 +336,24 @@ production identity/browser behavior.
 
 Full production model/connector and telemetry qualification, independent
 penetration/accessibility testing, large-scale human labeling, live production
-identity/browser qualification, MCP/A2A, external managed backends, 24/7 on-call
+identity/browser qualification, public protocol federation, external managed backends, 24/7 on-call
 evidence, HA/DR, multi-region operation, final load/chaos certification, and
 compliance certification remain deferred.
+
+## Layer 14 protocol boundary
+
+MCP descriptions/resources/tool results and A2A cards/messages/artifacts are
+untrusted data. Authentication never delegates authority: exact tenant,
+principal, audience, scope, purpose, peer revision, capability/card/schema
+digest, risk, quota, and budget are rechecked by local application services.
+External agents cannot approve, execute remediation, spawn internal specialists,
+alter policy, or write ledger facts directly.
+
+Intent is appended before network delivery. Duplicate delivery is suppressed by
+stable idempotency; ambiguous delivery is represented explicitly and reconciled
+by observing status before retry under a current fencing token. Returned content
+is bounded, schema/MIME/Unicode validated, provenance labeled, and represented
+by internal artifact references. HTTPS allowlists plus DNS/IP/redirect
+validation fail closed against SSRF/rebinding/exfiltration. Digest drift,
+signature failure, unknown content, replay, tenant mismatch, and revocation
+quarantine or deny before authority is used.

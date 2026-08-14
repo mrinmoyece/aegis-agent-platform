@@ -151,3 +151,26 @@ correctness dependencies do. See
 
 See [operator-ui.md](operator-ui.md) for triage and
 [operator-accessibility.md](operator-accessibility.md) for release checks.
+
+## Layer 14 protocol boundary failures
+
+- Peer/card/capability/schema/key/certificate digest drift quarantines before
+  network I/O; reviewed authority is never expanded automatically.
+- Incomplete authentication, audience, scope, proof, tenant, purpose, risk,
+  quota, budget, version, content type, or schema validation denies by default.
+- Invocation/task intent precedes delivery. A crash after possible delivery is
+  ambiguous, not failed or complete, until observe-before-retry reconciliation.
+- Stale fencing tokens cannot complete, cancel, or reconcile an operation;
+  duplicate idempotency keys resolve to the established operation.
+- Cancellation is requested and acknowledged explicitly. A local timeout does
+  not prove remote cancellation or exactly-once behavior.
+- Unknown MIME, external artifact URLs, oversized/deep JSON, control tricks,
+  malicious instructions, forged progress/artifacts, and tenant mismatch are
+  rejected or quarantined without persisting raw content.
+- Circuit breaking, bounded retries, quotas, budgets, cancellation, and
+  backpressure prevent protocol outage from corrupting local runs or creating an
+  unbounded denial-of-wallet loop.
+- Revocation blocks new calls immediately; ambiguous in-flight work remains
+  visible for reconciliation and operator escalation.
+- Production readiness fails closed without deployed PKI/mTLS/token brokerage,
+  egress controls, partner identity, rotation/revocation, and capacity evidence.

@@ -212,7 +212,16 @@ export interface components {
 }
 `;
 
-await writeFile(outputPath, generated, 'utf8');
+if (process.argv.includes('--check')) {
+  const current = await readFile(outputPath, 'utf8');
+  if (current !== generated) {
+    throw new Error(
+      'Generated operator API contracts differ; run pnpm contract:generate',
+    );
+  }
+} else {
+  await writeFile(outputPath, generated, 'utf8');
+}
 
 function union(schema, name) {
   if (

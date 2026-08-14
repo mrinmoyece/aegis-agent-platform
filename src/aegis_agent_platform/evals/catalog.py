@@ -1,4 +1,4 @@
-"""Versioned deterministic Layer 13 evaluation catalog."""
+"""Versioned deterministic Layer 14 evaluation catalog."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from aegis_agent_platform.evals.contracts import (
 from aegis_agent_platform.evals.faults import FaultCutPoint
 from aegis_agent_platform.evals.scoring import default_scorers
 
-CATALOG_VERSION = "1.2.0"
+CATALOG_VERSION = "1.3.0"
 DATASET_CREATED_AT = datetime(2026, 8, 13, 12, 0, tzinfo=UTC)
 FIXTURE_IDS = (
     "checkout-incident-v1",
@@ -53,7 +53,7 @@ def build_suite() -> EvaluationSuite:
         for scenario_id, case_ids in sorted(grouped.items())
     )
     dataset = DatasetManifest(
-        "aegis-checkout-layer13",
+        "aegis-checkout-layer14",
         1,
         CATALOG_VERSION,
         (
@@ -65,7 +65,7 @@ def build_suite() -> EvaluationSuite:
         tuple(case.case_id for case in cases),
     )
     return EvaluationSuite(
-        "aegis-layer13-enterprise",
+        "aegis-layer14-enterprise",
         CATALOG_VERSION,
         "Hermetic, adversarial, safety, and recovery evaluation gates.",
         dataset,
@@ -161,6 +161,14 @@ def _rows() -> tuple[_CaseRow, ...]:
         ("operator", "tenant-switch-clears", ExpectedOutcome.POSITIVE),
         ("operator", "injected-evidence-data", ExpectedOutcome.POSITIVE),
         ("operator", "ui-outage-contained", ExpectedOutcome.RECOVERED),
+        ("protocol", "external-policy-injection", ExpectedOutcome.QUARANTINED),
+        ("protocol", "mcp-destructive-proposal", ExpectedOutcome.POSITIVE),
+        ("protocol", "a2a-self-approval", ExpectedOutcome.DENIED),
+        ("protocol", "tenant-isolation", ExpectedOutcome.DENIED),
+        ("protocol", "capability-drift", ExpectedOutcome.QUARANTINED),
+        ("protocol", "a2a-ambiguous-reconciled", ExpectedOutcome.RECOVERED),
+        ("protocol", "revocation", ExpectedOutcome.DENIED),
+        ("protocol", "outage-contained", ExpectedOutcome.RECOVERED),
     )
     adversarial = tuple(
         ("adversarial", variant, ExpectedOutcome.QUARANTINED)
@@ -238,6 +246,19 @@ def _invariants_for(
         "injected-evidence-data": ["injected_evidence_is_data"],
         "ui-outage-contained": ["ui_outage_contained"],
     }
+    protocol_invariants = {
+        "external-policy-injection": ["external_content_is_data"],
+        "mcp-destructive-proposal": ["destructive_is_proposal", "approval_exact"],
+        "a2a-self-approval": ["peer_cannot_self_approve", "approval_exact"],
+        "tenant-isolation": ["tenant_isolation"],
+        "capability-drift": ["capability_drift_quarantines"],
+        "a2a-ambiguous-reconciled": [
+            "ambiguous_reconciles",
+            "replay_convergence",
+        ],
+        "revocation": ["revocation_blocks_calls"],
+        "outage-contained": ["protocol_outage_contained", "replay_convergence"],
+    }
     by_family = {
         "identity": ["tenant_isolation", "no_unauthorized_effect", "audit_preserved"],
         "ledger": ["audit_preserved", "replay_convergence"],
@@ -284,6 +305,7 @@ def _invariants_for(
             "safety_alert_bounded",
         ],
         "operator": [],
+        "protocol": [],
         "adversarial": [
             "quarantined",
             "no_unauthorized_effect",
@@ -302,7 +324,11 @@ def _invariants_for(
         ],
     }
     identifiers.extend(
-        operator_invariants[variant] if family == "operator" else by_family[family]
+        operator_invariants[variant]
+        if family == "operator"
+        else protocol_invariants[variant]
+        if family == "protocol"
+        else by_family[family]
     )
     if family == "gateway" and variant == "stale-worker":
         identifiers.append("stale_worker_denied")
@@ -329,6 +355,13 @@ def _invariants_for(
                     "tenant_switch_clears",
                     "injected_evidence_is_data",
                     "ui_outage_contained",
+                    "external_content_is_data",
+                    "destructive_is_proposal",
+                    "peer_cannot_self_approve",
+                    "capability_drift_quarantines",
+                    "ambiguous_reconciles",
+                    "revocation_blocks_calls",
+                    "protocol_outage_contained",
                 }
                 else InvariantSeverity.REQUIRED
             ),
@@ -394,6 +427,7 @@ def _layer_for(family: str) -> str:
         "memory": "layer-10",
         "observability": "layer-12",
         "operator": "layer-13",
+        "protocol": "layer-14",
         "adversarial": "cross-layer",
         "fault": "cross-layer",
     }[family]
@@ -414,6 +448,7 @@ def _scenario_for(case: EvaluationCase) -> str:
         "memory": "memory-and-rag",
         "observability": "observability-and-replay",
         "operator": "operator-safety",
+        "protocol": "protocol-boundaries",
         "adversarial": "adversarial-pack",
         "fault": "recovery-cut-points",
     }[family]
@@ -421,7 +456,7 @@ def _scenario_for(case: EvaluationCase) -> str:
 
 def _scenario_description(scenario_id: str) -> str:
     return (
-        f"Deterministic Layer 13 coverage for {scenario_id.replace('-', ' ')} "
+        f"Deterministic Layer 14 coverage for {scenario_id.replace('-', ' ')} "
         "using synthetic fixtures and registered runtime probes."
     )
 

@@ -21,7 +21,7 @@
     "test:a11y": "vitest run --project accessibility",
     "e2e": "playwright test",
     "contract:generate": "node scripts/generate-contracts.mjs",
-    "contract:check": "pnpm contract:generate && git diff --exit-code -- src/api/generated.ts",
+    "contract:check": "node scripts/generate-contracts.mjs --check",
     "audit": "pnpm audit --prod --audit-level high",
     "license:check": "node scripts/check-licenses.mjs",
     "bundle:check": "node scripts/check-bundle.mjs",

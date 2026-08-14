@@ -347,3 +347,34 @@ reauthentication.
 **What does the accessibility evidence prove?** Semantic tests, keyboard journeys,
 themes/reduced-motion behavior, and axe catch deterministic regressions. They do not
 replace manual WCAG review or supported browser/assistive-technology qualification.
+
+## Layer 14 questions
+
+**Why not use A2A for internal specialists?** A2A is an untrusted external
+delivery boundary. It does not own Aegis tenancy, event truth, fencing, DAG,
+budget, approval, or deterministic aggregation. Internal roles communicate only
+through typed ledger artifacts under the coordinator.
+
+**When is an MCP tool response authoritative?** Never by itself. It is
+schema/size/content validated and provenance-labeled, then may support a local
+application command or evidence record. Protocol descriptions are data, not
+system instructions.
+
+**How does a destructive MCP request execute?** It does not. The only mutating
+risk capability creates an exact Layer 8 proposal. A separate authorized human
+approval, durable intent, controlled adapter, reconciliation, and fresh
+verification are still required.
+
+**Why pin Agent Card and capability digests?** Authentication identifies the
+peer but does not make changing authority safe. Digest changes invalidate
+reviewed scope and quarantine until a tenant administrator reviews a new
+revision.
+
+**What does at-least-once mean for an ambiguous A2A task?** A timeout may follow
+remote acceptance. Aegis records ambiguity, observes the stable task/
+idempotency identity, and reconciles before retry. It never claims exactly-once
+network effects.
+
+**Why is protocol production readiness false?** Deterministic contracts,
+adapters, and tests do not prove deployed PKI/mTLS, token brokerage, partner
+identity, egress, rotation, conformance, HA, or operational capacity.

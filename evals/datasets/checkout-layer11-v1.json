@@ -81,6 +81,14 @@
     "policy.approval-required",
     "policy.budget-denial",
     "policy.cross-tenant",
+    "protocol.a2a-ambiguous-reconciled",
+    "protocol.a2a-self-approval",
+    "protocol.capability-drift",
+    "protocol.external-policy-injection",
+    "protocol.mcp-destructive-proposal",
+    "protocol.outage-contained",
+    "protocol.revocation",
+    "protocol.tenant-isolation",
     "remediation.ambiguous-reconciled",
     "remediation.approved-success",
     "remediation.crash-recovery",
@@ -105,7 +113,7 @@
     "work.stale-success"
   ],
   "created_at": "2026-08-13T12:00:00Z",
-  "dataset_id": "aegis-checkout-layer13",
+  "dataset_id": "aegis-checkout-layer14",
   "description": "Synthetic checkout incident, adversarial channels, recovery cut points, observability invariants, and operator safety invariants.",
   "fixtures": [
     {
@@ -153,5 +161,5 @@
   ],
   "migration_from": null,
   "schema_version": 1,
-  "version": "1.2.0"
+  "version": "1.3.0"
 }

@@ -14,7 +14,7 @@ deployments, Kubernetes/runtime changes, and runbooks. This narrow story makes
 durability, evidence provenance, authorization, and safe effects testable end
 to end.
 
-> **Current status: Layer 13 - Secure operator UI and BFF.** Layers 1-4 add
+> **Current status: Layer 14 - Secure MCP and A2A interoperability.** Layers 1-4 add
 > tenant-bound work events, a crash-reconcilable PostgreSQL outbox publisher,
 > Redis Streams consumer groups, inbox deduplication, PostgreSQL renewable
 > leases and fencing, fair bounded supervision, quota enforcement, cancellation,
@@ -53,11 +53,17 @@ to end.
 > strict React/TypeScript workspace, secure server-session BFF boundary, validated
 > OpenAPI-derived contracts, tenant/RBAC-safe operator views, exact-scope approval
 > UX, bounded cursor updates, accessibility/security controls, a non-root static
-> image, and six operator-safety evals. The catalog now contains 103 cases. These are
+> image, and six operator-safety evals. Layer 14 adds provider-neutral protocol
+> contracts, curated MCP server/client adapters, signed A2A Agent Cards and task
+> exchange, tenant-scoped digest-pinned peer trust, intent-before-network durable
+> lifecycle events, forced-RLS protocol projections, reconciliation, bounded
+> telemetry, operator trust review, deterministic demos, and eight protocol safety
+> evals. The catalog now contains 111 cases. These are
 > configured and locally validated controls, not evidence of production SLO
 > attainment. Live model/connector and production telemetry qualification,
 > model-judge execution, independent penetration testing, human labeling,
-> production identity/browser qualification, MCP/A2A, external managed backends,
+> production identity/browser qualification, public protocol federation and PKI/
+> token-broker qualification, external managed backends,
 > 24/7 on-call evidence,
 > production deployment, HA/DR/multi-region, compliance certification, and final
 > load/chaos certification remain deferred. See
@@ -100,6 +106,10 @@ to end.
     datasets, fault injection, baselines, waivers, and bounded reports.
 12. **Observability and enterprise operations:** production signals, resilience,
     governance, and deployment evidence.
+13. **Operator UI and BFF:** server-side identity, derived tenant views, exact
+    mutation review, accessibility, and browser security.
+14. **MCP and A2A boundaries:** governed tool/context and external-agent
+    interoperability without replacing ledger-mediated orchestration.
 
 Across these layers the checkout-failure demo grows from fixture-backed evidence
 to durable investigation, approval-gated rollback, recovery verification, and
@@ -151,6 +161,7 @@ python -m aegis_agent_platform.remediation --scenario approved-success
 python -m aegis_agent_platform.sandbox --scenario approved-analysis
 python -m aegis_agent_platform.evals check-fixtures
 python -m aegis_agent_platform.evals compare
+python -m aegis_agent_platform.protocols artifact-exchange
 make eval-adversarial
 make eval-recovery
 make eval-baseline
@@ -186,12 +197,14 @@ covers live-adapter configuration, bounded ingestion, provenance/redaction,
 timeline correlation, webhook security requirements, and connector extension.
 [Evaluation and release evidence](docs/evaluation.md) covers the deterministic
 suite, fault cuts, governance, gates, reports, CLI, and explicit live gaps.
+[MCP and A2A interoperability](docs/protocols.md) covers protocol compatibility,
+trust, lifecycle, security, operations, and production-readiness gaps.
 
 ## Repository map
 
 ```text
 src/aegis_agent_platform/  Importable platform boundaries
-  integrations/            Dynatrace, GitHub, Kubernetes, and runbook adapters
+  integrations/            Evidence, MCP, and A2A wire adapters
   evidence/                Ingestion, persistence, operations, and correlation
   agents/                  Governed DAG, artifacts, engines, and projections
   event_store/             PostgreSQL ledger, inbox/outbox, and projections
@@ -200,6 +213,7 @@ src/aegis_agent_platform/  Importable platform boundaries
   gateway/                 Catalog, routing, budgets, resilience, and metering
   providers/               Neutral protocol plus OpenAI/Anthropic/mock adapters
   evals/                   Layer 11/12 contracts, catalog, gates, and reporting
+  protocols/               Governed protocol registry, security, ledger, and demos
   persistence/             PostgreSQL identity/governance repositories
 evals/                     Governed fixtures, dataset, baseline, and waivers
 tests/                     Deterministic unit, adapter, API, and architecture tests

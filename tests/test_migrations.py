@@ -12,6 +12,7 @@ GATEWAY_MIGRATION = ROOT / "migrations" / "0004_model_gateway.sql"
 EVIDENCE_MIGRATION = ROOT / "migrations" / "0005_evidence_connectors.sql"
 AGENT_MIGRATION = ROOT / "migrations" / "0006_specialist_orchestration.sql"
 SANDBOX_MIGRATION = ROOT / "migrations" / "0008_hardened_sandbox_execution.sql"
+PROTOCOL_MIGRATION = ROOT / "migrations" / "0010_mcp_a2a_interoperability.sql"
 
 
 def test_identity_governance_schema_has_tenant_constraints_and_indexes() -> None:
@@ -183,3 +184,28 @@ def test_sandbox_schema_is_tenant_scoped_fenced_and_rebuildable() -> None:
     assert "quota_reserved boolean not null" in schema
     assert "sandbox_cleanup_ready_idx" in schema
     assert "revoke update, delete, truncate on sandbox_attestations" in schema
+
+
+def test_protocol_schema_is_tenant_scoped_fenced_and_append_only() -> None:
+    schema = PROTOCOL_MIGRATION.read_text(encoding="utf-8").lower()
+    for table in (
+        "protocol_peer_registry",
+        "protocol_trust_decision_history",
+        "protocol_capability_snapshots",
+        "protocol_operation_projection",
+        "protocol_operation_claims",
+        "protocol_artifact_projection",
+        "protocol_stream_cursors",
+        "protocol_quota_projection",
+        "protocol_audit_projection",
+    ):
+        assert f"alter table {table} force row level security" in schema
+        assert f"{table}_tenant_isolation" in schema
+    assert "unique (tenant_id, idempotency_key)" in schema
+    assert "lease_generation bigint not null" in schema
+    assert "protocol_operation_reconcile_idx" in schema
+    assert "before update or delete on protocol_trust_decision_history" in schema
+    assert "before update or delete on protocol_capability_snapshots" in schema
+    assert (
+        "revoke update, delete, truncate on protocol_trust_decision_history" in schema
+    )
