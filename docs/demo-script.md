@@ -26,7 +26,7 @@ poisoning handling, bounded compaction, tenant isolation, and derived purge with
 deterministic providers.
 The identity/tenancy slice runs against deterministic fixtures rather than a
 live-network Keycloak realm. Those omissions are later-layer acceptance work.
-Layer 11 adds the unified `aegis_agent_platform.evals` harness, governed 91-case
+Layer 11 adds the unified `aegis_agent_platform.evals` harness, governed
 dataset/baseline/waiver artifacts, all 22 named fault cuts, deterministic hard
 gates, bounded reports/telemetry, and the current CLI. It makes no live provider,
 connector, production, or model-judge qualification claim.
@@ -137,6 +137,10 @@ required hermetic CI with the guarded optional-live boundary. State that no live
 adapter is registered, no model judge executes, and no evaluator result becomes
 runtime truth.
 
+Layer 15 expands the catalog to 119 cases and adds production-foundation
+configuration plus a local restore drill. It still makes no live production
+readiness claim.
+
 ## 30-minute architecture interview demo
 
 - **0–5:** Product, current status, and canonical incident.
@@ -216,3 +220,22 @@ State that SLOs are configured locally and no production attainment is claimed.
 8. Close with `production_ready: false`: no live external agents, network,
    credentials, public federation, production PKI/mTLS, or partner qualification
    are used by required tests.
+
+## Layer 15 production-foundation demo
+
+```bash
+make production-check
+make kubernetes-check
+terraform -chdir=infra/terraform/aws init -backend=false
+terraform -chdir=infra/terraform/aws validate
+terraform -chdir=infra/terraform/aws test
+python -m aegis_agent_platform.evals run --tag deployment
+make restore-drill
+```
+
+Show immutable digest transforms, restricted contexts, default-deny network
+intent, zero-replica BFF/protocol gates, the cost-disabled AWS plan, schema/
+writer-fence/retention contracts, and the bounded restore report. State that
+placeholder digests are not deployable, Terraform uses a mock provider, restore
+has two synthetic events, and no live cloud, cluster, managed failover, measured
+SLO/RPO/RTO, or compliance claim is demonstrated.

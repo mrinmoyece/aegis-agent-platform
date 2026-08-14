@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install format format-check lint type test evals eval-behavioral eval-deterministic eval-adversarial eval-recovery eval-baseline eval-fixtures eval-meta eval-integration postgres-test integration-test docs-check manifest-check migration-check observability-check protocol-check dependency-audit frontend-install frontend-check frontend-e2e frontend-audit frontend-container-check check compose-config container-check
+.PHONY: help install format format-check lint type test evals eval-behavioral eval-deterministic eval-adversarial eval-recovery eval-baseline eval-fixtures eval-meta eval-integration postgres-test integration-test docs-check manifest-check migration-check observability-check protocol-check production-check kubernetes-check terraform-check restore-drill license-check dependency-audit frontend-install frontend-check frontend-e2e frontend-audit frontend-container-check check compose-config container-check
 
 PYTHON ?= python3
 PNPM ?= pnpm
@@ -8,7 +8,8 @@ help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*?##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 install: ## Install the package and development tools
-	$(PYTHON) -m pip install -e '.[dev]'
+	$(PYTHON) -m pip install --require-hashes -r requirements-dev.lock
+	$(PYTHON) -m pip install --no-build-isolation --no-deps -e .
 
 format: ## Format Python sources and tests
 	$(PYTHON) -m ruff check --fix src tests scripts
@@ -76,8 +77,31 @@ protocol-check: ## Validate MCP/A2A versions, boundaries, contracts, and forced 
 	PYTHONPATH=src $(PYTHON) -m pytest tests/test_protocols.py tests/test_protocol_adapters.py tests/test_protocol_demo.py
 
 dependency-audit: ## Audit Python vulnerabilities and dependency licenses
-	$(PYTHON) -m pip_audit . --progress-spinner off
+	$(PYTHON) -m pip_audit --requirement requirements.lock --progress-spinner off
+	$(PYTHON) -m pip_audit --requirement requirements-dev.lock --progress-spinner off
 	$(PYTHON) -m piplicenses --format=plain --order=license
+
+license-check: ## Enforce prohibited backend dependency licenses
+	$(PYTHON) scripts/check_license_policy.py
+
+production-check: ## Validate Layer 15 deployment, supply-chain, and operations controls
+	$(PYTHON) scripts/check_production.py
+	$(PYTHON) scripts/check_vulnerability_policy.py
+
+kubernetes-check: production-check ## Render all Kustomize environments
+	@for environment in development staging production; do \
+		kubectl kustomize "deploy/kubernetes/overlays/$$environment" >/dev/null; \
+	done
+
+terraform-check: ## Validate the cost-gated AWS Terraform reference
+	terraform -chdir=infra/terraform/aws fmt -check -recursive
+	terraform -chdir=infra/terraform/aws init -backend=false -input=false
+	terraform -chdir=infra/terraform/aws validate
+	terraform -chdir=infra/terraform/aws test
+	trivy config --exit-code 1 --severity HIGH,CRITICAL infra/terraform/aws
+
+restore-drill: ## Restore ledger truth in isolation and rebuild derived state
+	PYTHON=$(PYTHON) sh scripts/restore_drill.sh
 
 frontend-install: ## Install the exact frontend dependency graph
 	$(PNPM) --dir frontend install --frozen-lockfile
@@ -95,7 +119,7 @@ frontend-container-check: ## Build the non-root static operator image
 	docker build --check frontend
 	docker build --tag aegis-operator-ui:local frontend
 
-check: format-check lint type test evals docs-check manifest-check migration-check observability-check protocol-check ## Run all fast local checks
+check: format-check lint type test evals docs-check manifest-check migration-check observability-check protocol-check production-check license-check ## Run all fast local checks
 
 compose-config: ## Render and validate the local Compose configuration
 	docker compose --env-file .env.example config --quiet

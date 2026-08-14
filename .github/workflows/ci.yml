@@ -36,8 +36,11 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: requirements-dev.lock
       - name: Install project
-        run: python -m pip install -e '.[dev]'
+        run: |
+          python -m pip install --require-hashes -r requirements-dev.lock
+          python -m pip install --no-build-isolation --no-deps -e .
       - name: Run fast checks
         run: make check
       - name: Audit Python dependencies and licenses
@@ -55,8 +58,11 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: requirements-dev.lock
       - name: Install project
-        run: python -m pip install -e '.[dev]'
+        run: |
+          python -m pip install --require-hashes -r requirements-dev.lock
+          python -m pip install --no-build-isolation --no-deps -e .
       - name: Verify governed fixtures
         run: make eval-fixtures
       - name: Gate adversarial safety cases
@@ -134,7 +140,7 @@ jobs:
     timeout-minutes: 10
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
         env:
           POSTGRES_DB: aegis_test
           POSTGRES_PASSWORD: local-ci-only
@@ -147,7 +153,7 @@ jobs:
           --health-timeout 2s
           --health-retries 15
       redis:
-        image: redis:7.4-alpine
+        image: redis:7.4-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
         ports:
           - 6379:6379
         options: >-
@@ -167,8 +173,11 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: requirements-dev.lock
       - name: Install project
-        run: python -m pip install -e '.[dev]'
+        run: |
+          python -m pip install --require-hashes -r requirements-dev.lock
+          python -m pip install --no-build-isolation --no-deps -e .
       - name: Exercise live delivery, lease, and storage controls
         run: make integration-test
       - name: Exercise evaluation-relevant persistence modes

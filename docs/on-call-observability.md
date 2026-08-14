@@ -65,3 +65,19 @@ is absent.
 
 Reproduce the exact deterministic case and source fingerprint. Hard safety
 failures block release and cannot be waived.
+
+## Deployment and regional change
+
+Correlate region, environment, service, and immutable version attributes. Halt a
+canary on safety/correctness alerts, readiness failure, fast burn, retry storm,
+queue growth, or pool saturation. Automatic application rollback is allowed only
+across the declared schema window; never reverse an irreversible migration
+automatically. Regional traffic shift requires writer-fence proof, a new durable
+generation, reconciliation, and scoped approval.
+
+## Backup and restore
+
+Backup job success is informational until an isolated restore proves decryptable
+dependencies, ledger count/hash/sequence integrity, RLS/role safety, projection
+rebuild, Redis redrive, ambiguous-effect reconciliation, credential rotation, and
+return-to-service smoke. Never export payload or secret content into alerts.

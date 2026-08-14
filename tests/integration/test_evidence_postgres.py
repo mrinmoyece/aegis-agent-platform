@@ -43,6 +43,7 @@ from aegis_agent_platform.identity import Role, TenantId
 from aegis_agent_platform.policy import QuotaLimits, RiskLevel, TenantPolicy
 from aegis_agent_platform.runtime.postgres import PostgresWorkRepository
 from aegis_agent_platform.tenancy import TenantContext
+from integration_helpers import integration_writer_fences
 
 DATABASE_URL = os.environ.get("AEGIS_TEST_DATABASE_URL")
 pytestmark = [
@@ -128,7 +129,10 @@ def test_fenced_evidence_commit_and_durable_bundle_round_trip() -> None:
             10,
             f"evidence-integration-{uuid4()}",
         )
-        events = PostgresEventStore(connection)
+        events = PostgresEventStore(
+            connection,
+            writer_fence_resolver=integration_writer_fences("local-test", 1),
+        )
         work = PostgresWorkRepository(connection, events)
         repository = PostgresEvidenceRepository(connection, events, work)
         service = EvidenceQueryService(

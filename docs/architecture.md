@@ -670,3 +670,45 @@ change ledger truth or controlled execution.
 The current executable experience is a visibly synthetic demo. The live OIDC
 exchange and shared session adapter are intentionally absent and readiness is
 false. See [operator-ui.md](operator-ui.md).
+
+## Layer 15 production deployment boundary
+
+Layer 15 adds deployment and control evidence around the runtime; it does not add
+a second orchestration authority.
+
+```mermaid
+flowchart LR
+  EDGE[Regional TLS ingress] --> API[API replicas]
+  EDGE --> UI[Operator UI]
+  UI --> BFF[Operator BFF - gated]
+  API --> PG[(PostgreSQL writer ledger)]
+  WORKERS[Worker classes] --> PG
+  PUB[Outbox publishers] --> PG
+  PUB --> REDIS[(Redis transport)]
+  WORKERS --> REDIS
+  RECON[Reconcilers] --> PG
+  API --> EGRESS[Egress gateway]
+  WORKERS --> EGRESS
+  PROTO[Protocol gateway - gated] --> EGRESS
+  API --> OTEL[OTel collectors]
+  PG --> BACKUP[Encrypted backup/archive]
+```
+
+PostgreSQL remains sole run-state truth. Redis, telemetry, regional caches, read
+replicas, object archives, SBOM/provenance stores, and GitOps state cannot
+authorize work or reconstruct authoritative state while the ledger exists.
+Publishers use database claims; workers/reconcilers use durable leases and
+generations. Kubernetes scheduling and Lease state coordinate availability only.
+
+Environments use separate AWS accounts, clusters, state, and keys. Namespaces
+separate application, data, egress, and untrusted sandbox zones, while tenant
+authority still comes from verified identity, explicit authorization, and forced
+RLS. Optional BFF, protocol, and sandbox serving fails closed until its identity/
+session, PKI/token/trust, or runtime/admission/network prerequisites pass.
+
+The multi-region design is single-writer per tenant with stateless edges and
+read-only/reporting replicas. A monotonic durable generation fences stale regions;
+DNS cannot grant write authority. See
+[ADR 0024](adr/0024-single-writer-multi-region.md). Kustomize/AWS artifacts,
+mock plans, scans, evals, and the local restore drill do not prove a live cloud,
+cluster, backup/failover, or production SLO.

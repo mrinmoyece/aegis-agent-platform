@@ -1,0 +1,26 @@
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: aegis-control-plane
+value: 100000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: Aegis API, publisher, and reconciler processes.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: aegis-workers
+value: 50000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: Durable Aegis worker processes.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: aegis-sandbox
+value: 1000
+globalDefault: false
+preemptionPolicy: Never
+description: Untrusted workloads are shed before correctness-critical services.

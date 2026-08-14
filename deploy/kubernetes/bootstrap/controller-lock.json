@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "components": {
+    "envoy-gateway": "v1.8.3",
+    "external-secrets": "helm-chart-2.9.0",
+    "kyverno": "v1.18.2",
+    "prometheus-operator": "v0.83.0"
+  },
+  "registry": "000000000000.dkr.ecr.eu-west-1.amazonaws.com",
+  "api_versions": [
+    "external-secrets.io/v1",
+    "monitoring.coreos.com/v1"
+  ],
+  "api_resources": [
+    "backendtrafficpolicies.gateway.envoyproxy.io",
+    "clienttrafficpolicies.gateway.envoyproxy.io",
+    "clusterpolicies.kyverno.io",
+    "clustersecretstores.external-secrets.io",
+    "envoyproxies.gateway.envoyproxy.io",
+    "externalsecrets.external-secrets.io",
+    "gateways.gateway.networking.k8s.io",
+    "httproutes.gateway.networking.k8s.io",
+    "podmonitors.monitoring.coreos.com",
+    "prometheusrules.monitoring.coreos.com",
+    "servicemonitors.monitoring.coreos.com",
+    "securitypolicies.gateway.envoyproxy.io"
+  ],
+  "workloads": [
+    {
+      "kind": "Deployment",
+      "namespace": "monitoring",
+      "name": "prometheus-operator",
+      "repository": "aegis-prometheus-operator",
+      "digests": [
+        "sha256:b6a89b8ec08f4cca759b2d579e8545f97ffb897973fcd68148c153f2e936c8b3"
+      ]
+    },
+    {
+      "kind": "Deployment",
+      "namespace": "envoy-gateway-system",
+      "name": "envoy-gateway",
+      "repository": "aegis-envoy-gateway",
+      "digests": [
+        "sha256:e7a8c70537628bf996e5dec5c4c835704b4b9f4f715a74cf361bea30608c49ac"
+      ]
+    },
+    {
+      "kind": "Deployment",
+      "namespace": "external-secrets",
+      "name": "external-secrets",
+      "repository": "aegis-external-secrets",
+      "digests": [
+        "sha256:44eb290f1c7f5d8f4eec2168cea4a6cfbc72a955c6781eb835e1c40700475dbd"
+      ]
+    },
+    {
+      "kind": "Deployment",
+      "namespace": "external-secrets",
+      "name": "external-secrets-cert-controller",
+      "repository": "aegis-external-secrets",
+      "digests": [
+        "sha256:44eb290f1c7f5d8f4eec2168cea4a6cfbc72a955c6781eb835e1c40700475dbd"
+      ]
+    },
+    {
+      "kind": "Deployment",
+      "namespace": "external-secrets",
+      "name": "external-secrets-webhook",
+      "repository": "aegis-external-secrets",
+      "digests": [
+        "sha256:44eb290f1c7f5d8f4eec2168cea4a6cfbc72a955c6781eb835e1c40700475dbd"
+      ]
+    },
+    {
+      "kind": "Deployment",
+      "namespace": "kyverno",
+      "name": "kyverno-admission-controller",
+      "repository": "aegis-kyverno",
+      "digests": [
+        "sha256:0a540e2ddf74d0d2d3d45f9ef248d7dbc96576accdbcc6a2dd7eaff9fea56504",
+        "sha256:cd8cb4a31d25b3992734fb8f24a90ef691c90ce49338c89bea96792160eacb98"
+      ]
+    },
+    {
+      "kind": "Deployment",
+      "namespace": "kyverno",
+      "name": "kyverno-background-controller",
+      "repository": "aegis-kyverno",
+      "digests": [
+        "sha256:d62566ce41bd0d4a32bf2cf44b9ebfc02c36374f821f83070890287f62f68671"
+      ]
+    },
+    {
+      "kind": "Deployment",
+      "namespace": "kyverno",
+      "name": "kyverno-cleanup-controller",
+      "repository": "aegis-kyverno",
+      "digests": [
+        "sha256:b0395d29ae332276e6910eb40418be9bc127c068d659f90aa1bcddd6be99ccb4"
+      ]
+    },
+    {
+      "kind": "Deployment",
+      "namespace": "kyverno",
+      "name": "kyverno-reports-controller",
+      "repository": "aegis-kyverno",
+      "digests": [
+        "sha256:f09cf305170014e191b94e1c54f5be73163d8824eefad49349675c4efe43159a"
+      ]
+    }
+  ]
+}

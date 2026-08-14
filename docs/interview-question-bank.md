@@ -378,3 +378,28 @@ network effects.
 **Why is protocol production readiness false?** Deterministic contracts,
 adapters, and tests do not prove deployed PKI/mTLS, token brokerage, partner
 identity, egress, rotation, conformance, HA, or operational capacity.
+
+## Layer 15 questions
+
+**Why Kustomize rather than Helm?** The repository has one plain-YAML deployment
+shape. Kustomize changes images/replicas without a template language, keeping
+policy visible. Helm is reconsidered when reuse and a typed values contract
+justify the added surface.
+
+**Why is a validated AWS module not production evidence?** Mock plans prove syntax
+and selected invariants, not account guardrails, CNI/addons, service behavior,
+failover, quotas, cost, egress, keys, state operations, or an approved live apply.
+
+**How does regional failover avoid split brain?** Fence the old writer, verify the
+recovery point, advance a durable tenant generation, rotate credentials, then
+shift traffic. DNS/Kubernetes leadership cannot grant write authority; without
+fence proof, remain unavailable.
+
+**Why is backup success insufficient?** Return requires decryptable keys/objects,
+migrations, roles/RLS, exact ledger hashes/sequences, projection rebuild, Redis
+redrive, effect reconciliation, rotation, and smoke approval. RPO/RTO come from
+measured restore, not backup status.
+
+**Can automatic rollback reverse a migration?** No. A compatible application
+digest can roll back across an expand schema. Backfill resumes. Irreversible
+contract changes require roll-forward or isolated restore; downgrade risks truth.

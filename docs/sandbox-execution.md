@@ -208,7 +208,12 @@ success-shaped fallback.
 | --- | --- |
 | Contracts, canonicalization, policy, replay, fencing, fake backend, artifacts, APIs, telemetry, RLS schema | Implemented and deterministic |
 | Kubernetes locked-down Job generation and official-client translation | Implemented and mocked |
-| Admission policy, isolated runtime class, PID controller, default-deny network policy, egress proxy/DNS defense, trusted artifact CSI/collector | Required environment controls; not deployed or certified |
-| Secret broker, copy-on-write seeded writable mounts, malware engine, image signing/SBOM enforcement, remote attestation | Planned |
+| Namespace, RuntimeClass/node-pool declaration, taints/tolerations, admission examples, default-deny network intent, no-token identity, cleanup RBAC, ephemeral limits, quarantine declarations | Checked-in Layer 15 manifests; not live-enforced or certified |
+| Qualified CNI/runtime/admission, PID controller, egress proxy DNS/IP/redirect defense, trusted artifact CSI/collector, secret broker, copy-on-write seeded mounts, malware engine, remote attestation | Required environment controls; not deployed or certified |
+| Image signing/SBOM/admission verification | Checked-in supply-chain workflow and policy example; live admission is unverified |
 | Memory/RAG | Implemented separately in Layer 10; it grants no sandbox authority |
-| Production-qualified operator UI, public MCP/A2A federation and PKI, HA/DR/multi-region, broad autonomous production mutation | Explicitly deferred |
+| Production-qualified operator UI, public MCP/A2A federation and PKI, measured HA/DR/multi-region, broad autonomous production mutation | Explicitly deferred |
+
+Layer 15 does not enable untrusted execution. Admission, CNI, runtime class,
+dedicated node isolation, cleanup, artifact handling, and egress enforcement must
+all be qualified together before the namespace may schedule sandbox work.

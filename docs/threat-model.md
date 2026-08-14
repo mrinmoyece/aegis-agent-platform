@@ -357,3 +357,22 @@ by internal artifact references. HTTPS allowlists plus DNS/IP/redirect
 validation fail closed against SSRF/rebinding/exfiltration. Digest drift,
 signature failure, unknown content, replay, tenant mismatch, and revocation
 quarantine or deny before authority is used.
+
+## Layer 15 production-foundation residual risk
+
+| Threat | Checked-in mitigation | Residual/unverified risk |
+| --- | --- | --- |
+| Mutable or poisoned release | digest-pinned bases/promotion, SPDX, provenance, cosign, scans, Kyverno verify policy | registry/transparency compromise, live admission and environment approvals unqualified |
+| Cluster privilege or host escape | restricted contexts, no host boundaries, token off, Pod Security, sandbox RuntimeClass/node pool | CNI/admission/runtime implementation and kernel isolation not independently tested |
+| Metadata/private-network SSRF | default deny and single egress-gateway intent | standard NetworkPolicy cannot prove FQDN/DNS/IP/redirect behavior; gateway absent |
+| Secret theft or stale credential | ExternalSecret references, Pod Identity, fail-closed config, rotation/revocation runbook | live broker/controller/rotation/key recovery not exercised |
+| Migration weakens isolation or truth | additive guard, one-runner lock, checksums, schema window, forced-RLS tests | large-table lock/WAL behavior and live maintenance role unqualified |
+| Backup theft/corruption/unrestorable key | KMS, locked vault/object controls, hash manifests, isolated local drill | managed cross-account/PITR/object/key/full-volume recovery unmeasured |
+| Regional split brain | tenant home region, monotonic generation, stale-writer eval, approval-gated failover | no live database/traffic/provider fencing exercise |
+| Autoscaling/noisy-neighbor storm | slow HPA, quota/concurrency/pool budgets, durable backpressure | capacity ceilings and tenant skew not measured at scale |
+| Telemetry used as authority | telemetry-loss invariant and ledger-grounded replay | production backend loss/backpressure/on-call unqualified |
+| Compliance overclaim | evidence classes, control map, explicit non-certification | organizational/legal scope and independent audit absent |
+
+Placeholder digests, unqualified process-role bootstrap, scaled-to-zero BFF/
+protocol surfaces, and disabled sandbox execution are deliberate fail-closed
+states. Operators must not remove them merely to obtain a green rollout.

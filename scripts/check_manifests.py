@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ACTION_PATTERN = re.compile(r"^[^@\s]+@[0-9a-f]{40}$")
 REQUIRED_SERVICES = {
     "api",
+    "migration",
     "postgres",
     "redis",
     "keycloak",
@@ -111,10 +112,25 @@ def main() -> None:
     init_mounts = services["postgres"]["volumes"]
     if not any("40-create-app-user.sh" in volume for volume in init_mounts):
         raise SystemExit("PostgreSQL must create the restricted runtime login")
-    for migration in sorted((ROOT / "migrations").glob("*.sql")):
+    legacy_init_migrations = sorted((ROOT / "migrations").glob("000[1-9]_*.sql"))
+    legacy_init_migrations.extend((ROOT / "migrations").glob("0010_*.sql"))
+    for migration in legacy_init_migrations:
         mount = f"./migrations/{migration.name}:"
         if not any(mount in volume for volume in init_mounts):
             raise SystemExit(f"PostgreSQL init mounts must include {migration.name}")
+    migration_command = " ".join(services["migration"]["command"])
+    if (
+        "scripts/migrate.py" not in migration_command
+        or "--adopt-existing" not in migration_command
+    ):
+        raise SystemExit(
+            "Compose migration service must adopt and manage schema history"
+        )
+    if (
+        services["api"]["depends_on"].get("migration", {}).get("condition")
+        != "service_completed_successfully"
+    ):
+        raise SystemExit("API must wait for successful managed migrations")
     runtime_init = (ROOT / "docker" / "postgres" / "40-create-app-user.sh").read_text(
         encoding="utf-8"
     )

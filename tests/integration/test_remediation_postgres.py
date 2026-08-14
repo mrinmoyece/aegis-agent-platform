@@ -37,6 +37,7 @@ from aegis_agent_platform.remediation import (
 from aegis_agent_platform.remediation.postgres import PostgresRemediationRepository
 from aegis_agent_platform.runtime.postgres import PostgresWorkRepository
 from aegis_agent_platform.tenancy import TenantContext
+from integration_helpers import integration_writer_fences
 from remediation_helpers import Clock, action, lease, plan, policy, principal
 
 DATABASE_URL = os.environ.get("AEGIS_TEST_DATABASE_URL")
@@ -109,7 +110,10 @@ def test_remediation_approval_execution_rls_race_and_rebuild() -> None:
             autocommit=True,
         )
         await connection.execute("SET ROLE aegis_app")
-        events = PostgresEventStore(connection)
+        events = PostgresEventStore(
+            connection,
+            writer_fence_resolver=integration_writer_fences("local-test", 1),
+        )
         repository = PostgresRemediationRepository(
             connection,
             events,
@@ -292,7 +296,10 @@ def test_remediation_approval_execution_rls_race_and_rebuild() -> None:
             autocommit=True,
         )
         await maintenance.execute("SET ROLE aegis_maintenance")
-        maintenance_events = PostgresEventStore(maintenance)
+        maintenance_events = PostgresEventStore(
+            maintenance,
+            writer_fence_resolver=integration_writer_fences("local-test", 1),
+        )
         maintenance_repository = PostgresRemediationRepository(
             maintenance,
             maintenance_events,
@@ -387,8 +394,14 @@ def test_postgres_effect_quota_race_and_long_stream_rebuild() -> None:
         await first_connection.execute("SET ROLE aegis_app")
         await second_connection.execute("SET ROLE aegis_app")
         barrier = asyncio.Barrier(2)
-        first_events = PostgresEventStore(first_connection)
-        second_events = PostgresEventStore(second_connection)
+        first_events = PostgresEventStore(
+            first_connection,
+            writer_fence_resolver=integration_writer_fences("local-test", 1),
+        )
+        second_events = PostgresEventStore(
+            second_connection,
+            writer_fence_resolver=integration_writer_fences("local-test", 1),
+        )
         first_repository = BarrierRemediationRepository(
             first_connection,
             first_events,

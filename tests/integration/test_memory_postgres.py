@@ -34,6 +34,7 @@ from aegis_agent_platform.memory.repository import InMemoryMemoryBlobStore
 from aegis_agent_platform.memory.retrieval import HybridRetriever
 from aegis_agent_platform.runtime.postgres import PostgresWorkRepository
 from aegis_agent_platform.tenancy import TenantContext
+from integration_helpers import integration_writer_fences
 from memory_helpers import semantic_memory
 
 DATABASE_URL = os.environ.get("AEGIS_TEST_DATABASE_URL")
@@ -147,7 +148,10 @@ def test_pgvector_rls_cache_fencing_rebuild_and_purge() -> None:
         redis = Redis.from_url(REDIS_URL)
         await redis.flushdb()
         await connection.execute("SET ROLE aegis_app")
-        event_store = PostgresEventStore(connection)
+        event_store = PostgresEventStore(
+            connection,
+            writer_fence_resolver=integration_writer_fences("local-test", 1),
+        )
         ledger = PostgresMemoryLedger(connection, event_store)
         index = PostgresMemoryIndex(connection)
         blobs = InMemoryMemoryBlobStore()

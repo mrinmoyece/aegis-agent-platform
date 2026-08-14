@@ -390,6 +390,7 @@ def test_remote_jwks_provider_parses_and_caches_key(
     first = provider.get_key(KEY_ID)
     second = provider.get_key(KEY_ID)
 
+    assert provider.ready()
     assert first == second
     assert first.pem == signing.public_pem
     assert calls == [2.0]
@@ -450,6 +451,8 @@ def test_remote_jwks_invalid_documents_fail_closed(
         provider.get_key(KEY_ID)
 
     assert captured.value.code is AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE
+    with pytest.raises(AuthenticationError):
+        provider.ready()
 
 
 def test_remote_jwks_transport_and_scheme_failures_are_classified(

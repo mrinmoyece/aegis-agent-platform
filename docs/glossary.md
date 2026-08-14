@@ -132,3 +132,31 @@ operation; never inferred from mutable content.
 
 **Verification window** — Predefined post-action interval and signals used to
 decide whether service recovery is sustained.
+
+**Blue/green deployment** — Promotion between two qualified serving sets while
+one authoritative writer/fence model remains unchanged.
+
+**Canary** — Bounded exposure of one verified immutable digest before wider
+traffic.
+
+**Disaster recovery (DR)** — Approved restoration of authoritative dependencies,
+integrity verification, derived-state rebuild, reconciliation, and return to
+service after a major failure.
+
+**Recovery point objective (RPO)** — Maximum targeted data age at recovery; an
+objective until measured by a real restore.
+
+**Recovery time objective (RTO)** — Maximum targeted restore time for a defined
+scope; an objective until measured by a real drill.
+
+**SBOM** — Software bill of materials for one exact artifact; it supports policy
+and investigation but does not prove provenance.
+
+**SLSA provenance** — Signed build metadata binding an artifact digest to source,
+builder identity, and workflow inputs.
+
+**Split brain** — Two authorities accepting writes for one tenant/generation;
+Aegis prefers unavailability and monotonic writer fencing.
+
+**Writer generation** — Monotonic durable token binding a tenant's current home
+region and rejecting stale regional writers.

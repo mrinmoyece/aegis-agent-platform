@@ -120,6 +120,24 @@ class RemoteJwksProvider:
         now = self._monotonic()
         if cached is not None and now < cached[1]:
             return cached[0]
+        self._refresh(now)
+        try:
+            return self._cache[key_id][0]
+        except KeyError as error:
+            raise AuthenticationError(
+                AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
+                "signing key was not found",
+            ) from error
+
+    def ready(self) -> bool:
+        """Refresh the key set and report whether at least one key is usable."""
+        now = self._monotonic()
+        if any(now < expires_at for _, expires_at in self._cache.values()):
+            return True
+        self._refresh(now)
+        return bool(self._cache)
+
+    def _refresh(self, now: float) -> None:
         request = Request(  # noqa: S310 - URL scheme is constrained above
             self._jwks_url,
             headers={"Accept": "application/json"},
@@ -140,20 +158,20 @@ class RemoteJwksProvider:
                 AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
                 "JWKS document is invalid",
             )
+        refreshed: dict[str, tuple[VerificationKey, float]] = {}
         for raw_key in document["keys"]:
             key = _parse_rsa_jwk(raw_key)
             if key is not None:
-                self._cache[key.key_id] = (
+                refreshed[key.key_id] = (
                     key,
                     now + self._cache_ttl_seconds,
                 )
-        try:
-            return self._cache[key_id][0]
-        except KeyError as error:
+        if not refreshed:
             raise AuthenticationError(
                 AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
-                "signing key was not found",
-            ) from error
+                "JWKS document did not contain usable signing keys",
+            )
+        self._cache = refreshed
 
 
 def _parse_rsa_jwk(raw_key: object) -> VerificationKey | None:

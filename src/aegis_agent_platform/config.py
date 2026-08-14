@@ -7,6 +7,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 
+from psycopg.conninfo import conninfo_to_dict
+from psycopg.errors import ProgrammingError
+
+RDS_GLOBAL_BUNDLE_PATH = "/opt/aegis/trust/rds-global-bundle.pem"
+
 
 class ConfigurationError(ValueError):
     """Raised when process configuration violates an invariant."""
@@ -16,8 +21,39 @@ class Environment(StrEnum):
     """Supported deployment environment classes."""
 
     DEVELOPMENT = "development"
+    STAGING = "staging"
     TEST = "test"
     PRODUCTION = "production"
+
+
+class ProcessRole(StrEnum):
+    """Explicit process roles accepted by the shared container entry point."""
+
+    API = "api"
+    OPERATOR_BFF = "operator-bff"
+    OUTBOX_PUBLISHER = "outbox-publisher"
+    PROTOCOL_GATEWAY = "protocol-gateway"
+    RECONCILER = "reconciler"
+    WORKER_EVIDENCE = "worker-evidence"
+    WORKER_GENERAL = "worker-general"
+
+
+def validate_protected_database_url(database_url: str) -> None:
+    """Require authenticated PostgreSQL TLS against the pinned RDS trust bundle."""
+    try:
+        database_parameters = conninfo_to_dict(database_url)
+    except ProgrammingError as error:
+        raise ConfigurationError(
+            "staging/production AEGIS_DATABASE_URL is invalid"
+        ) from error
+    if database_parameters.get("sslmode") != "verify-full":
+        raise ConfigurationError(
+            "staging/production AEGIS_DATABASE_URL must require sslmode=verify-full"
+        )
+    if database_parameters.get("sslrootcert") != RDS_GLOBAL_BUNDLE_PATH:
+        raise ConfigurationError(
+            "staging/production database URLs must use the pinned RDS sslrootcert"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +61,7 @@ class Settings:
     """Validated settings shared by process entry points."""
 
     environment: Environment = Environment.DEVELOPMENT
+    process_role: ProcessRole = ProcessRole.API
     service_name: str = "aegis-control-plane"
     host: str = "0.0.0.0"  # noqa: S104 - required inside the container network
     port: int = 8080
@@ -44,6 +81,11 @@ class Settings:
     telemetry_export_timeout_seconds: float = 2.0
     telemetry_buffer_capacity: int = 4_096
     telemetry_sample_rate: float = 0.1
+    schema_min_version: int = 1
+    schema_max_version: int = 11
+    secret_provider: str = ""
+    signing_key_reference: str = ""
+    writer_fences_file: str = ""
 
     def __post_init__(self) -> None:
         self.validate()
@@ -59,6 +101,14 @@ class Settings:
             choices = ", ".join(member.value for member in Environment)
             raise ConfigurationError(
                 f"AEGIS_ENVIRONMENT must be one of: {choices}"
+            ) from error
+        process_role_raw = values.get("AEGIS_PROCESS_ROLE", "api")
+        try:
+            process_role = ProcessRole(process_role_raw)
+        except ValueError as error:
+            choices = ", ".join(member.value for member in ProcessRole)
+            raise ConfigurationError(
+                f"AEGIS_PROCESS_ROLE must be one of: {choices}"
             ) from error
 
         port_raw = values.get("AEGIS_PORT", "8080")
@@ -97,13 +147,16 @@ class Settings:
             telemetry_sample_rate = float(
                 values.get("AEGIS_TELEMETRY_SAMPLE_RATE", "0.1")
             )
+            schema_min_version = int(values.get("AEGIS_SCHEMA_MIN_VERSION", "1"))
+            schema_max_version = int(values.get("AEGIS_SCHEMA_MAX_VERSION", "11"))
         except ValueError as error:
             raise ConfigurationError(
-                "Redis and worker numeric settings must be numbers"
+                "Redis, worker, and schema settings must be numbers"
             ) from error
 
         settings = cls(
             environment=environment,
+            process_role=process_role,
             service_name=values.get(
                 "AEGIS_SERVICE_NAME",
                 "aegis-control-plane",
@@ -129,6 +182,11 @@ class Settings:
             telemetry_export_timeout_seconds=telemetry_export_timeout_seconds,
             telemetry_buffer_capacity=telemetry_buffer_capacity,
             telemetry_sample_rate=telemetry_sample_rate,
+            schema_min_version=schema_min_version,
+            schema_max_version=schema_max_version,
+            secret_provider=values.get("AEGIS_CREDENTIAL_PROVIDER", ""),
+            signing_key_reference=values.get("AEGIS_SIGNING_KEY_REFERENCE", ""),
+            writer_fences_file=values.get("AEGIS_WRITER_FENCES_FILE", ""),
         )
         settings.validate()
         return settings
@@ -179,20 +237,44 @@ class Settings:
             )
         if not 0 <= self.telemetry_sample_rate <= 1:
             raise ConfigurationError("telemetry sample rate must be between 0 and 1")
-        if self.environment is Environment.PRODUCTION:
+        if not 1 <= self.schema_min_version <= self.schema_max_version:
+            raise ConfigurationError(
+                "schema compatibility requires 1 <= minimum <= maximum"
+            )
+        if self.environment in {Environment.STAGING, Environment.PRODUCTION}:
             required = {
                 "AEGIS_DATABASE_URL": self.database_url,
                 "AEGIS_REDIS_URL": self.redis_url,
                 "AEGIS_OIDC_ISSUER": self.oidc_issuer,
                 "AEGIS_OIDC_JWKS_URL": self.oidc_jwks_url,
                 "AEGIS_OIDC_AUDIENCE": self.oidc_audience,
+                "AEGIS_CREDENTIAL_PROVIDER": self.secret_provider,
+                "AEGIS_SIGNING_KEY_REFERENCE": self.signing_key_reference,
+                "AEGIS_WRITER_FENCES_FILE": self.writer_fences_file,
             }
             missing = [name for name, value in required.items() if not value.strip()]
             if missing:
                 raise ConfigurationError(
-                    "production requires: " + ", ".join(sorted(missing))
+                    "staging/production requires: " + ", ".join(sorted(missing))
                 )
             if not self.redis_url.startswith("rediss://"):
                 raise ConfigurationError(
-                    "production AEGIS_REDIS_URL must use rediss:// TLS"
+                    "staging/production AEGIS_REDIS_URL must use rediss:// TLS"
+                )
+            validate_protected_database_url(self.database_url)
+            if not self.oidc_issuer.startswith("https://"):
+                raise ConfigurationError(
+                    "staging/production OIDC issuer must use HTTPS"
+                )
+            if not self.oidc_jwks_url.startswith("https://"):
+                raise ConfigurationError(
+                    "staging/production OIDC JWKS URL must use HTTPS"
+                )
+            if not self.signing_key_reference.startswith("secret-ref://"):
+                raise ConfigurationError(
+                    "AEGIS_SIGNING_KEY_REFERENCE must use secret-ref://"
+                )
+            if not self.writer_fences_file.startswith("/"):
+                raise ConfigurationError(
+                    "staging/production AEGIS_WRITER_FENCES_FILE must be absolute"
                 )

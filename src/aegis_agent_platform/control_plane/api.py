@@ -21,7 +21,7 @@ from aegis_agent_platform.audit import (
     InMemoryAuditStore,
     redact_details,
 )
-from aegis_agent_platform.config import ConfigurationError, Settings
+from aegis_agent_platform.config import ConfigurationError, Environment, Settings
 from aegis_agent_platform.domain import (
     EnvironmentIdentity,
     EventEnvelope,
@@ -115,6 +115,7 @@ class ControlPlaneApp:
         event_store: EventStore | None = None,
         projections: RunStatusReader | None = None,
         storage_ready: Callable[[], Awaitable[bool]] | None = None,
+        schema_version: Callable[[], Awaitable[int | None]] | None = None,
         gateway_operations: GatewayOperations | None = None,
         evidence_operations: EvidenceOperations | None = None,
         agent_operations: AgentOperations | None = None,
@@ -125,6 +126,7 @@ class ControlPlaneApp:
         observability_operations: ObservabilityOperations | None = None,
         health_registry: HealthRegistry | None = None,
         health_clock: Callable[[], float] = monotonic,
+        settings: Settings | None = None,
     ) -> None:
         self._authentication = authentication
         self._authorization = authorization or AuthorizationService()
@@ -134,6 +136,7 @@ class ControlPlaneApp:
         self._event_store = event_store
         self._projections = projections
         self._storage_ready = storage_ready
+        self._schema_version = schema_version
         self._gateway_operations = gateway_operations
         self._evidence_operations = evidence_operations
         self._agent_operations = agent_operations
@@ -146,6 +149,7 @@ class ControlPlaneApp:
         self._observability_operations = observability_operations
         self._health_registry = health_registry
         self._health_clock = health_clock
+        self._settings = settings
 
     async def __call__(
         self,
@@ -1292,7 +1296,7 @@ class ControlPlaneApp:
 
     async def _readiness(self, send: Send) -> None:
         try:
-            Settings.from_env()
+            settings = self._settings or Settings.from_env()
         except ConfigurationError as error:
             await _respond(
                 send,
@@ -1300,6 +1304,43 @@ class ControlPlaneApp:
                 {"status": "not-ready", "reason": str(error)},
             )
             return
+        if settings.environment in {Environment.STAGING, Environment.PRODUCTION}:
+            missing_dependencies = [
+                name
+                for name, dependency in (
+                    ("authentication", self._authentication),
+                    ("event_store", self._event_store),
+                    ("health_registry", self._health_registry),
+                    ("storage_probe", self._storage_ready),
+                    ("schema_probe", self._schema_version),
+                )
+                if dependency is None
+            ]
+            if missing_dependencies:
+                await _respond(
+                    send,
+                    503,
+                    {
+                        "status": "not-ready",
+                        "reason": "managed_environment_dependencies_unconfigured",
+                        "components": sorted(missing_dependencies),
+                    },
+                )
+                return
+        if self._schema_version is not None:
+            current_schema_version = await self._schema_version()
+            if (
+                current_schema_version is None
+                or not settings.schema_min_version
+                <= current_schema_version
+                <= settings.schema_max_version
+            ):
+                await _respond(
+                    send,
+                    503,
+                    {"status": "not-ready", "reason": "schema_incompatible"},
+                )
+                return
         if self._storage_ready is not None and not await self._storage_ready():
             await _respond(
                 send,
@@ -1338,11 +1379,11 @@ class ControlPlaneApp:
                     if health is not None and health.status.value == "degraded"
                     else "ready"
                 ),
-                "checks": (
-                    ["configuration", "storage"]
-                    if self._storage_ready is not None
-                    else ["configuration"]
-                ),
+                "checks": [
+                    "configuration",
+                    *(["schema"] if self._schema_version is not None else []),
+                    *(["storage"] if self._storage_ready is not None else []),
+                ],
                 "capabilities": {
                     "remediation": (
                         "configured"

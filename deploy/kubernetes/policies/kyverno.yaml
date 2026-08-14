@@ -1,0 +1,166 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: aegis-restricted-workloads
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: immutable-images
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [aegis-system, aegis-sandbox]
+      validate:
+        message: Images must use immutable sha256 digests.
+        foreach:
+          - list: request.object.spec.containers
+            pattern:
+              image: "*@sha256:*"
+          - list: request.object.spec.initContainers || `[]`
+            pattern:
+              image: "*@sha256:*"
+          - list: request.object.spec.ephemeralContainers || `[]`
+            pattern:
+              image: "*@sha256:*"
+    - name: restricted-security-context
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [aegis-system, aegis-sandbox]
+      validate:
+        message: Aegis workloads require the restricted security baseline.
+        foreach:
+          - list: request.object.spec.containers
+            pattern:
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+          - list: request.object.spec.initContainers || `[]`
+            pattern:
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+          - list: request.object.spec.ephemeralContainers || `[]`
+            pattern:
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+    - name: no-host-boundaries
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [aegis-system, aegis-sandbox]
+      validate:
+        message: Host networking, PID, and IPC namespaces are forbidden.
+        pattern:
+          spec:
+            =(hostNetwork): false
+            =(hostPID): false
+            =(hostIPC): false
+    - name: restricted-pod-context
+      match:
+        any:
+          - resources:
+             kinds: [Pod]
+             namespaces: [aegis-system, aegis-sandbox]
+      validate:
+        message: Aegis pods require non-root RuntimeDefault execution.
+        pattern:
+          spec:
+            securityContext:
+             runAsNonRoot: true
+             seccompProfile:
+               type: RuntimeDefault
+    - name: no-host-paths
+      match:
+        any:
+          - resources:
+             kinds: [Pod]
+             namespaces: [aegis-system, aegis-sandbox]
+      validate:
+        message: Host path volumes are forbidden.
+        deny:
+          conditions:
+            any:
+             - key: "{{ request.object.spec.volumes[?hostPath] | length(@) }}"
+               operator: GreaterThan
+               value: 0
+    - name: no-service-token-by-default
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [aegis-system, aegis-sandbox]
+      exclude:
+        any:
+          - subjects:
+              - kind: ServiceAccount
+                name: aegis-sandbox-cleanup
+                namespace: aegis-sandbox
+      validate:
+        message: Kubernetes API credentials require an explicit exception.
+        pattern:
+          spec:
+            automountServiceAccountToken: false
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: aegis-image-verification
+spec:
+  validationFailureAction: Enforce
+  background: true
+  webhookConfiguration:
+    failurePolicy: Fail
+  rules:
+    - name: verify-keyless-signature-and-attestations
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [aegis-system]
+      verifyImages:
+        - imageReferences:
+            - ghcr.io/mrinmoyece/aegis-*
+          type: Cosign
+          cosignOCI11: true
+          mutateDigest: false
+          required: true
+          verifyDigest: true
+          attestors:
+            - entries:
+                - keyless:
+                    subject: https://github.com/mrinmoyece/aegis-agent-platform/.github/workflows/supply-chain.yml@refs/heads/master
+                    issuer: https://token.actions.githubusercontent.com
+        - imageReferences:
+            - ghcr.io/mrinmoyece/aegis-*
+          type: SigstoreBundle
+          mutateDigest: false
+          required: true
+          verifyDigest: true
+          attestations:
+            - type: https://slsa.dev/provenance/v1
+              attestors:
+                - entries:
+                    - keyless:
+                        subject: https://github.com/mrinmoyece/aegis-agent-platform/.github/workflows/supply-chain.yml@refs/heads/master
+                        issuer: https://token.actions.githubusercontent.com
+            - type: https://spdx.dev/Document/v2.3
+              attestors:
+                - entries:
+                    - keyless:
+                        subject: https://github.com/mrinmoyece/aegis-agent-platform/.github/workflows/supply-chain.yml@refs/heads/master
+                        issuer: https://token.actions.githubusercontent.com

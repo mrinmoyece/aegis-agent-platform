@@ -25,6 +25,7 @@ from aegis_agent_platform.event_store.postgres import PostgresEventStore
 from aegis_agent_platform.identity import TenantId
 from aegis_agent_platform.runtime.postgres import PostgresWorkRepository
 from aegis_agent_platform.tenancy import TenantContext
+from integration_helpers import integration_writer_fences
 
 DATABASE_URL = os.environ.get("AEGIS_TEST_DATABASE_URL")
 pytestmark = [
@@ -48,7 +49,10 @@ def test_specialist_projection_fencing_rls_and_rebuild() -> None:
         await connection.execute("SET ROLE aegis_app")
         now = datetime.now(UTC)
         run_id = uuid4()
-        event_store = PostgresEventStore(connection)
+        event_store = PostgresEventStore(
+            connection,
+            writer_fence_resolver=integration_writer_fences("local-test", 1),
+        )
         work = PostgresWorkRepository(connection, event_store)
         repository = PostgresAgentRepository(connection, event_store, work)
         coordinator = DurableCoordinator(
@@ -159,7 +163,10 @@ def test_specialist_projection_fencing_rls_and_rebuild() -> None:
             autocommit=True,
         )
         await maintenance.execute("SET ROLE aegis_maintenance")
-        maintenance_events = PostgresEventStore(maintenance)
+        maintenance_events = PostgresEventStore(
+            maintenance,
+            writer_fence_resolver=integration_writer_fences("local-test", 1),
+        )
         maintenance_repository = PostgresAgentRepository(
             maintenance,
             maintenance_events,

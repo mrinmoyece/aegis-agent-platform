@@ -119,11 +119,23 @@ contract drift, lint/types/tests/axe/Playwright, production audit/license policy
 bundle/CSP/source-map budgets, SBOM generation, and container smoke. Dependency
 automation must not auto-merge major versions.
 
+## Layer 15 serving boundary
+
+The production Kustomize base serves the static UI behind TLS with HSTS, CSP,
+frame denial, body/time/rate limits, and immutable caching for hashed assets.
+Dynamic HTML and source maps are not cached or exposed. The BFF has the same
+restricted workload, probe, disruption, topology, and default-deny controls but
+is deliberately scaled to zero: the current in-memory demo session is not safe
+across replicas or restarts. Enablement requires a distributed server-side
+session adapter, OIDC exchange, cookie/CSRF/origin qualification, key rotation,
+and ingress/browser tests. Stickiness is not a substitute for that work.
+
 ## Production readiness gaps
 
 The repository has not live-tested OIDC login/logout/key rotation, distributed
 session persistence, TLS proxy behavior, production browsers/assistive technology,
-managed deployment, external telemetry/model/connectors, HA/DR/multi-region,
+live managed-deployment behavior, external telemetry/model/connectors, measured
+HA/DR/multi-region,
 long-window load/chaos, independent penetration or accessibility audits, or
 compliance certification. MCP and A2A remain deferred adapters. The deterministic
 demo and automated axe/Playwright checks are not substitutes for those claims.

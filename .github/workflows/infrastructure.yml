@@ -1,0 +1,111 @@
+name: Infrastructure foundations
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/infrastructure.yml"
+      - "deploy/kubernetes/**"
+      - "infra/terraform/**"
+      - "scripts/check_production.py"
+      - "security/vulnerability-waivers.yaml"
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/infrastructure.yml"
+      - "deploy/kubernetes/**"
+      - "infra/terraform/**"
+      - "scripts/check_production.py"
+      - "security/vulnerability-waivers.yaml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: infrastructure-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kubernetes:
+    name: Kustomize, schemas, and policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CRD_SCHEMA_REVISION: 52b0261318acc7dd0b66e032759b1f218216b980
+      KUBERNETES_SCHEMA_REVISION: c8f4e61c63bc529749125ac566bccc6986e08d45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Run dependency-free production controls
+        run: python scripts/check_production.py
+      - name: Render environment overlays
+        run: |
+          mkdir -p .aegis-evidence/kubernetes
+          for environment in development staging production; do
+            kubectl kustomize "deploy/kubernetes/overlays/${environment}" \
+              > ".aegis-evidence/kubernetes/${environment}.yaml"
+          done
+      - name: Validate Kubernetes schemas
+        run: |
+          for manifest in .aegis-evidence/kubernetes/*.yaml; do
+            docker run --rm \
+              --volume "${PWD}:/workspace:ro" \
+              ghcr.io/yannh/kubeconform@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c \
+              -strict -summary -ignore-missing-schemas \
+              -kubernetes-version 1.32.0 \
+              -schema-location "https://raw.githubusercontent.com/yannh/kubernetes-json-schema/${KUBERNETES_SCHEMA_REVISION}/{{ .NormalizedKubernetesVersion }}-standalone-strict/{{ .ResourceKind }}{{ .KindSuffix }}.json" \
+              -schema-location "https://raw.githubusercontent.com/datreeio/CRDs-catalog/${CRD_SCHEMA_REVISION}/{{ .Group }}/{{ .ResourceKind }}_{{ .ResourceAPIVersion }}.json" \
+              "/workspace/${manifest}"
+          done
+      - name: Scan Kubernetes configuration
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: deploy/kubernetes
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          hide-progress: true
+      - name: Retain bounded rendered evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: kubernetes-rendered-manifests
+          path: .aegis-evidence/kubernetes/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
+  terraform:
+    name: Terraform format, validate, lint, security, and mock plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: infra/terraform/aws
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: 1.11.4
+      - name: Set up TFLint
+        uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6 # v4.1.1
+        with:
+          tflint_version: v0.56.0
+      - name: Format
+        run: terraform fmt -check -recursive
+      - name: Initialize without remote backend
+        run: terraform init -backend=false -input=false
+      - name: Validate
+        run: terraform validate
+      - name: Lint
+        run: tflint --recursive
+      - name: Run mocked plans
+        run: terraform test
+      - name: Scan Terraform configuration
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: infra/terraform/aws
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          hide-progress: true

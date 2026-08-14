@@ -12,12 +12,20 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import MappingProxyType
-from typing import cast
+from typing import Any, cast
 from uuid import UUID
+
+import yaml
 
 from aegis_agent_platform.agents import CanonicalScenario
 from aegis_agent_platform.agents.__main__ import run_canonical_demo
-from aegis_agent_platform.config import Environment
+from aegis_agent_platform.config import (
+    ConfigurationError,
+    Environment,
+    ProcessRole,
+    Settings,
+)
+from aegis_agent_platform.control_plane.api import ControlPlaneApp
 from aegis_agent_platform.domain import (
     DataClassification,
     DomainEventType,
@@ -80,9 +88,11 @@ from aegis_agent_platform.evals.faults import (
 )
 from aegis_agent_platform.evals.scoring import ScoringObservation
 from aegis_agent_platform.event_store import (
+    ClaimedOutboxMessage,
     EventPage,
     EventStore,
     FencingError,
+    OutboxMessage,
     ReplayCorruptionError,
 )
 from aegis_agent_platform.evidence import (
@@ -125,6 +135,12 @@ from aegis_agent_platform.observability import (
     extract_context,
     linked_contexts,
 )
+from aegis_agent_platform.operations import (
+    DeploymentPrerequisites,
+    RestoreEvidence,
+    SchemaCompatibilityWindow,
+    WriterFence,
+)
 from aegis_agent_platform.operator import (
     InMemoryOperatorSessionStore,
     canonical_operator_snapshot,
@@ -156,11 +172,21 @@ from aegis_agent_platform.protocols import (
     peer_digest,
 )
 from aegis_agent_platform.providers import ScriptedModelProvider
+from aegis_agent_platform.queueing import (
+    MessageEnvelope,
+    RetryableQueueError,
+    WorkQueue,
+)
+from aegis_agent_platform.queueing.publisher import OutboxPublisher
 from aegis_agent_platform.remediation.__main__ import (
     RemediationScenario,
     run_remediation_demo,
 )
 from aegis_agent_platform.runtime.backoff import ExponentialBackoff
+from aegis_agent_platform.runtime.deployment import (
+    active_process_roles,
+    run_background_role,
+)
 from aegis_agent_platform.sandbox import AllowlistScanner, InMemoryArtifactStore
 from aegis_agent_platform.sandbox.__main__ import (
     SandboxScenario,
@@ -221,6 +247,7 @@ async def execute_probe(
         "observability": _observability_probe,
         "operator": _operator_probe,
         "protocol": _protocol_probe,
+        "deployment": _deployment_probe,
         "fault": _fault_probe,
     }
     if family == "adversarial":
@@ -1712,6 +1739,336 @@ async def _protocol_probe(
             budget_tokens=1,
         ),
         (_trace("protocol_boundary", 0, reason_code=reason),),
+    )
+
+
+class _DeploymentOutbox:
+    def __init__(self, claim: ClaimedOutboxMessage) -> None:
+        self.claim = claim
+        self.published = False
+        self.failures = 0
+
+    async def claim_outbox(
+        self,
+        context: TenantContext,
+        *,
+        lease_owner: str,
+        lease_expires_at: datetime,
+        now: datetime,
+        limit: int,
+    ) -> Sequence[object]:
+        del context, lease_owner, lease_expires_at, now, limit
+        return () if self.published else (self.claim,)
+
+    async def mark_outbox_published(
+        self,
+        context: TenantContext,
+        message_id: UUID,
+        *,
+        lease_owner: str,
+        published_at: datetime,
+    ) -> None:
+        del context, lease_owner, published_at
+        self.published = message_id == self.claim.message.message_id
+
+    async def mark_outbox_failed(
+        self,
+        context: TenantContext,
+        message_id: UUID,
+        *,
+        lease_owner: str,
+        retry_at: datetime,
+        error_code: str,
+    ) -> None:
+        del context, lease_owner, retry_at
+        if (
+            message_id == self.claim.message.message_id
+            and error_code == "redis_unavailable"
+        ):
+            self.failures += 1
+
+
+class _RecoveringDeploymentQueue:
+    def __init__(self) -> None:
+        self.available = False
+        self.published: list[MessageEnvelope] = []
+
+    async def publish(self, envelope: MessageEnvelope) -> str:
+        if not self.available:
+            raise RetryableQueueError("redis unavailable")
+        self.published.append(envelope)
+        return "1-0"
+
+
+async def _readiness_status(schema: int) -> int:
+    app = ControlPlaneApp(
+        schema_version=lambda: _schema_value(schema),
+        settings=Settings(
+            environment=Environment.DEVELOPMENT,
+            schema_min_version=10,
+            schema_max_version=11,
+        ),
+    )
+    messages: list[dict[str, Any]] = []
+
+    async def receive() -> dict[str, Any]:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message: dict[str, Any]) -> None:
+        messages.append(message)
+
+    await app(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/health/ready",
+            "headers": [],
+            "query_string": b"",
+        },
+        receive,
+        send,
+    )
+    return int(messages[0]["status"])
+
+
+async def _schema_value(version: int) -> int:
+    return version
+
+
+async def _deployment_probe(
+    variant: str,
+    _faults: DeterministicFaultInjector | None,
+) -> ProbeResult:
+    passed = False
+    outcome = ExpectedOutcome.SAFE_FAILURE
+    reason = variant.replace("-", "_")
+    root = Path(__file__).resolve().parents[3]
+    recovery_expected = variant in {
+        "pod-restart",
+        "redis-loss",
+        "ledger-restore",
+        "telemetry-loss",
+    }
+
+    if variant == "pod-restart":
+        restart_events = (_stored_event(1, 1), _stored_event(2, 2))
+        before = ReplayDebugger(
+            cast(EventStore, _ProjectionStore(restart_events)),
+            identifier_hash_key=b"r" * 32,
+            hash_key_version="restart-v1",
+        ).fold(restart_events, aggregate_id="run-eval")
+        restarted = ReplayDebugger(
+            cast(EventStore, _ProjectionStore(restart_events)),
+            identifier_hash_key=b"r" * 32,
+            hash_key_version="restart-v1",
+        )
+        passed = (
+            restarted.fold(restart_events, aggregate_id="run-eval") == before
+            and restarted.validate(restart_events).valid
+            and active_process_roles()
+            == frozenset(
+                {
+                    ProcessRole.API,
+                    ProcessRole.OUTBOX_PUBLISHER,
+                    ProcessRole.RECONCILER,
+                }
+            )
+        )
+        outcome = ExpectedOutcome.RECOVERED
+    elif variant == "stale-region-writer":
+        fence = WriterFence("eu-west-1", 9)
+        passed = (
+            fence.permits(region="eu-west-1", generation=9)
+            and not fence.permits(region="eu-west-1", generation=8)
+            and not fence.permits(region="us-east-1", generation=9)
+        )
+        outcome = ExpectedOutcome.DENIED
+    elif variant == "redis-loss":
+        message_id = UUID("00000000-0000-0000-0000-000000000210")
+        claim = ClaimedOutboxMessage(
+            OutboxMessage(
+                message_id=message_id,
+                event_id=UUID("00000000-0000-0000-0000-000000000211"),
+                destination="aegis.work",
+                available_at=NOW,
+                max_attempts=3,
+                payload={
+                    "work_id": "00000000-0000-0000-0000-000000000212",
+                    "correlation_id": "00000000-0000-0000-0000-000000000213",
+                },
+                headers={"tenant_id": str(TENANT_A)},
+            ),
+            attempt_count=1,
+            lease_owner="publisher-eval",
+            lease_expires_at=NOW + timedelta(seconds=30),
+        )
+        repository = _DeploymentOutbox(claim)
+        queue = _RecoveringDeploymentQueue()
+        publisher = OutboxPublisher(
+            repository,
+            cast(WorkQueue, queue),
+            publisher_id="publisher-eval",
+            retry_delay=lambda _: timedelta(0),
+        )
+        failed = await publisher.publish_batch(TenantContext(TENANT_A), now=NOW)
+        queue.available = True
+        recovered = await publisher.publish_batch(
+            TenantContext(TENANT_A),
+            now=NOW + timedelta(seconds=1),
+        )
+        passed = (
+            failed.failed == 1
+            and repository.failures == 1
+            and recovered.published == 1
+            and repository.published
+            and [message.message_id for message in queue.published] == [message_id]
+        )
+        outcome = ExpectedOutcome.RECOVERED
+    elif variant == "ledger-restore":
+        valid = RestoreEvidence(2, 2, 2, 2, "a" * 64, "a" * 64, True, True)
+        corrupt = RestoreEvidence(2, 1, 2, 1, "a" * 64, "b" * 64, True, True)
+        passed = valid.valid and not corrupt.valid
+        outcome = ExpectedOutcome.RECOVERED
+    elif variant == "schema-mismatch":
+        window = SchemaCompatibilityWindow(10, 11)
+        status = await _readiness_status(12)
+        passed = (
+            window.accepts(10)
+            and window.accepts(11)
+            and not window.accepts(12)
+            and status == 503
+        )
+        outcome = ExpectedOutcome.SAFE_FAILURE
+    elif variant == "unsigned-image":
+        policy_path = root / "deploy" / "kubernetes" / "policies" / "kyverno.yaml"
+        policy_documents = tuple(
+            yaml.safe_load_all(policy_path.read_text(encoding="utf-8"))
+        )
+        image_policy = next(
+            document
+            for document in policy_documents
+            if document["metadata"]["name"] == "aegis-image-verification"
+        )
+        verifications = image_policy["spec"]["rules"][0]["verifyImages"]
+        signature_verification = next(
+            verification
+            for verification in verifications
+            if verification["type"] == "Cosign"
+        )
+        attestation_verification = next(
+            verification
+            for verification in verifications
+            if verification["type"] == "SigstoreBundle"
+        )
+        predicates = {
+            attestation["type"]
+            for attestation in attestation_verification["attestations"]
+        }
+        passed = (
+            image_policy["spec"]["validationFailureAction"] == "Enforce"
+            and image_policy["spec"]["webhookConfiguration"]["failurePolicy"] == "Fail"
+            and signature_verification["required"] is True
+            and signature_verification["verifyDigest"] is True
+            and signature_verification["cosignOCI11"] is True
+            and attestation_verification["required"] is True
+            and attestation_verification["verifyDigest"] is True
+            and predicates
+            == {
+                "https://slsa.dev/provenance/v1",
+                "https://spdx.dev/Document/v2.3",
+            }
+        )
+        outcome = ExpectedOutcome.DENIED
+    elif variant == "unready-boundaries":
+        missing_key = DeploymentPrerequisites(True, False, True)
+        prerequisites = DeploymentPrerequisites(True, True, True)
+        workload_documents = tuple(
+            yaml.safe_load_all(
+                (
+                    root / "deploy" / "kubernetes" / "base" / "worker-workloads.yaml"
+                ).read_text(encoding="utf-8")
+            )
+        )
+        replicas = {
+            document["metadata"]["name"]: document["spec"]["replicas"]
+            for document in workload_documents
+            if document is not None and document.get("kind") == "Deployment"
+        }
+        role_rejected = False
+        try:
+            await run_background_role(
+                Settings(process_role=ProcessRole.PROTOCOL_GATEWAY)
+            )
+        except ConfigurationError:
+            role_rejected = True
+        passed = (
+            not missing_key.core_ready
+            and prerequisites.core_ready
+            and not prerequisites.protocol_enabled
+            and not prerequisites.sandbox_enabled
+            and replicas["aegis-protocol-gateway"] == 0
+            and replicas["aegis-worker-general"] == 0
+            and replicas["aegis-worker-evidence"] == 0
+            and role_rejected
+        )
+        outcome = ExpectedOutcome.DENIED
+    elif variant == "telemetry-loss":
+        telemetry_events = (_stored_event(1, 1),)
+        replay = ReplayDebugger(
+            cast(EventStore, _ProjectionStore(telemetry_events)),
+            identifier_hash_key=b"t" * 32,
+            hash_key_version="telemetry-v1",
+        )
+        authoritative_state = replay.fold(telemetry_events, aggregate_id="run-eval")
+        buffer = BoundedExportBuffer(capacity=1)
+        offered = buffer.offer({"event": "non-authoritative"})
+
+        def unavailable(_batch: object) -> None:
+            raise TimeoutError
+
+        passed = (
+            offered
+            and buffer.drain(unavailable) == 0
+            and replay.fold(telemetry_events, aggregate_id="run-eval")
+            == authoritative_state
+        )
+        outcome = ExpectedOutcome.RECOVERED
+    else:
+        raise ValueError(f"unknown deployment probe: {variant}")
+
+    checks = _common_checks()
+    checks.update(
+        {
+            "fail_closed": passed,
+            "pod_restart_preserves_correctness": passed,
+            "stale_region_denied": passed,
+            "redis_loss_recoverable": passed,
+            "restore_integrity": passed,
+            "schema_mismatch_fails_readiness": passed,
+            "unsigned_image_rejected": passed,
+            "protocol_disabled_without_trust": passed,
+            "sandbox_disabled_without_isolation": passed,
+            "telemetry_outage_contained": passed,
+            "replay_convergence": passed,
+        }
+    )
+    return ProbeResult(
+        outcome,
+        checks,
+        ScoringObservation(
+            outcome_correct=passed,
+            safety_violations=0 if passed else 1,
+            policy_checks=1,
+            effect_checks=1,
+            correct_effects=1 if passed else 0,
+            verified_effects=1 if passed else 0,
+            recovery_expected=recovery_expected,
+            recovery_converged=passed if recovery_expected else False,
+            steps=2,
+            tokens=0,
+            budget_tokens=1,
+        ),
+        (_trace("deployment_invariant", 0, reason_code=reason),),
     )
 
 

@@ -366,6 +366,8 @@ federation and PKI/token brokerage, HA/DR/multi-region,
 final load/chaos, independent penetration/accessibility testing, and compliance
 certification remain deferred.
 
+## Layer 14 limitations
+
 Layer 14's MCP `2026-07-28` / `mcp==2.0.0` and A2A `1.0` specification
 `v1.0.1` / `a2a-sdk==1.1.2` compatibility is exercised with deterministic fake
 peers. This is not independent protocol conformance certification. Production
@@ -390,4 +392,33 @@ qualification, load/chaos, HA/DR, and multi-region evidence.
 - Dependency audit, permissive-license policy, bundle/source-map/CSP checks, SBOM,
   and non-root container smoke are CI controls. Image signing, SLSA provenance,
   managed promotion/rollback, production WAF/CDN behavior, penetration testing,
-  load/chaos, HA/DR/multi-region, and compliance certification remain absent.
+  load/chaos, HA/DR/multi-region, and compliance certification remained absent at that
+  layer; Layer 15 adds signing/promotion configuration and local DR evidence without
+  claiming live qualification.
+
+## Layer 15 limitations
+
+- Kustomize, Terraform, Kyverno, External Secrets, workflow, and runbook artifacts
+  are configuration evidence. The application image digest placeholders are not
+  deployable releases. Promotion can create private-ECR, checksummed bundles; only API,
+  publisher, and reconciler have managed process bootstrap. Workers, BFF, protocol, and
+  sandbox execution remain fail-closed at zero pending qualified adapters.
+- The AWS module is validated and mock-planned with paid resources disabled. It has
+  not been applied; account guardrails, state bootstrap, pinned add-on behavior,
+  controller installs/mirrors, CNI, ingress/egress, Redis authentication, runtime class,
+  costs, quotas, and managed service behavior are unverified.
+- Standard NetworkPolicy cannot prove FQDN/provider/peer identity or metadata/
+  private/link-local denial. The production egress gateway and generated managed
+  endpoint policy are deployment prerequisites.
+- The local restore drill proves two deterministic events, projection rebuild, and
+  Redis non-authority. It does not prove managed PITR, object/key recovery,
+  production volume, cross-account/region recovery, or attained RPO/RTO.
+- HA, capacity, partitioning, retention, and single-writer regional behavior are
+  designs plus deterministic invariants. No live failover, repartition, archive
+  deletion, full-scale load/chaos, or multi-region operation is implemented.
+- Keyless workflows, private-mirror promotion, controller preflight, and admission
+  examples do not prove registry, transparency, environment approval, GitOps apply, or
+  production admission enforcement.
+- Live OIDC/BFF sessions, production PKI/token brokerage/partner federation,
+  independent penetration/accessibility/compliance certification, 24/7 operations,
+  measured SLOs, and active-active writes remain explicitly deferred.

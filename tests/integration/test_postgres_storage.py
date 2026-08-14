@@ -33,6 +33,7 @@ from aegis_agent_platform.identity import (
     TenantId,
     VerifiedClaims,
 )
+from aegis_agent_platform.operations import PostgresSchemaVersionProbe
 from aegis_agent_platform.persistence import (
     PostgresAuditStore,
     PostgresIdentityDirectory,
@@ -41,6 +42,7 @@ from aegis_agent_platform.persistence import (
 )
 from aegis_agent_platform.projections import ProjectionEngine
 from aegis_agent_platform.tenancy import TenantContext
+from integration_helpers import integration_writer_fences
 
 DATABASE_URL = os.environ.get("AEGIS_TEST_DATABASE_URL")
 pytestmark = [
@@ -101,7 +103,10 @@ def test_append_replay_stale_version_and_transaction_rollback() -> None:
     async def scenario() -> None:
         connection = await app_connection()
         try:
-            store = PostgresEventStore(connection)
+            store = PostgresEventStore(
+                connection,
+                writer_fence_resolver=integration_writer_fences("local-test", 1),
+            )
             aggregate_id = f"run-{uuid4()}"
             first = event(aggregate_id)
             assert await store.append(TENANT_A, (first,), expected_version=0) == 1
@@ -152,7 +157,10 @@ def test_concurrent_append_has_one_winner_and_gapless_sequence() -> None:
                     ready.set()
             await ready.wait()
             try:
-                await PostgresEventStore(connection).append(
+                await PostgresEventStore(
+                    connection,
+                    writer_fence_resolver=integration_writer_fences("local-test", 1),
+                ).append(
                     TENANT_A,
                     (event(aggregate_id),),
                     expected_version=0,
@@ -168,11 +176,17 @@ def test_concurrent_append_has_one_winner_and_gapless_sequence() -> None:
             )
             assert sorted(outcomes) == ["committed", "conflict"]
             replay = await collect(
-                PostgresEventStore(first_connection).read_stream(TENANT_A, aggregate_id)
+                PostgresEventStore(
+                    first_connection,
+                    writer_fence_resolver=integration_writer_fences("local-test", 1),
+                ).read_stream(TENANT_A, aggregate_id)
             )
             assert [item.aggregate_sequence for item in replay] == [1]
 
-            shared_store = PostgresEventStore(first_connection)
+            shared_store = PostgresEventStore(
+                first_connection,
+                writer_fence_resolver=integration_writer_fences("local-test", 1),
+            )
             tenant_a_aggregate = f"shared-a-{uuid4()}"
             tenant_b_aggregate = f"shared-b-{uuid4()}"
             versions = await asyncio.gather(
@@ -216,7 +230,10 @@ def test_inbox_deduplication_and_outbox_claim_race() -> None:
         )
         inbox_message_id = f"message-{uuid4()}"
         try:
-            first_store = PostgresEventStore(first_connection)
+            first_store = PostgresEventStore(
+                first_connection,
+                writer_fence_resolver=integration_writer_fences("local-test", 1),
+            )
             first = await first_store.append_from_inbox(
                 TENANT_A,
                 source="test-source",
@@ -246,7 +263,10 @@ def test_inbox_deduplication_and_outbox_claim_race() -> None:
                     limit=1,
                     destination="later-worker",
                 ),
-                PostgresEventStore(second_connection).claim_outbox(
+                PostgresEventStore(
+                    second_connection,
+                    writer_fence_resolver=integration_writer_fences("local-test", 1),
+                ).claim_outbox(
                     TENANT_A,
                     lease_owner="publisher-b",
                     lease_expires_at=expiry,
@@ -260,7 +280,10 @@ def test_inbox_deduplication_and_outbox_claim_race() -> None:
             winning_store = (
                 first_store
                 if winning_claim.lease_owner == "publisher-a"
-                else PostgresEventStore(second_connection)
+                else PostgresEventStore(
+                    second_connection,
+                    writer_fence_resolver=integration_writer_fences("local-test", 1),
+                )
             )
             await winning_store.mark_outbox_failed(
                 TENANT_A,
@@ -391,9 +414,10 @@ def test_forced_rls_denies_cross_tenant_and_event_mutation() -> None:
         connection = await app_connection()
         try:
             item = event(aggregate_id)
-            await PostgresEventStore(connection).append(
-                TENANT_A, (item,), expected_version=0
-            )
+            await PostgresEventStore(
+                connection,
+                writer_fence_resolver=integration_writer_fences("local-test", 1),
+            ).append(TENANT_A, (item,), expected_version=0)
             return item.event_id
         finally:
             await connection.close()
@@ -409,12 +433,120 @@ def test_forced_rls_denies_cross_tenant_and_event_mutation() -> None:
             admin.execute("DELETE FROM events WHERE event_id = %s", (event_id,))
 
 
+def test_stale_region_writer_cannot_append() -> None:
+    async def scenario() -> None:
+        for region, generation in (("stale-region", 1), ("local-test", 2)):
+            connection = await app_connection()
+            try:
+                store = PostgresEventStore(
+                    connection,
+                    writer_fence_resolver=integration_writer_fences(region, generation),
+                )
+                with pytest.raises(PermanentStorageError):
+                    await store.append(
+                        TENANT_A,
+                        (event(f"stale-writer-{region}-{generation}-{uuid4()}"),),
+                        expected_version=0,
+                    )
+            finally:
+                await connection.close()
+
+    asyncio.run(scenario())
+
+
+def test_writer_fence_activation_preserves_expand_phase_overlap() -> None:
+    assert DATABASE_URL is not None
+    with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+        admin.execute(
+            """
+            INSERT INTO tenants (tenant_id, display_name, enabled, created_at)
+            VALUES (
+                'tenant-expand-overlap',
+                'Tenant Expand Overlap',
+                true,
+                transaction_timestamp()
+            )
+            """
+        )
+        admin.execute(
+            """
+            UPDATE tenant_writer_fences
+            SET home_region = 'local-test',
+                state = 'active',
+                approved_change_reference = 'change-ref://integration-expand',
+                updated_at = transaction_timestamp()
+            WHERE tenant_id = 'tenant-expand-overlap'
+            """
+        )
+        admin.execute(
+            "SELECT aegis_assert_writer_fence('tenant-expand-overlap', NULL, NULL)"
+        )
+        admin.execute(
+            """
+            UPDATE tenant_writer_fences
+            SET enforcement_enabled = true,
+                updated_at = transaction_timestamp()
+            WHERE tenant_id = 'tenant-expand-overlap'
+            """
+        )
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            admin.execute(
+                "SELECT aegis_assert_writer_fence('tenant-expand-overlap', NULL, NULL)"
+            )
+        admin.execute(
+            "DELETE FROM tenant_writer_fences WHERE tenant_id = 'tenant-expand-overlap'"
+        )
+        with pytest.raises(psycopg.errors.InsufficientPrivilege, match="missing"):
+            admin.execute(
+                "SELECT aegis_assert_writer_fence("
+                "'tenant-expand-overlap', 'local-test', 1)"
+            )
+
+
+def test_writer_fence_transitions_are_monotonic_and_irreversible() -> None:
+    assert DATABASE_URL is not None
+    with psycopg.connect(DATABASE_URL, autocommit=True) as admin:
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            admin.execute(
+                """
+                UPDATE tenant_writer_fences
+                SET generation = 3,
+                    state = 'failover_pending',
+                    updated_at = transaction_timestamp()
+                WHERE tenant_id = 'tenant-a'
+                """
+            )
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            admin.execute(
+                """
+                UPDATE tenant_writer_fences
+                SET enforcement_enabled = false,
+                    updated_at = transaction_timestamp()
+                WHERE tenant_id = 'tenant-a'
+                """
+            )
+
+
+def test_schema_probe_reads_contiguous_migration_history() -> None:
+    async def scenario() -> None:
+        connection = await app_connection()
+        try:
+            assert await PostgresSchemaVersionProbe(connection)() == 11
+        finally:
+            await connection.close()
+
+    asyncio.run(scenario())
+
+
 def test_projection_idempotence_and_rebuild() -> None:
     async def scenario() -> None:
         connection = await app_connection()
         aggregate_id = f"projection-{uuid4()}"
         try:
-            store = PostgresEventStore(connection)
+            store = PostgresEventStore(
+                connection,
+                writer_fence_resolver=integration_writer_fences("local-test", 1),
+            )
             await store.append(
                 TENANT_A,
                 (

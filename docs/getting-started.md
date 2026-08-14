@@ -55,7 +55,8 @@ Install Python 3.12+, then:
 python3.12 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e '.[dev]'
+python -m pip install --require-hashes -r requirements-dev.lock
+python -m pip install --no-build-isolation --no-deps -e .
 make check
 ```
 
@@ -172,9 +173,13 @@ demonstrates the expected configuration shape (issuer, JWKS URL, audience) for
 `RemoteJwksProvider` rather than a ready-to-use login flow. Calling `/v1/me`
 without a bearer token returns `401 missing_token`; obtaining a real token
 against this realm and wiring it through `RemoteJwksProvider` is a deployment
-exercise, not something the fast local checks assume works. PostgreSQL initializes all forward migrations. Production composition must
-explicitly inject the PostgreSQL repositories and event store; the module-level
-demo application remains fail-closed and does not invent development identities.
+exercise, not something the fast local checks assume works. PostgreSQL initializes the
+pre-Layer-15 local schema. Production composition must
+explicitly inject the PostgreSQL repositories and event store; the shared container
+does so only for the API role. A one-runner Compose migration service adopts the
+pre-Layer-15 local schema, records checksums, applies migration 0011, and seeds only the
+conspicuous `local-demo` tenant/fence matching `docker/local-writer-fences.json`.
+Unsupported worker, BFF, protocol, and sandbox roles remain fail closed.
 
 Stop and remove containers with `docker compose down`. Add `--volumes` only when
 you intentionally want to delete local data.

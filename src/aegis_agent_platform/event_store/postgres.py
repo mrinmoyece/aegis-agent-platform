@@ -36,6 +36,7 @@ from aegis_agent_platform.event_store import (
     PermanentStorageError,
     ReplayCorruptionError,
     TransientStorageError,
+    WriterFenceResolver,
 )
 from aegis_agent_platform.projections import ProjectionCheckpoint
 from aegis_agent_platform.tenancy import TenantContext
@@ -200,10 +201,12 @@ class PostgresEventStore:
         self,
         connection: psycopg.AsyncConnection[Any],
         *,
+        writer_fence_resolver: WriterFenceResolver,
         telemetry: StorageTelemetry | None = None,
         monotonic_clock: Callable[[], float] = monotonic,
     ) -> None:
         self._connection = connection
+        self._writer_fence_resolver = writer_fence_resolver
         self._telemetry = telemetry or NullStorageTelemetry()
         self._monotonic = monotonic_clock
         self._lock = postgres_connection_lock(connection)
@@ -222,6 +225,7 @@ class PostgresEventStore:
         try:
             async with _tenant_transaction(self._connection, self._lock, context):
                 version = await self._append_in_transaction(
+                    context,
                     events,
                     expected_version=expected_version,
                     outbox=outbox,
@@ -253,6 +257,7 @@ class PostgresEventStore:
         try:
             async with _tenant_transaction(self._connection, self._lock, context):
                 version = await self._append_in_transaction(
+                    context,
                     events,
                     expected_version=expected_version,
                     outbox=outbox,
@@ -310,6 +315,7 @@ class PostgresEventStore:
                         )
                     return AppendResult(aggregate_version=int(row[0]), duplicate=True)
                 version = await self._append_in_transaction(
+                    context,
                     events,
                     expected_version=expected_version,
                     outbox=outbox,
@@ -400,6 +406,7 @@ class PostgresEventStore:
                             "prepared events must preserve the worker fence"
                         )
                 version = await self._append_in_transaction(
+                    context,
                     events,
                     expected_version=expected_version,
                     outbox=outbox,
@@ -417,12 +424,25 @@ class PostgresEventStore:
 
     async def _append_in_transaction(
         self,
+        context: TenantContext,
         events: Sequence[EventEnvelope],
         *,
         expected_version: int,
         outbox: Sequence[OutboxMessage],
     ) -> int:
         first = events[0]
+        writer_fence = self._writer_fence_resolver.resolve(context)
+        await self._connection.execute(
+            """
+            SELECT
+                set_config('aegis.writer_region', %s, true),
+                set_config('aegis.writer_generation', %s, true)
+            """,
+            (
+                writer_fence.home_region,
+                str(writer_fence.generation),
+            ),
+        )
         await self._connection.execute(
             """
             INSERT INTO tenant_event_commit_locks (tenant_id)

@@ -1,0 +1,232 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aegis-otel-collector
+  namespace: aegis-system
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 384
+        spike_limit_mib: 96
+      batch:
+        timeout: 2s
+        send_batch_size: 512
+        send_batch_max_size: 1024
+      resource:
+        attributes:
+          - key: service.namespace
+            value: aegis
+            action: upsert
+    exporters:
+      otlp:
+        endpoint: aegis-egress-gateway.aegis-egress.svc:8443
+        tls:
+          insecure: false
+          server_name: telemetry-gateway.example.invalid
+        sending_queue:
+          enabled: true
+          num_consumers: 2
+          queue_size: 2048
+        retry_on_failure:
+          enabled: true
+          initial_interval: 1s
+          max_interval: 5s
+          max_elapsed_time: 30s
+    service:
+      telemetry:
+        metrics:
+          address: 0.0.0.0:8888
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, resource, batch]
+          exporters: [otlp]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, resource, batch]
+          exporters: [otlp]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, resource, batch]
+          exporters: [otlp]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegis-otel-collector
+  namespace: aegis-system
+  labels:
+    app.kubernetes.io/name: aegis-otel-collector
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-otel-collector
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aegis-otel-collector
+    spec:
+      serviceAccountName: aegis-otel
+      automountServiceAccountToken: false
+      priorityClassName: aegis-control-plane
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: aegis-otel-collector
+      containers:
+        - name: collector
+          image: otel/opentelemetry-collector-contrib@sha256:9c247564e65ca19f97d891cca19a1a8d291ce631b890885b44e3503c5fdb3895
+          args: [--config=/etc/otel/config.yaml]
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+            - name: otlp-http
+              containerPort: 4318
+            - name: metrics
+              containerPort: 8888
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+              ephemeral-storage: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          startupProbe:
+            tcpSocket:
+              port: otlp-grpc
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            tcpSocket:
+              port: otlp-grpc
+          livenessProbe:
+            tcpSocket:
+              port: otlp-grpc
+            periodSeconds: 10
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: aegis-otel-collector
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aegis-otel-collector
+  namespace: aegis-system
+  labels:
+    app.kubernetes.io/name: aegis-otel-collector
+spec:
+  selector:
+    app.kubernetes.io/name: aegis-otel-collector
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http
+    - name: metrics
+      port: 8888
+      targetPort: metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: aegis-otel-collector
+  namespace: aegis-system
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-otel-collector
+  endpoints:
+    - port: metrics
+      interval: 30s
+      scrapeTimeout: 10s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: aegis-processes
+  namespace: aegis-system
+spec:
+  selector:
+    matchExpressions:
+      - key: aegis.dev/process-class
+        operator: Exists
+  podMetricsEndpoints:
+    - port: health
+      path: /metrics
+      interval: 30s
+    - port: http
+      path: /metrics
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: aegis-deployment
+  namespace: aegis-system
+spec:
+  groups:
+    - name: aegis.deployment
+      rules:
+        - alert: AegisDeploymentUnavailable
+          expr: kube_deployment_status_replicas_unavailable{namespace="aegis-system"} > 0
+          for: 10m
+          labels:
+            severity: warning
+            route: platform-placeholder
+          annotations:
+            summary: Aegis deployment has unavailable replicas
+        - alert: AegisMigrationJobFailed
+          expr: kube_job_status_failed{namespace="aegis-system",job_name=~"aegis-schema-migration.*"} > 0
+          for: 1m
+          labels:
+            severity: critical
+            route: database-placeholder
+          annotations:
+            summary: Aegis schema migration job failed

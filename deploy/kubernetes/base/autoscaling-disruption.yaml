@@ -1,0 +1,97 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aegis-api
+  namespace: aegis-system
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aegis-operator-ui
+  namespace: aegis-system
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-operator-ui
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aegis-outbox-publisher
+  namespace: aegis-system
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-outbox-publisher
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aegis-reconciler
+  namespace: aegis-system
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-reconciler
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aegis-otel-collector
+  namespace: aegis-system
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-otel-collector
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aegis-api
+  namespace: aegis-system
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aegis-api
+  minReplicas: 3
+  maxReplicas: 12
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      selectPolicy: Min
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+        - type: Percent
+          value: 20
+          periodSeconds: 120
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 65
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 75

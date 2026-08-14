@@ -1,0 +1,45 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespaces.yaml
+  - priority-classes.yaml
+  - service-accounts-rbac.yaml
+  - external-secrets.yaml
+  - core-workloads.yaml
+  - worker-workloads.yaml
+  - migration-job.yaml
+  - autoscaling-disruption.yaml
+  - ingress.yaml
+  - network-policies.yaml
+  - observability.yaml
+  - sandbox-boundary.yaml
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: aegis-agent-platform
+patches:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: aegis-(api|operator-bff|worker-general|worker-evidence|outbox-publisher|reconciler|protocol-gateway)
+    patch: |-
+      - op: add
+        path: /spec/template/spec/securityContext/fsGroup
+        value: 10001
+      - op: add
+        path: /spec/template/spec/securityContext/fsGroupChangePolicy
+        value: OnRootMismatch
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: writer-fences
+          mountPath: /var/run/secrets/aegis
+          readOnly: true
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: writer-fences
+          secret:
+            secretName: aegis-writer-fences
+            defaultMode: 288

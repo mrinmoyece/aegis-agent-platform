@@ -101,7 +101,7 @@ Status meanings:
 | Memory quotas and fenced lifecycle recovery | Implemented | atomic tenant-period reservations, durable intent/results, reconciliation and rebuild tests |
 | Deterministic specialist behavioral evaluations | Implemented | success, ambiguity, contradiction, budget, recovery; `make evals` |
 | Deterministic remediation behavioral evaluations | Implemented | approval success/denial/stale, ambiguity, verification/rollback, policy attack, crash recovery |
-| Layered provider-neutral evaluation contracts and harness | Implemented | `aegis_agent_platform.evals`; ADR 0018; 111-case catalog |
+| Layered provider-neutral evaluation contracts and harness | Implemented | `aegis_agent_platform.evals`; ADR 0018; 119-case catalog |
 | Governed synthetic scenario/adversarial/recovery corpus | Implemented | versioned manifest/fixtures; 12 adversarial cases and 22 fault cuts |
 | Hermetic deterministic release gates and hard safety baselines | Implemented | no live network, secrets, judge, or production effects |
 | Scoped expiring evaluation waivers and reviewed baseline changes | Implemented | non-safety waivers only; explicit reviewed update |
@@ -116,11 +116,11 @@ Status meanings:
 | Specialist span/metric content redaction | Implemented | fixed operation/role labels; no evidence/prompt/tenant/run labels |
 | Authorized investigation status/task/artifact APIs | Implemented | tenant authorization, redacted cursor pages |
 | Tenant-RLS specialist projections and rebuild | Implemented | migration `0006`, live PostgreSQL test |
-| End-to-end trace/event correlation | Planned | Layer 12 |
-| SLOs, alerts, runbooks, backup, and restore evidence | Planned | Layer 12 |
-| HA deployment and capacity evidence | Planned | Layer 12 |
-| SBOM, provenance, image signing, and release policy | Planned | Layer 12 |
-| Compliance evidence mapping and access review | Planned | Layer 12 |
+| End-to-end trace/event correlation | Implemented local/config | Layer 12 semantic wiring; production backend unverified |
+| SLOs, alerts, runbooks, backup, and restore evidence | Implemented local/config | Layers 12/15 rules, runbooks, restore drill; live objectives unmeasured |
+| HA deployment and capacity evidence | Implemented design/config | Layer 15 replicas/PDB/HPA/topology/capacity profiles; no live load/failover |
+| SBOM, provenance, image signing, and release policy | Implemented CI/config | Layer 15 SPDX, attest/sign/promote/admission workflows; live admission unverified |
+| Compliance evidence mapping and access review | Scaffolded | Layer 15 mapping/bundle/cadence; no certification or production review records |
 | MCP tool/context adapters under runtime policy | Implemented local/deterministic | curated server, allowlisted client, Streamable HTTP, fixed local stdio |
 | External A2A Agent Card and task lifecycle adapter | Implemented local/deterministic | signed card, JSON-RPC task/artifact/status/cancellation |
 | Durable MCP/A2A lifecycle mapping and replay protection | Implemented | intent/result/ambiguity/reconciliation events, idempotency, replay cache |
@@ -170,3 +170,17 @@ delivery slices and exit gates in the enterprise implementation blueprint.
 | Forced-RLS projections/rebuild | Implemented boundary | migration `0010`; static and environment-gated PostgreSQL tests |
 | Protocol threat controls | Implemented deterministic | schema/Unicode/SSRF/DNS/redirect/replay/tenant/authority tests |
 | Public federation and production PKI | Planned | no partner qualification, live token broker, PKI/mTLS, or conformance certification |
+
+## Layer 15 production-foundation evidence
+
+| Control | Status | Evidence |
+| --- | --- | --- |
+| Kubernetes packaging and restricted workloads | Implemented config/local render | Kustomize overlays, security contexts, probes, drain, resources, topology, active-role PDB/API HPA, gated roles at zero, Trivy |
+| Namespace/RBAC/network/egress intent | Implemented config | least-privilege accounts, default deny, exact ports and egress-gateway boundary; live CNI/FQDN enforcement unverified |
+| AWS reference infrastructure | Implemented config/mock | Terraform `1.11.4`, AWS `5.100.0`, private network/EKS/RDS/Redis/ECR/S3/KMS/Backup/identity; no apply |
+| Secrets and workload identity | Implemented references | ExternalSecret and EKS Pod Identity; live broker/rotation not exercised |
+| Supply-chain verification | Implemented CI/config | pinned bases/actions, SPDX, HIGH/CRITICAL and license/secret gates, provenance, cosign, private-ECR mirror/bundles, Kyverno example |
+| Safe schema and retention | Implemented contract/local | migration `0011`, advisory lock/checksum runner, schema window, forced RLS, archive manifests; no event deletion/repartition |
+| HA, scaling, and regional fencing | Mixed implementation/design | multi-replica API/publisher/reconciler, gated workers, leases/fences, quotas/capacity profiles, stale-region eval; no live failover/load |
+| Backup/restore/DR | Implemented local drill/design | encrypted/locked reference, isolated dump/restore/hash/rebuild/Redis-loss report; managed RPO/RTO unmeasured |
+| Compliance-ready evidence | Scaffolded | asset/data-flow/control mapping and evidence bundle; no certification |
