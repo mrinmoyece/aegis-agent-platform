@@ -637,3 +637,15 @@ realm has no users and self-registration disabled; it is a config-shape
 reference for the JWKS/issuer/audience abstraction, not a live-tested identity
 path in the fast local checks. These are developer conveniences, not a
 production deployment model.
+
+## Layer 12 observability and replay
+
+Layer 12 instruments every implemented boundary with the versioned,
+provider-neutral conventions in
+[telemetry-semantic-conventions.md](telemetry-semantic-conventions.md).
+Telemetry, SLI windows, dashboards, health caches, and support views are
+derived. The append-only event ledger remains authoritative. Strict W3C context
+validation, deterministic sampling, bounded async links, central redaction,
+fixed metric cardinality, non-blocking export, authenticated observability APIs,
+and the read-only replay debugger preserve domain purity and durable execution.
+Configured SLOs and local dashboards are not production attainment evidence.

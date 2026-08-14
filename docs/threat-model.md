@@ -312,6 +312,15 @@ fail-closed optional-live boundary. The deterministic suite and existing fake
 behavioral matrices do not qualify live models/connectors or production
 behavior. No model judge or live adapter executes by default.
 
-Full production model/connector qualification, independent penetration testing,
-large-scale human labeling, operator UI, MCP/A2A, observability/SLOs, HA/DR,
-multi-region operation, and final load/chaos certification remain deferred.
+Layer 12 addresses telemetry injection, hostile trace context/baggage, metric
+cardinality exhaustion, secret/PII leakage, support-bundle exfiltration,
+cross-tenant timeline enumeration, and debugger mutation with validation,
+allowlists, redaction, bounds, purpose/RBAC checks, immutable access audit, and
+read-only adapters. Residual risks include hash-key compromise, backend access
+policy, collector spoofing without production mTLS/auth, and incomplete
+production telemetry qualification.
+
+Full production model/connector and telemetry qualification, independent
+penetration testing, large-scale human labeling, operator React UI, MCP/A2A,
+external managed backends, 24/7 on-call evidence, HA/DR, multi-region operation,
+final load/chaos certification, and compliance certification remain deferred.

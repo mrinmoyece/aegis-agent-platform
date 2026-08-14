@@ -197,7 +197,7 @@ def render_junit(
     suite = ET.Element(
         "testsuite",
         {
-            "name": "aegis-layer11-evaluations",
+            "name": "aegis-layer12-evaluations",
             "tests": str(len(report.results) + int(comparison_failed)),
             "failures": str(failures),
             "errors": str(errors),

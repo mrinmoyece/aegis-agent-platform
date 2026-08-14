@@ -8,6 +8,7 @@ import json
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from decimal import Decimal
+from time import monotonic
 from typing import Any, Protocol, cast
 from urllib.parse import parse_qs
 from uuid import UUID, uuid4
@@ -37,7 +38,7 @@ from aegis_agent_platform.domain import (
     sandbox_request_from_payload,
 )
 from aegis_agent_platform.domain.events import thaw_json
-from aegis_agent_platform.event_store import EventStore, TransientStorageError
+from aegis_agent_platform.event_store import EventStore
 from aegis_agent_platform.evidence import EvidenceQuery
 from aegis_agent_platform.evidence.operations import EvidenceOperations
 from aegis_agent_platform.evidence.service import EvidenceIdempotencyConflictError
@@ -54,6 +55,14 @@ from aegis_agent_platform.identity import (
 )
 from aegis_agent_platform.memory.api import MemoryHttpApi
 from aegis_agent_platform.memory.operations import MemoryOperations
+from aegis_agent_platform.observability.context import (
+    TraceContextError,
+    extract_context,
+)
+from aegis_agent_platform.observability.health import HealthRegistry
+from aegis_agent_platform.observability.operations import ObservabilityOperations
+from aegis_agent_platform.observability.replay import SupportReportTooLargeError
+from aegis_agent_platform.observability.runtime import RuntimeTracer
 from aegis_agent_platform.policy import (
     InMemoryPolicyRepository,
     PolicyRepository,
@@ -113,6 +122,10 @@ class ControlPlaneApp:
         remediation_operations: RemediationOperations | None = None,
         sandbox_operations: SandboxOperations | None = None,
         memory_operations: MemoryOperations | None = None,
+        tracer: RuntimeTracer | None = None,
+        observability_operations: ObservabilityOperations | None = None,
+        health_registry: HealthRegistry | None = None,
+        health_clock: Callable[[], float] = monotonic,
     ) -> None:
         self._authentication = authentication
         self._authorization = authorization or AuthorizationService()
@@ -130,8 +143,32 @@ class ControlPlaneApp:
         self._memory_api = (
             MemoryHttpApi(memory_operations) if memory_operations is not None else None
         )
+        self._tracer = tracer or RuntimeTracer("aegis.control-plane")
+        self._observability_operations = observability_operations
+        self._health_registry = health_registry
+        self._health_clock = health_clock
 
     async def __call__(
+        self,
+        scope: AsgiMessage,
+        receive: Receive,
+        send: Send,
+    ) -> None:
+        if scope.get("type") != "http":
+            return
+        try:
+            parent = extract_context(_propagation_headers(scope))
+        except TraceContextError:
+            await _respond(
+                send,
+                400,
+                {"error": {"code": "invalid_trace_context"}},
+            )
+            return
+        with self._tracer.span("api.request", parent=parent):
+            await self._handle(scope, receive, send)
+
+    async def _handle(
         self,
         scope: AsgiMessage,
         receive: Receive,
@@ -470,6 +507,43 @@ class ControlPlaneApp:
                 tenant_id,
                 correlation_id=correlation_id,
                 after_position=after_position,
+            )
+            return
+        if (
+            method == "GET"
+            and len(segments) == 5
+            and segments[3:] == ["observability", "slos"]
+        ):
+            await self._get_observability_slos(send, principal, tenant_id)
+            return
+        if (
+            method == "GET"
+            and len(segments) == 6
+            and segments[3:5] == ["observability", "timeline"]
+        ):
+            try:
+                after_version = _cursor_parameter(scope)
+            except ValueError:
+                await _respond(send, 400, {"error": {"code": "invalid_cursor"}})
+                return
+            await self._get_observability_timeline(
+                send,
+                principal,
+                tenant_id,
+                segments[5],
+                after_version=after_version,
+            )
+            return
+        if (
+            method == "GET"
+            and len(segments) == 6
+            and segments[3:5] == ["observability", "support-reports"]
+        ):
+            await self._get_support_report(
+                send,
+                principal,
+                tenant_id,
+                segments[5],
             )
             return
         if len(segments) == 6 and segments[3] == "runs" and segments[5] == "timeline":
@@ -1256,11 +1330,37 @@ class ControlPlaneApp:
                 {"status": "not-ready", "reason": "storage_unavailable"},
             )
             return
+        health = (
+            await self._health_registry.report(monotonic_time=self._health_clock())
+            if self._health_registry is not None
+            else None
+        )
+        if health is not None and not health.ready:
+            await _respond(
+                send,
+                503,
+                {
+                    "status": "not-ready",
+                    "reason": "correctness_dependency_unavailable",
+                    "components": {
+                        name: {
+                            "status": result.status.value,
+                            "reason_code": result.reason_code,
+                        }
+                        for name, result in health.components.items()
+                    },
+                },
+            )
+            return
         await _respond(
             send,
             200,
             {
-                "status": "ready",
+                "status": (
+                    "degraded"
+                    if health is not None and health.status.value == "degraded"
+                    else "ready"
+                ),
                 "checks": (
                     ["configuration", "storage"]
                     if self._storage_ready is not None
@@ -1271,8 +1371,26 @@ class ControlPlaneApp:
                         "configured"
                         if self._remediation_operations is not None
                         else "disabled"
-                    )
+                    ),
+                    "telemetry": (
+                        "degraded"
+                        if health is not None and health.status.value == "degraded"
+                        else "configured"
+                        if self._health_registry is not None
+                        else "unprobed"
+                    ),
                 },
+                "components": (
+                    {
+                        name: {
+                            "status": result.status.value,
+                            "reason_code": result.reason_code,
+                        }
+                        for name, result in health.components.items()
+                    }
+                    if health is not None
+                    else {}
+                ),
             },
         )
 
@@ -1475,6 +1593,129 @@ class ControlPlaneApp:
             },
         )
 
+    async def _get_observability_slos(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+    ) -> None:
+        if self._observability_operations is None:
+            await _respond(
+                send,
+                503,
+                {"error": {"code": "observability_not_configured"}},
+            )
+            return
+        try:
+            summaries = self._observability_operations.slo_summary(
+                principal,
+                TenantContext(tenant_id),
+                at=datetime.now(UTC),
+            )
+        except PermissionError:
+            await _respond(send, 403, {"error": {"code": "authorization_denied"}})
+            return
+        await _respond(
+            send,
+            200,
+            {
+                "authoritative": False,
+                "source": "derived_sli_windows",
+                "objectives": [
+                    {
+                        "objective": summary.objective,
+                        "window": summary.window,
+                        "target": summary.target,
+                        "status": summary.status,
+                        "measured": summary.measured,
+                        "reason_code": summary.reason_code,
+                    }
+                    for summary in summaries
+                ],
+            },
+        )
+
+    async def _get_observability_timeline(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+        aggregate_id: str,
+        *,
+        after_version: int,
+    ) -> None:
+        if self._observability_operations is None:
+            await _respond(
+                send,
+                503,
+                {"error": {"code": "observability_not_configured"}},
+            )
+            return
+        try:
+            timeline = await self._observability_operations.timeline(
+                principal,
+                TenantContext(tenant_id),
+                aggregate_id,
+                at=datetime.now(UTC),
+                after_sequence=after_version,
+            )
+        except PermissionError:
+            await _respond(send, 403, {"error": {"code": "authorization_denied"}})
+            return
+        await _respond(send, 200, cast(dict[str, Any], thaw_json(timeline)))
+
+    async def _get_support_report(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+        aggregate_id: str,
+    ) -> None:
+        if self._observability_operations is None:
+            await _respond(
+                send,
+                503,
+                {"error": {"code": "observability_not_configured"}},
+            )
+            return
+        try:
+            report = await self._observability_operations.support_report(
+                principal,
+                TenantContext(tenant_id),
+                aggregate_id,
+                at=datetime.now(UTC),
+            )
+        except PermissionError:
+            await _respond(send, 403, {"error": {"code": "authorization_denied"}})
+            return
+        except SupportReportTooLargeError:
+            await _respond(
+                send,
+                422,
+                {"error": {"code": "support_report_too_large"}},
+            )
+            return
+        await _respond(
+            send,
+            200,
+            {
+                "schema_version": report.schema_version,
+                "tenant_reference": report.tenant_reference,
+                "aggregate_reference": report.aggregate_reference,
+                "content_digest": report.content_digest,
+                "signature_algorithm": report.signature_algorithm,
+                "signer": report.signer,
+                "signature": report.signature,
+                "validation": {
+                    "valid": report.validation.valid,
+                    "event_count": report.validation.event_count,
+                    "stream_digest": report.validation.stream_digest,
+                    "reason_codes": list(report.validation.reason_codes),
+                },
+                "authoritative_source": "event_ledger",
+            },
+        )
+
     async def _get_timeline(
         self,
         send: Send,
@@ -1639,6 +1880,24 @@ def _single_header(scope: AsgiMessage, name: bytes) -> str | None:
     if len(values) != 1:
         return None
     return values[0]
+
+
+def _propagation_headers(scope: AsgiMessage) -> Mapping[str, str]:
+    raw_headers: object = scope.get("headers", [])
+    if not isinstance(raw_headers, list):
+        return {}
+    output: dict[str, str] = {}
+    for name in (b"traceparent", b"tracestate", b"baggage"):
+        values = [
+            value
+            for item in raw_headers
+            if (value := _matching_header(item, name)) is not None
+        ]
+        if len(values) > 1:
+            raise TraceContextError("duplicate propagation header")
+        if values:
+            output[name.decode()] = values[0]
+    return output
 
 
 def _cursor_parameter(scope: AsgiMessage) -> int:

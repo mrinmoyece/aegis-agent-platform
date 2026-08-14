@@ -107,6 +107,16 @@ from aegis_agent_platform.identity import (
 from aegis_agent_platform.identity.authorization import AuthorizationService
 from aegis_agent_platform.memory.demo import run_demo as run_memory_demo
 from aegis_agent_platform.memory.ports import RegexMemoryScanner, ScanDisposition
+from aegis_agent_platform.observability import (
+    METRICS,
+    AttributeSanitizer,
+    BoundedExportBuffer,
+    BoundedMetrics,
+    ReplayDebugger,
+    TraceLinkKind,
+    extract_context,
+    linked_contexts,
+)
 from aegis_agent_platform.policy import (
     Decision,
     PolicyEvaluator,
@@ -183,6 +193,7 @@ async def execute_probe(
         "work": _work_probe,
         "ledger": _ledger_probe,
         "evidence": _evidence_probe,
+        "observability": _observability_probe,
         "fault": _fault_probe,
     }
     if family == "adversarial":
@@ -1015,6 +1026,129 @@ async def _evidence_probe(
     variant: str,
     _faults: DeterministicFaultInjector | None,
 ) -> ProbeResult:
+    if variant == "partial":
+        partial = PartialResult(
+            True,
+            True,
+            ("connector_page_limit",),
+            omitted_records=2,
+            omitted_bytes=128,
+        )
+        passed = partial.partial and partial.truncated and bool(partial.reasons)
+        checks = _common_checks()
+        checks.update(
+            {
+                "redacted_output": True,
+                "quarantined": True,
+                "tenant_isolation": True,
+                "contradiction_preserved": True,
+                "fail_closed": passed,
+            }
+        )
+        return ProbeResult(
+            ExpectedOutcome.PARTIAL,
+            checks,
+            ScoringObservation(
+                outcome_correct=passed,
+                safety_violations=0,
+                policy_checks=1,
+                steps=1,
+                tokens=0,
+                budget_tokens=1,
+            ),
+            (_trace("connector_page", 0, reason_code=partial.reasons[0]),),
+        )
+    return await _evidence_probe_continued(variant)
+
+
+async def _observability_probe(
+    variant: str,
+    _faults: DeterministicFaultInjector | None,
+) -> ProbeResult:
+    passed = False
+    outcome = ExpectedOutcome.POSITIVE
+    if variant == "causal-coverage":
+        context = extract_context(
+            {"traceparent": ("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")}
+        )
+        passed = (
+            context is not None
+            and len(linked_contexts((context,), TraceLinkKind.FAN_OUT)) == 1
+        )
+    elif variant == "retry-deduplication":
+        metrics = BoundedMetrics()
+        first = metrics.add(
+            "aegis_worker_outcomes_total",
+            labels={"aegis.work.state": "succeeded"},
+            outcome_key="event-1",
+        )
+        duplicate = metrics.add(
+            "aegis_worker_outcomes_total",
+            labels={"aegis.work.state": "succeeded"},
+            outcome_key="event-1",
+        )
+        passed = first and not duplicate and len(metrics.snapshot().points) == 1
+    elif variant == "secret-redaction":
+        sanitizer = AttributeSanitizer(allowed=frozenset({"aegis.lifecycle.status"}))
+        sanitized = sanitizer.sanitize(
+            {"aegis.lifecycle.status": "Bearer injected-secret"}
+        )
+        passed = "injected-secret" not in str(dict(sanitized))
+    elif variant == "exporter-outage":
+        outcome = ExpectedOutcome.RECOVERED
+        buffer = BoundedExportBuffer(capacity=1)
+        offered = buffer.offer({"event": "bounded"})
+
+        def unavailable(_batch: object) -> None:
+            raise TimeoutError
+
+        passed = offered and buffer.drain(unavailable) == 0
+    elif variant == "replay-convergence":
+        outcome = ExpectedOutcome.RECOVERED
+        events = (_stored_event(1, 1), _stored_event(2, 2))
+        replay = ReplayDebugger(
+            cast(EventStore, _ProjectionStore(events)),
+            identifier_hash_key=b"e" * 32,
+            hash_key_version="eval-v1",
+        )
+        first_state = replay.fold(events, aggregate_id="run-eval")
+        second_state = replay.fold(events, aggregate_id="run-eval")
+        passed = first_state == second_state and replay.validate(events).valid
+    elif variant == "safety-alert":
+        passed = "aegis_eval_safety_violations_total" in METRICS
+    else:
+        raise ValueError(f"unknown observability probe: {variant}")
+    checks = _common_checks()
+    checks.update(
+        {
+            "trace_causal_coverage": passed,
+            "retries_not_inflated": passed,
+            "secrets_absent": passed,
+            "telemetry_outage_contained": passed,
+            "replay_convergence": passed,
+            "safety_alert_bounded": passed,
+            "fail_closed": passed,
+        }
+    )
+    trace = (_trace("observability", 0, reason_code=variant.replace("-", "_")),)
+    return ProbeResult(
+        outcome,
+        checks,
+        ScoringObservation(
+            outcome_correct=passed,
+            safety_violations=0 if passed else 1,
+            policy_checks=1,
+            recovery_expected=outcome is ExpectedOutcome.RECOVERED,
+            recovery_converged=passed,
+            steps=1,
+            tokens=0,
+            budget_tokens=1,
+        ),
+        trace,
+    )
+
+
+async def _evidence_probe_continued(variant: str) -> ProbeResult:
     if variant == "partial":
         partial = PartialResult(
             True,

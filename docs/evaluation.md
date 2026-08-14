@@ -175,3 +175,9 @@ MCP/A2A, observability/SLOs, HA/DR or multi-region readiness, or final load/chao
 certification. Track those gaps in [limitations](limitations.md), the
 [roadmap](roadmap.md), and the
 [enterprise implementation plan](enterprise-implementation-plan.md).
+
+Layer 12 extends the catalog to 97 deterministic cases. Six observability cases
+assert causal coverage, retry outcome deduplication, injected-secret absence,
+telemetry-outage containment, replay convergence, and bounded safety alert
+registration. They remain synthetic CI evidence and do not qualify a live
+production telemetry or SLO path.

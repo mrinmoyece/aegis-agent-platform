@@ -82,3 +82,11 @@ A strong learner can:
    operations claims.
 7. Quantify capacity, latency, cost, and recovery tradeoffs.
 8. Present limitations and alternatives before proposing complexity.
+
+## Layer 12 learning outcomes
+
+Learners define low-cardinality semantics, propagate W3C context safely across
+at-least-once work, design measurable SLIs and burn alerts, provision dashboards
+that treat no-data honestly, contain exporter failure, and debug from immutable
+ledger facts. The demo explicitly distinguishes configured/local objectives
+from production-measured attainment.

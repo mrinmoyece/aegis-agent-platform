@@ -169,3 +169,12 @@ execution, independent penetration testing, large-scale human labeling, operator
 UI, MCP/A2A, observability/SLOs, HA/DR/multi-region, final load/chaos
 certification, and incident update remain planned, so the full production
 narrative is not yet claimable.
+
+## Layer 12 demo
+
+Run `make observability-check`, open the ten provisioned dashboard JSON files,
+execute the six `observability.*` deterministic cases, then replay a bounded
+event export with `python -m aegis_agent_platform.observability`. Demonstrate
+hostile context rejection, secret redaction, retry outcome deduplication,
+exporter-outage containment, time-travel diff, and a digested support report.
+State that SLOs are configured locally and no production attainment is claimed.

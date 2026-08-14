@@ -10,11 +10,14 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 from aegis_agent_platform.event_store import ClaimedOutboxMessage
-from aegis_agent_platform.observability.runtime import (
-    RuntimeMetrics,
-    RuntimeTracer,
-    shared_runtime_metrics,
+from aegis_agent_platform.observability.context import (
+    PropagationContext,
+    TraceContextError,
+    TraceLinkKind,
+    extract_context,
+    linked_contexts,
 )
+from aegis_agent_platform.observability.runtime import RuntimeTracer
 from aegis_agent_platform.queueing import (
     MessageEnvelope,
     OutboxRepository,
@@ -117,7 +120,17 @@ class OutboxPublisher:
             )
             try:
                 envelope = _envelope(context, claim, now)
-                with self._tracer.span("outbox.publish"):
+                propagation = _propagation_context(envelope)
+                links = (
+                    linked_contexts((propagation,), TraceLinkKind.REDELIVERY)
+                    if propagation is not None and claim.attempt_count > 1
+                    else ()
+                )
+                with self._tracer.span(
+                    "outbox.publish",
+                    parent=propagation,
+                    links=links,
+                ):
                     await self._queue.publish(envelope)
                     await self._repository.mark_outbox_published(
                         context,
@@ -200,6 +213,20 @@ def _envelope(
 
 def _default_retry_delay(attempt: int) -> timedelta:
     return timedelta(seconds=min(300, 2 ** min(attempt, 8)))
+
+
+def _propagation_context(envelope: MessageEnvelope) -> PropagationContext | None:
+    headers = {
+        key: value
+        for key, raw_value in envelope.headers.items()
+        if key in {"traceparent", "tracestate", "baggage"}
+        and isinstance(raw_value, str)
+        and (value := raw_value)
+    }
+    try:
+        return extract_context(headers)
+    except TraceContextError as error:
+        raise PermanentQueueError("invalid propagation context") from error
 
 
 __all__ = ["OutboxPublisher", "PublishBatchResult", "PublisherTelemetry"]

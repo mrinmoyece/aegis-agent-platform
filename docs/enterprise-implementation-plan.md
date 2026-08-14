@@ -678,3 +678,16 @@ Before any real tenant onboarding, reviewers must approve:
 
 Until that review passes, Aegis remains a learning/reference implementation, not
 an enterprise production service.
+
+## Layer 12 acceptance gate
+
+Layer 12 is implemented as a reversible adapter layer: versioned conventions,
+bounded telemetry, strict context propagation, operational health, SLO/rule
+configuration, provisioned dashboards, authenticated support APIs, and
+ledger-grounded replay. Acceptance requires `make check`,
+`make observability-check`, deterministic replay demonstrations, Compose
+configuration, container build, environment-gated PostgreSQL/pgvector/Redis
+tests, and CI. These validate implementation/configuration, not production
+attainment. Production qualification, external backends, React operator UI,
+MCP/A2A, 24/7 operations, HA/DR/multi-region, final load/chaos, and compliance
+remain later gates.

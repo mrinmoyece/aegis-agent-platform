@@ -1,0 +1,139 @@
+groups:
+  - name: aegis.slo-burn.v1
+    rules:
+      - alert: AegisApiAvailabilityFastBurn
+        expr: |
+          aegis:sli_api_error_ratio:rate5m > (14.4 * 0.001)
+          and aegis:sli_api_error_ratio:rate1h > (14.4 * 0.001)
+        for: 2m
+        labels: {severity: page, owner: control-plane}
+        annotations:
+          summary: API availability budget is burning rapidly
+          runbook_url: https://github.com/mrinmoyece/aegis-agent-platform/blob/master/docs/on-call-observability.md#api-fast-burn
+      - alert: AegisApiAvailabilitySlowBurn
+        expr: |
+          aegis:sli_api_error_ratio:rate6h > (6 * 0.001)
+          and aegis:sli_api_error_ratio:rate3d > (6 * 0.001)
+        for: 30m
+        labels: {severity: ticket, owner: control-plane}
+        annotations:
+          summary: API availability budget is burning persistently
+          runbook_url: https://github.com/mrinmoyece/aegis-agent-platform/blob/master/docs/on-call-observability.md#api-slow-burn
+      - alert: AegisApiBudgetExhausted
+        expr: aegis:sli_api_error_ratio:rate30d > 0.001
+        for: 1h
+        labels: {severity: ticket, owner: control-plane}
+        annotations:
+          summary: Configured API error budget is exhausted
+          runbook_url: https://github.com/mrinmoyece/aegis-agent-platform/blob/master/docs/on-call-observability.md#error-budget
+  - name: aegis.safety-and-runtime.v1
+    rules:
+      - alert: AegisSafetyInvariantViolation
+        expr: increase(aegis_eval_safety_violations_total[5m]) > 0
+        labels: {severity: page, owner: safety}
+        annotations:
+          summary: A hard safety invariant failed
+          runbook_url: https://github.com/mrinmoyece/aegis-agent-platform/blob/master/docs/on-call-observability.md#safety
+      - alert: AegisLedgerCorruption
+        expr: increase(aegis_ledger_replay_corruption_total[5m]) > 0
+        labels: {severity: page, owner: storage}
+        annotations:
+          summary: Ledger replay integrity validation failed
+          runbook_url: https://github.com/mrinmoyece/aegis-agent-platform/blob/master/docs/replay-debugger.md#corruption
+      - alert: AegisQueueLagHigh
+        expr: histogram_quantile(0.99, sum by (le) (rate(aegis_queue_oldest_pending_age_seconds_bucket[10m]))) > 60
+        for: 10m
+        labels: {severity: ticket, owner: runtime}
+        annotations:
+          summary: Durable work freshness is outside its objective
+          runbook_url: https://github.com/mrinmoyece/aegis-agent-platform/blob/master/docs/on-call-observability.md#queue-lag
+      - alert: AegisDeadLetterQueueNonEmpty
+        expr: aegis_worker_dlq_messages > 0
+        for: 5m
+        labels: {severity: ticket, owner: runtime}
+        annotations:
+          summary: Work is present in the dead-letter queue
+          runbook_url: https://github.com/mrinmoyece/aegis-agent-platform/blob/master/docs/on-call-observability.md#dlq
+      - alert: AegisFenceRejectionSpike
+        expr: increase(aegis_worker_fence_rejections_total[10m]) > 5
+        labels: {severity: ticket, owner: runtime}
+        annotations:
+          summary: Stale worker fence rejections increased
+          runbook_url: https://github.com/mrinmoyece/aegis-agent-platform/blob/master/docs/on-call-observability.md#fencing
+      - alert: AegisActionReconciliationFailure
+        expr: increase(aegis_action_reconciliation_total{aegis_status="failed"}[10m]) > 0
+        labels: {severity: page, owner: remediation}
+        annotations:
+          summary: An ambiguous effect could not be reconciled
+          runbook_url: https://github.com/mrinmoyece/aegis-agent-platform/blob/master/docs/on-call-observability.md#reconciliation
+      - alert: AegisSandboxCleanupFailure
+        expr: increase(aegis_sandbox_cleanup_total{aegis_status="failed"}[10m]) > 0
+        labels: {severity: page, owner: sandbox}
+        annotations:
+          summary: Ephemeral sandbox cleanup failed
+          runbook_url: https://github.com/mrinmoyece/aegis-agent-platform/blob/master/docs/on-call-observability.md#sandbox-cleanup
+      - alert: AegisTenantDenialSpike
+        expr: increase(aegis_tenant_access_denials_total[10m]) > 20
+        labels: {severity: ticket, owner: identity}
+        annotations:
+          summary: Tenant authorization denials increased
+          runbook_url: https://github.com/mrinmoyece/aegis-agent-platform/blob/master/docs/on-call-observability.md#tenant-denials
+      - alert: AegisProviderBudgetDenialSpike
+        expr: increase(aegis_provider_budget_denials_total[15m]) > 10
+        labels: {severity: ticket, owner: model-gateway}
+        annotations:
+          summary: Provider budget denials increased
+          runbook_url: https://github.com/mrinmoyece/aegis-agent-platform/blob/master/docs/on-call-observability.md#provider-budget
+      - alert: AegisProviderCircuitOpen
+        expr: aegis_provider_circuit_state == 1
+        for: 5m
+        labels: {severity: ticket, owner: model-gateway}
+        annotations:
+          summary: A bounded provider-family circuit is open
+          runbook_url: https://github.com/mrinmoyece/aegis-agent-platform/blob/master/docs/on-call-observability.md#provider-circuit
+      - alert: AegisEvidenceStale
+        expr: histogram_quantile(0.99, sum by (le) (rate(aegis_connector_freshness_seconds_bucket[30m]))) > 900
+        for: 15m
+        labels: {severity: ticket, owner: evidence}
+        annotations:
+          summary: Accepted evidence is stale
+          runbook_url: https://github.com/mrinmoyece/aegis-agent-platform/blob/master/docs/on-call-observability.md#evidence
+      - alert: AegisMemoryIndexLag
+        expr: histogram_quantile(0.99, sum by (le) (rate(aegis_memory_index_lag_seconds_bucket[30m]))) > 300
+        for: 15m
+        labels: {severity: ticket, owner: memory}
+        annotations:
+          summary: Derived memory index is behind accepted ledger state
+          runbook_url: https://github.com/mrinmoyece/aegis-agent-platform/blob/master/docs/on-call-observability.md#memory-index
+      - alert: AegisTelemetryExporterSilent
+        expr: max_over_time(aegis_telemetry_exporter_healthy[10m]) == 0
+        for: 10m
+        labels: {severity: ticket, owner: observability}
+        annotations:
+          summary: Optional telemetry export is unavailable
+          runbook_url: https://github.com/mrinmoyece/aegis-agent-platform/blob/master/docs/on-call-observability.md#exporter
+      - alert: AegisTelemetryDropped
+        expr: increase(aegis_telemetry_dropped_total[10m]) > 100
+        labels: {severity: ticket, owner: observability}
+        annotations:
+          summary: Telemetry is being dropped by bounded controls
+          runbook_url: https://github.com/mrinmoyece/aegis-agent-platform/blob/master/docs/on-call-observability.md#drops
+      - alert: AegisEvaluationRegression
+        expr: increase(aegis_eval_regressions_total[1h]) > 0
+        labels: {severity: ticket, owner: evaluation}
+        annotations:
+          summary: Deterministic evaluation regressed
+          runbook_url: https://github.com/mrinmoyece/aegis-agent-platform/blob/master/docs/on-call-observability.md#evaluation
+      - alert: AegisActionVerificationFailure
+        expr: increase(aegis_action_verification_total{aegis_status="failed"}[10m]) > 0
+        labels: {severity: page, owner: remediation}
+        annotations:
+          summary: A controlled action failed postcondition verification
+          runbook_url: https://github.com/mrinmoyece/aegis-agent-platform/blob/master/docs/on-call-observability.md#verification
+      - alert: AegisOutboxLagHigh
+        expr: histogram_quantile(0.99, sum by (le) (rate(aegis_outbox_lag_seconds_bucket[10m]))) > 30
+        for: 10m
+        labels: {severity: ticket, owner: storage}
+        annotations:
+          summary: Durable outbox publication is delayed
+          runbook_url: https://github.com/mrinmoyece/aegis-agent-platform/blob/master/docs/on-call-observability.md#outbox

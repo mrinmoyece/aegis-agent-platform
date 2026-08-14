@@ -35,6 +35,15 @@ autonomous production mutation remain deferred. See
 [limitations](limitations.md), [memory and RAG](memory-and-rag.md), and
 [sandbox execution](sandbox-execution.md).
 
-Full production model/connector qualification, independent penetration testing,
-large-scale human labeling, the observability/SLO layer, HA/DR, multi-region,
-and final load/chaos certification are also deferred.
+Layer 12 is implemented: provider-neutral semantic conventions, strict
+propagation and async links, central sensitive-data/cardinality enforcement,
+bounded structured logs/metrics/export, component health, configured SLIs/SLOs
+and burn alerts, ten provisioned dashboards, authenticated observability APIs,
+ledger-grounded replay/support reports, and six deterministic observability
+evaluation cases.
+
+This is configured/local evidence, not measured production SLO attainment.
+Production model/connector/telemetry qualification, external managed backends,
+independent penetration testing, large-scale human labeling, operator React UI,
+MCP/A2A, 24/7 on-call evidence, HA/DR, multi-region, final load/chaos, and
+compliance certification are deferred.
