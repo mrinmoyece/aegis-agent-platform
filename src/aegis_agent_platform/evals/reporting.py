@@ -180,7 +180,7 @@ def render_junit(report: EvaluationReport) -> str:
     suite = ET.Element(
         "testsuite",
         {
-            "name": "aegis-layer11-evaluations",
+            "name": "aegis-layer12-evaluations",
             "tests": str(len(report.results)),
             "failures": str(failures),
             "errors": "0",

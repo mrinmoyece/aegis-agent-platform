@@ -225,3 +225,12 @@ They create authoritative
 facts and security roles; automated downgrade would destroy evidence or weaken
 isolation. Roll forward with an additive corrective migration. Disaster restore
 uses a separately tested backup, not `DROP TABLE` downgrade SQL.
+
+## Layer 12 operations
+
+Use [on-call-observability.md](on-call-observability.md) for alerts,
+[dashboard-guide.md](dashboard-guide.md) for navigation, and
+[replay-debugger.md](replay-debugger.md) when telemetry is incomplete. Never
+repair truth from a dashboard, trace, or support report. Preserve ledger
+evidence, reconcile through controlled adapters, and rebuild only disposable
+projections.

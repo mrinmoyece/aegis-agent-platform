@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -85,20 +84,16 @@ class HealthRegistry:
         *,
         cache_seconds: float = 5,
         transition_threshold: int = 2,
-        probe_timeout_seconds: float = 1.0,
     ) -> None:
         if not 0 <= cache_seconds <= 60:
             raise ValueError("cache_seconds must be between 0 and 60")
         if not 1 <= transition_threshold <= 5:
             raise ValueError("transition_threshold must be between 1 and 5")
-        if not 0.05 <= probe_timeout_seconds <= 30:
-            raise ValueError("probe_timeout_seconds must be between 0.05 and 30")
         if len({probe.component for probe in probes}) != len(probes):
             raise ValueError("health probe names must be unique")
         self._probes = probes
         self._cache_seconds = cache_seconds
         self._threshold = transition_threshold
-        self._probe_timeout_seconds = probe_timeout_seconds
         self._state: dict[str, _ProbeState] = {}
 
     async def report(self, *, monotonic_time: float) -> HealthReport:
@@ -138,7 +133,7 @@ class HealthRegistry:
         previous = self._state.get(probe.component)
         if previous is not None and monotonic_time < previous.expires_at:
             return previous.result
-        observed = await self._observe(probe)
+        observed = await probe.check()
         state = _ProbeState(observed, 0, 0, 0) if previous is None else previous
         is_success = observed.status is HealthStatus.HEALTHY
         state.consecutive_successes = (
@@ -159,19 +154,6 @@ class HealthRegistry:
         state.expires_at = monotonic_time + self._cache_seconds
         self._state[probe.component] = state
         return state.result
-
-    async def _observe(self, probe: ComponentProbe) -> ProbeResult:
-        try:
-            return await asyncio.wait_for(
-                probe.check(),
-                timeout=self._probe_timeout_seconds,
-            )
-        except TimeoutError:
-            return ProbeResult(HealthStatus.UNAVAILABLE, "probe_timeout")
-        except (ConnectionError, OSError):
-            return ProbeResult(HealthStatus.UNAVAILABLE, "dependency_unavailable")
-        except Exception:
-            return ProbeResult(HealthStatus.UNAVAILABLE, "probe_failed")
 
 
 __all__ = [

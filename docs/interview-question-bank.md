@@ -310,3 +310,16 @@ error-budget action.
 **Answer outline:** not a feature checklist alone. Require isolation evidence,
 failure and restore drills, SLOs, capacity tests, key rotation, privacy
 workflows, signed artifacts, runbooks, audit review, and explicit residual risk.
+
+## Layer 12 questions
+
+**Why not reconstruct a run from traces?** Traces are sampled, lossy, reordered,
+and optional. The ledger is authoritative; trace links are diagnostic.
+
+**How do retries avoid inflating success?** Attempt metrics count attempts.
+Business outcomes require a durable outcome key and are deduplicated across
+retry, redelivery, replay, and projection rebuild.
+
+**Why can telemetry degradation leave readiness green?** Export is optional to
+correctness and must not block work. DB, fencing, policy, or sandbox enforcement
+can gate readiness; exporter loss reports degraded and uses replay fallback.

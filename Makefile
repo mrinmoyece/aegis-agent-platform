@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install format format-check lint type test evals eval-behavioral eval-deterministic eval-adversarial eval-recovery eval-baseline eval-fixtures eval-meta eval-integration postgres-test integration-test docs-check manifest-check migration-check check compose-config container-check
+.PHONY: help install format format-check lint type test evals eval-behavioral eval-deterministic eval-adversarial eval-recovery eval-baseline eval-fixtures eval-meta eval-integration postgres-test integration-test docs-check manifest-check migration-check observability-check check compose-config container-check
 
 PYTHON ?= python3
 
@@ -66,7 +66,11 @@ manifest-check: ## Validate repository configuration manifests
 migration-check: ## Validate ordered SQL migrations and tenant controls
 	$(PYTHON) scripts/check_migrations.py
 
-check: format-check lint type test evals docs-check manifest-check migration-check ## Run all fast local checks
+observability-check: ## Validate semantic conventions, rules, dashboards, and OTel config
+	$(PYTHON) scripts/check_observability.py
+	@if command -v promtool >/dev/null 2>&1; then promtool check rules deploy/prometheus/rules/*.yml; else echo "promtool unavailable; structural rule validation passed"; fi
+
+check: format-check lint type test evals docs-check manifest-check migration-check observability-check ## Run all fast local checks
 
 compose-config: ## Render and validate the local Compose configuration
 	docker compose --env-file .env.example config --quiet

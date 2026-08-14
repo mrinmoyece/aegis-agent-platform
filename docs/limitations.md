@@ -348,3 +348,13 @@ only with code, tests, and operational evidence linked from its curriculum
 document. `enterprise-implementation-plan.md` specifies the implementation
 sequence, data and security contracts, failure tests, SLO hypotheses, deployment
 evidence, and production-readiness review needed to close every gap.
+
+## Layer 12 limitations
+
+The semantic catalog, rules, dashboards, local collector topology, APIs, replay
+debugger, tests, and deterministic evals are implemented. The application does
+not yet provide qualified production OTel SDK/exporter evidence, a production
+trace/log backend, long-window production SLI history, external managed backend
+qualification, or a proven 24/7 on-call rotation. Local collector buffering is
+ephemeral. Operator React UI, MCP/A2A, HA/DR/multi-region, final load/chaos,
+independent penetration testing, and compliance certification remain deferred.

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from collections import deque
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -30,7 +29,6 @@ class MetricPoint:
     labels: tuple[tuple[str, str], ...]
     value: float
     count: int = 1
-    buckets: tuple[tuple[float, int], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,9 +59,6 @@ class BoundedMetrics:
         self._max_series = max_series
         self._values: dict[tuple[str, tuple[tuple[str, str], ...]], float] = {}
         self._counts: dict[tuple[str, tuple[tuple[str, str], ...]], int] = {}
-        self._histogram_buckets: dict[
-            tuple[str, tuple[tuple[str, str], ...]], dict[float, int]
-        ] = {}
         self._label_values: dict[tuple[str, str], set[str]] = {}
         self._outcomes: set[str] = set()
         self._outcome_order: deque[str] = deque()
@@ -83,8 +78,6 @@ class BoundedMetrics:
         definition = self._definition(name)
         if definition.kind is MetricKind.GAUGE:
             raise ValueError("gauges must use set_gauge")
-        if not math.isfinite(value):
-            raise ValueError("metric values must be finite")
         if value < 0:
             raise ValueError("metric values cannot be negative")
         label_key = self._labels(definition, labels or {})
@@ -101,14 +94,6 @@ class BoundedMetrics:
             key = (name, label_key)
             self._values[key] = self._values.get(key, 0.0) + value
             self._counts[key] = self._counts.get(key, 0) + 1
-            if definition.kind is MetricKind.HISTOGRAM:
-                buckets = self._histogram_buckets.setdefault(
-                    key,
-                    dict.fromkeys(definition.buckets, 0),
-                )
-                for bucket in definition.buckets:
-                    if value <= bucket:
-                        buckets[bucket] += 1
             return True
 
     def set_gauge(
@@ -122,8 +107,6 @@ class BoundedMetrics:
         definition = self._definition(name)
         if definition.kind is not MetricKind.GAUGE:
             raise ValueError("only gauges may be set")
-        if not math.isfinite(value):
-            raise ValueError("gauge values must be finite")
         if value < 0:
             raise ValueError("gauge values cannot be negative")
         label_key = self._labels(definition, labels or {})
@@ -134,22 +117,13 @@ class BoundedMetrics:
             key = (name, label_key)
             self._values[key] = value
             self._counts[key] = 1
-            self._histogram_buckets.pop(key, None)
             return True
 
     def snapshot(self) -> MetricSnapshot:
         """Return sorted points without exposing mutable aggregation state."""
         with self._lock:
             points = tuple(
-                MetricPoint(
-                    name,
-                    labels,
-                    value,
-                    self._counts[(name, labels)],
-                    tuple(
-                        sorted(self._histogram_buckets.get((name, labels), {}).items())
-                    ),
-                )
+                MetricPoint(name, labels, value, self._counts[(name, labels)])
                 for (name, labels), value in sorted(self._values.items())
             )
             return MetricSnapshot(points, self._dropped, self._duplicates)
@@ -206,9 +180,6 @@ class BoundedMetrics:
             raise ValueError("outcome key is required and bounded")
         if key in self._outcomes:
             return False
-        # Best-effort bounded in-memory deduplication: eviction and process restarts can
-        # admit a later replay of the same durable outcome, so this does not prove
-        # exactly-once business counters beyond the reviewed retention window.
         if len(self._outcome_order) >= MAX_DEDUPLICATION_KEYS:
             expired = self._outcome_order.popleft()
             self._outcomes.remove(expired)
@@ -229,7 +200,6 @@ class BoundedExportBuffer:
         self._failures = 0
         self._circuit_open = False
         self._lock = Lock()
-        self._drain_lock = Lock()
 
     def offer(self, item: Mapping[str, object]) -> bool:
         """Copy one bounded item without waiting for an exporter."""
@@ -250,27 +220,22 @@ class BoundedExportBuffer:
         """Attempt one bounded batch; retain it when the adapter fails."""
         if not 1 <= limit <= 1_000:
             raise ValueError("export drain limit must be between 1 and 1000")
-        if not self._drain_lock.acquire(blocking=False):
-            return 0
-        try:
-            with self._lock:
-                if self._circuit_open or not self._items:
-                    return 0
-                batch = tuple(list(self._items)[:limit])
-            try:
-                exporter(batch)
-            except (OSError, TimeoutError):
-                with self._lock:
-                    self._failures += 1
-                    self._circuit_open = self._failures >= 3
+        with self._lock:
+            if self._circuit_open or not self._items:
                 return 0
+            batch = tuple(list(self._items)[:limit])
+        try:
+            exporter(batch)
+        except (OSError, TimeoutError):
             with self._lock:
-                for _ in batch:
-                    self._items.popleft()
-                self._failures = 0
-            return len(batch)
-        finally:
-            self._drain_lock.release()
+                self._failures += 1
+                self._circuit_open = self._failures >= 3
+            return 0
+        with self._lock:
+            for _ in batch:
+                self._items.popleft()
+            self._failures = 0
+        return len(batch)
 
     def reset_circuit(self) -> None:
         """Allow an operator-controlled or timed adapter probe to retry export."""

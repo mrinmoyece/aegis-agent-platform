@@ -111,6 +111,9 @@ class Permission(StrEnum):
     MEMORY_ACCEPT = "memory:accept"
     MEMORY_FEEDBACK = "memory:feedback"
     MEMORY_ADMIN = "memory:admin"
+    OBSERVABILITY_READ = "observability:read"
+    REPLAY_READ = "observability:replay"
+    SUPPORT_EXPORT = "observability:support:export"
 
 
 @dataclass(frozen=True, slots=True)

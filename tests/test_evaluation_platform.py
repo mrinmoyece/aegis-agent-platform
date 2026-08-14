@@ -93,7 +93,7 @@ def full_report() -> EvaluationReport:
 def test_catalog_covers_every_layer_outcome_and_gate_pack() -> None:
     suite = build_suite()
 
-    assert len(suite.cases) == 91
+    assert len(suite.cases) == 97
     assert {case.layer for case in suite.cases} == {
         "layer-2",
         "layer-3",
@@ -104,6 +104,7 @@ def test_catalog_covers_every_layer_outcome_and_gate_pack() -> None:
         "layer-8",
         "layer-9",
         "layer-10",
+        "layer-12",
         "cross-layer",
     }
     assert set(ExpectedOutcome).issubset(
