@@ -141,4 +141,19 @@ delivery slices and exit gates in the enterprise implementation blueprint.
   collector/Prometheus/Grafana topology.
 - Not complete: production SLO attainment, live production telemetry
   qualification, external managed backends, 24/7 on-call evidence, operator
-  React UI, HA/DR/multi-region, final load/chaos, or compliance certification.
+  production qualification, HA/DR/multi-region, final load/chaos, or compliance
+  certification.
+
+## Layer 13 operator evidence
+
+| Control | Status | Evidence |
+| --- | --- | --- |
+| Secure BFF session/PKCE boundary | Implemented boundary | `operator.session`, secure-cookie/CSRF/origin tests; live exchange/shared sessions unverified |
+| Tenant/RBAC and anti-enumeration | Implemented | server authorization and audited `401`/`403`/`404` tests |
+| Bounded OpenAPI-derived contracts | Implemented | OpenAPI 3.1, deterministic TS generator, Zod rejection, drift gate |
+| Exact-scope safe mutation UX | Implemented | digest/expiry/quorum/SoD review, typed confirm, idempotency/concurrency tests |
+| Cursor updates and tenant teardown | Implemented polling | validation, resume, dedupe, ordering, reconnect and abort tests; SSE/WebSocket deferred |
+| Client privacy/security | Implemented | URL/download/CSV/clipboard/redaction/telemetry/error/CSP tests |
+| WCAG 2.2 AA target | Automated evidence | semantic tests, keyboard flows, themes/reduced motion, axe; independent/manual qualification deferred |
+| Supply chain/static serving | Implemented local/CI | pinned lock/toolchain/actions/images, audit/license/bundle/source-map/CSP/SBOM and non-root smoke |
+| Live production identity/browser/deployment | Planned | OIDC exchange, shared encrypted sessions, TLS proxy, browser/AT matrix, managed rollout |

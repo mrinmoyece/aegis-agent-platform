@@ -129,3 +129,25 @@ Dashboard no-data is unknown, never healthy. Ledger corruption stops replay and
 projection rebuild. Optional telemetry does not fail readiness; unavailable
 correctness dependencies do. See
 [on-call-observability.md](on-call-observability.md).
+
+## Layer 13 operator failure modes
+
+- Expired/missing session returns `401` and clears tenant state before sign-in.
+- Authenticated denial returns `403`; cross-tenant/resource mismatch returns an
+  audited anti-enumerating `404`.
+- CSRF, Origin, digest, expiry, quorum, separation-of-duties, or authorization
+  failure denies server-side regardless of browser state.
+- Duplicate mutation reuses its idempotency record. Version mismatch returns a
+  conflict and requires a fresh review; it never overwrites.
+- Ambiguous action acknowledgement remains ambiguous until reconciliation and
+  fresh verification. It never renders as success.
+- Invalid, oversized, out-of-order, duplicate, or cross-tenant update pages are
+  rejected/deduplicated/bounded. Reconnect is capped and tenant switch aborts the
+  old cursor.
+- UI exception, stale browser state, offline/degraded polling, or telemetry outage
+  cannot change authoritative runtime state. Operators fall back to ledger replay.
+- Static-serving failure is isolated from the API/runtime; rollback uses the prior
+  immutable image. Dynamic HTML is no-store and hashed assets are immutable.
+
+See [operator-ui.md](operator-ui.md) for triage and
+[operator-accessibility.md](operator-accessibility.md) for release checks.

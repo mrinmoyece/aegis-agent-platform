@@ -1,0 +1,756 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Aegis Operator BFF API",
+    "version": "1.0.0",
+    "description": "Tenant-scoped, bounded, provider-neutral operator view and command contracts. The event ledger remains authoritative."
+  },
+  "servers": [
+    {
+      "url": "/operator/api"
+    }
+  ],
+  "paths": {
+    "/config": {
+      "get": {
+        "operationId": "getOperatorConfig",
+        "responses": {
+          "200": {
+            "description": "Public non-secret runtime configuration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorConfig"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demo/session": {
+      "post": {
+        "operationId": "createDemoSession",
+        "description": "Deterministic local-only fake authentication. Disabled when production readiness is true.",
+        "responses": {
+          "201": {
+            "description": "Server-side session created.",
+            "headers": {
+              "Set-Cookie": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBootstrap"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/session": {
+      "get": {
+        "operationId": "getSession",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current session and advisory permissions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBootstrap"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/session/logout": {
+      "post": {
+        "operationId": "logoutSession",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Session invalidated."
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/tenants/{tenantId}/snapshot": {
+      "get": {
+        "operationId": "getOperatorSnapshot",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded derived tenant view.",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string",
+                  "maxLength": 132
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorSnapshot"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/tenants/{tenantId}/events": {
+      "get": {
+        "operationId": "getOperatorEvents",
+        "description": "Visibility-aware cursor polling transport and fallback for bounded live updates.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantId"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,10}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Validated ordered event page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorEventPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/tenants/{tenantId}/approvals/{approvalId}/decisions/record": {
+      "post": {
+        "operationId": "recordApprovalDecision",
+        "description": "Records an exact-scope decision; it never implies action success.",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantId"
+          },
+          {
+            "name": "approvalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._-]+$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._-]+$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 132
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Decision durably acknowledged; verification remains pending.",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string",
+                  "maxLength": 132
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalDecisionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "TenantId": {
+        "name": "tenantId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._-]+$"
+        }
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "Classified bounded error.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-aegis-session",
+        "description": "Secure HttpOnly SameSite server session cookie."
+      },
+      "csrfHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-CSRF-Token",
+        "description": "Session-bound CSRF value required with an allowed Origin."
+      }
+    },
+    "schemas": {
+      "OperatorConfig": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "production_ready",
+          "auth_mode",
+          "demo",
+          "server_time",
+          "oidc_boundary"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "production_ready": {
+            "type": "boolean"
+          },
+          "auth_mode": {
+            "type": "string",
+            "enum": [
+              "oidc_bff",
+              "deterministic_demo"
+            ]
+          },
+          "demo": {
+            "type": "boolean"
+          },
+          "server_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "oidc_boundary": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "authorization_code",
+              "pkce",
+              "state",
+              "nonce",
+              "live_exchange_configured"
+            ],
+            "properties": {
+              "authorization_code": {
+                "const": true
+              },
+              "pkce": {
+                "const": true
+              },
+              "state": {
+                "const": true
+              },
+              "nonce": {
+                "const": true
+              },
+              "live_exchange_configured": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "SessionBootstrap": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "actor_id",
+          "tenant_id",
+          "roles",
+          "permissions",
+          "csrf_token",
+          "server_time",
+          "production_ready",
+          "demo",
+          "stale"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "actor_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "tenant_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "roles": {
+            "type": "array",
+            "maxItems": 16,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "permissions": {
+            "type": "array",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          "csrf_token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 32,
+            "maxLength": 256
+          },
+          "server_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "production_ready": {
+            "type": "boolean"
+          },
+          "demo": {
+            "type": "boolean"
+          },
+          "stale": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DataAuthority": {
+        "type": "string",
+        "enum": [
+          "event_fact",
+          "derived_state",
+          "model_claim",
+          "operator_decision",
+          "unknown"
+        ]
+      },
+      "JsonValue": {
+        "oneOf": [
+          {
+            "type": "string",
+            "maxLength": 2048
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "OperatorItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "summary",
+          "status",
+          "authority",
+          "occurred_at",
+          "severity",
+          "stale",
+          "citation",
+          "metadata"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "kind": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "status": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "authority": {
+            "$ref": "#/components/schemas/DataAuthority"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning",
+              "critical"
+            ]
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "citation": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2048
+          },
+          "metadata": {
+            "type": "object",
+            "maxProperties": 32,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            }
+          }
+        }
+      },
+      "OperatorSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "tenant_id",
+          "generated_at",
+          "source_cursor",
+          "stale",
+          "demo",
+          "sections"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": 1
+          },
+          "tenant_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source_cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "demo": {
+            "type": "boolean"
+          },
+          "sections": {
+            "type": "object",
+            "minProperties": 1,
+            "maxProperties": 16,
+            "additionalProperties": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "$ref": "#/components/schemas/OperatorItem"
+              }
+            }
+          }
+        }
+      },
+      "OperatorEventPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "events",
+          "next_cursor",
+          "server_time",
+          "stale"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/OperatorItem"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2048
+          },
+          "server_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "stale": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ApprovalDecisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "approval_id",
+          "plan_digest",
+          "policy_digest",
+          "decision",
+          "rationale_code",
+          "comment"
+        ],
+        "properties": {
+          "approval_id": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "plan_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "policy_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "grant",
+              "deny"
+            ]
+          },
+          "rationale_code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "comment": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        }
+      },
+      "ApprovalDecisionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "approval_id",
+          "status",
+          "verification",
+          "version",
+          "duplicate",
+          "server_time"
+        ],
+        "properties": {
+          "approval_id": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "status": {
+            "const": "decision_recorded"
+          },
+          "verification": {
+            "const": "pending"
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "duplicate": {
+            "type": "boolean"
+          },
+          "server_time": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "request_id",
+              "retryable"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "request_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

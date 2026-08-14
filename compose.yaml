@@ -1,6 +1,23 @@
 name: aegis-agent-platform
 
 services:
+  operator-ui:
+    profiles: ["operator-demo"]
+    build:
+      context: ./frontend
+    ports:
+      - "127.0.0.1:${AEGIS_OPERATOR_UI_PORT:-4173}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    networks:
+      - operator-ui
+
   api:
     build:
       context: .
@@ -222,4 +239,5 @@ volumes:
 
 networks:
   backend:
+  operator-ui:
   telemetry:

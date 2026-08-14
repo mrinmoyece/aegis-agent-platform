@@ -179,8 +179,23 @@ demo application remains fail-closed and does not invent development identities.
 Stop and remove containers with `docker compose down`. Add `--volumes` only when
 you intentionally want to delete local data.
 
+## Run the Layer 13 synthetic operator UI
+
+```bash
+pnpm --dir frontend install --frozen-lockfile
+pnpm --dir frontend check
+pnpm --dir frontend dev
+```
+
+Open <http://127.0.0.1:5173>. The session and incident are visibly synthetic and use
+no production network, identity, credential, model, connector, or action. To test
+the non-root static image, run
+`docker compose --profile operator-demo up --build operator-ui` and open
+<http://127.0.0.1:4173>. This does not wire live Keycloak login; see
+[operator-ui.md](operator-ui.md).
+
 ## Read next
 
 Read `durable-execution.md`, `worker-runtime.md`, ADR 0010/0011,
-ADR 0014, `failure-modes.md`, and `runbook.md`, then
+ADR 0014, ADR 0021, `operator-ui.md`, `failure-modes.md`, and `runbook.md`, then
 compare roadmap gates with `enterprise-checklist.md`.

@@ -211,4 +211,4 @@ success-shaped fallback.
 | Admission policy, isolated runtime class, PID controller, default-deny network policy, egress proxy/DNS defense, trusted artifact CSI/collector | Required environment controls; not deployed or certified |
 | Secret broker, copy-on-write seeded writable mounts, malware engine, image signing/SBOM enforcement, remote attestation | Planned |
 | Memory/RAG | Implemented separately in Layer 10; it grants no sandbox authority |
-| Operator UI, MCP/A2A, HA/DR/multi-region, broad autonomous production mutation | Explicitly deferred |
+| Production-qualified operator UI, MCP/A2A, HA/DR/multi-region, broad autonomous production mutation | Explicitly deferred |

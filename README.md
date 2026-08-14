@@ -14,7 +14,7 @@ deployments, Kubernetes/runtime changes, and runbooks. This narrow story makes
 durability, evidence provenance, authorization, and safe effects testable end
 to end.
 
-> **Current status: Layer 12 - Enterprise observability and replay.** Layers 1-4 add
+> **Current status: Layer 13 - Secure operator UI and BFF.** Layers 1-4 add
 > tenant-bound work events, a crash-reconcilable PostgreSQL outbox publisher,
 > Redis Streams consumer groups, inbox deduplication, PostgreSQL renewable
 > leases and fencing, fair bounded supervision, quota enforcement, cancellation,
@@ -49,11 +49,16 @@ to end.
 > cardinality metrics, structured logs, configured SLOs and burn-rate alerts,
 > provisioned dashboards, component health, tenant/operator observability APIs,
 > and ledger-grounded read-only replay debugging. The evaluation catalog now has
-> 97 deterministic cases, including six observability invariants. These are
+> 97 deterministic cases, including six observability invariants. Layer 13 adds a
+> strict React/TypeScript workspace, secure server-session BFF boundary, validated
+> OpenAPI-derived contracts, tenant/RBAC-safe operator views, exact-scope approval
+> UX, bounded cursor updates, accessibility/security controls, a non-root static
+> image, and six operator-safety evals. The catalog now contains 103 cases. These are
 > configured and locally validated controls, not evidence of production SLO
 > attainment. Live model/connector and production telemetry qualification,
 > model-judge execution, independent penetration testing, human labeling,
-> operator UI, MCP/A2A, external managed backends, 24/7 on-call evidence,
+> production identity/browser qualification, MCP/A2A, external managed backends,
+> 24/7 on-call evidence,
 > production deployment, HA/DR/multi-region, compliance certification, and final
 > load/chaos certification remain deferred. See
 > [Limitations and production gaps](docs/limitations.md) for the complete,

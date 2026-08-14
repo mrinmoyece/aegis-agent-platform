@@ -323,3 +323,27 @@ retry, redelivery, replay, and projection rebuild.
 **Why can telemetry degradation leave readiness green?** Export is optional to
 correctness and must not block work. DB, fencing, policy, or sandbox enforcement
 can gate readiness; exporter loss reports degraded and uses replay fallback.
+
+## Layer 13 questions
+
+**Why use a BFF instead of browser bearer tokens?** HttpOnly cookies keep reusable
+tokens out of JavaScript while the BFF centralizes OIDC exchange, tenant binding,
+CSRF/origin checks, response bounds, anti-enumeration, and audit. It does not make
+XSS harmless, so CSP and data-only rendering still apply.
+
+**Can the UI hide a denied operation and call that authorization?** No. UI RBAC is
+deny-by-default usability only. Every read and mutation is server-authorized against
+the current principal, tenant, purpose, policy, and approval.
+
+**Why is an approval decision not action success?** A decision only satisfies one
+precondition. Durable intent, controlled effect, ambiguous-outcome reconciliation,
+and fresh postcondition verification remain separate ledger facts.
+
+**How do you prevent tenant cache bleed?** Every cache/update key includes tenant
+and purpose, authenticated responses must match the active tenant, and switching
+tenant aborts updates and destroys all prior session/view/mutation state before
+reauthentication.
+
+**What does the accessibility evidence prove?** Semantic tests, keyboard journeys,
+themes/reduced-motion behavior, and axe catch deterministic regressions. They do not
+replace manual WCAG review or supported browser/assistive-technology qualification.

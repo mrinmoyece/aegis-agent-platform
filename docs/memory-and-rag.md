@@ -154,7 +154,7 @@ schema.
 
 ## Deliberate gaps
 
-Operator UI, MCP/A2A adapters, live embedding/summarization verification,
+Production-qualified operator UI, MCP/A2A adapters, live embedding/summarization verification,
 production key management and encrypted blob storage, external DLP/malware
 services, HA/DR, multi-region/global cache coherence, backup expiry, and final
 production load evidence remain deferred. The fixed eight-dimension deterministic

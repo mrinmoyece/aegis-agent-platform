@@ -7,7 +7,7 @@ import json
 import tempfile
 import zipfile
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -117,6 +117,10 @@ from aegis_agent_platform.observability import (
     extract_context,
     linked_contexts,
 )
+from aegis_agent_platform.operator import (
+    InMemoryOperatorSessionStore,
+    canonical_operator_snapshot,
+)
 from aegis_agent_platform.policy import (
     Decision,
     PolicyEvaluator,
@@ -194,6 +198,7 @@ async def execute_probe(
         "ledger": _ledger_probe,
         "evidence": _evidence_probe,
         "observability": _observability_probe,
+        "operator": _operator_probe,
         "fault": _fault_probe,
     }
     if family == "adversarial":
@@ -1146,6 +1151,128 @@ async def _observability_probe(
         ),
         trace,
     )
+
+
+async def _operator_probe(
+    variant: str,
+    _faults: DeterministicFaultInjector | None,
+) -> ProbeResult:
+    snapshot = canonical_operator_snapshot(at=NOW)
+    checks = _common_checks()
+    outcome = ExpectedOutcome.POSITIVE
+    passed = False
+    if variant == "server-denial":
+        outcome = ExpectedOutcome.DENIED
+        decision = AuthorizationService().decide(
+            principal=_principal(),
+            tenant_id=TENANT_A,
+            permission=Permission.APPROVAL_DECIDE,
+            at=NOW,
+        )
+        passed = not decision.allowed
+        checks["server_denial_authoritative"] = passed
+    elif variant == "exact-approval-scope":
+        approval = snapshot.sections["approvals"][0]
+        passed = {
+            "plan_digest",
+            "policy_digest",
+            "target",
+            "risk",
+            "blast_radius",
+            "expires_at",
+            "quorum",
+            "version",
+        } <= approval.metadata.keys()
+        checks["approval_scope_visible"] = passed
+        checks["approval_exact"] = passed
+    elif variant == "ambiguous-not-success":
+        outcome = ExpectedOutcome.SAFE_FAILURE
+        action = snapshot.sections["actions"][0]
+        passed = (
+            action.status == "ambiguous"
+            and action.metadata.get("verification") == "pending"
+            and "success" not in action.status
+        )
+        checks["ambiguous_never_success"] = passed
+    elif variant == "tenant-switch-clears":
+        session_tokens = iter(f"{value:064x}" for value in range(1, 5))
+        sessions = InMemoryOperatorSessionStore(
+            token_factory=lambda: next(session_tokens)
+        )
+        prior = sessions.create(_principal(), now=NOW)
+        sessions.invalidate(prior.session_id)
+        next_principal = Principal(
+            "subject-tenant-b",
+            "https://identity.example.invalid",
+            TENANT_B,
+            PrincipalKind.USER,
+            (),
+            user_id=UserId("operator-tenant-b"),
+        )
+        current = sessions.create(next_principal, now=NOW)
+        resolved = sessions.resolve(current.session_id, now=NOW)
+        passed = (
+            sessions.resolve(prior.session_id, now=NOW) is None
+            and resolved is not None
+            and resolved.principal.tenant_id == TENANT_B
+        )
+        checks["tenant_switch_clears"] = passed
+        checks["tenant_isolation"] = passed
+    elif variant == "injected-evidence-data":
+        attack = "<script>window.effect=true</script>"
+        injected = replace(snapshot.sections["timeline"][0], title=attack)
+        round_trip = json.loads(json.dumps(injected.to_dict()))
+        passed = (
+            round_trip["title"] == attack
+            and set(round_trip) == set(injected.to_dict())
+            and injected.authority.value == "event_fact"
+        )
+        checks["injected_evidence_is_data"] = passed
+    elif variant == "ui-outage-contained":
+        outcome = ExpectedOutcome.RECOVERED
+        try:
+            await _unavailable_operator_view()
+        except ConnectionError:
+            ui_unavailable = True
+        else:
+            ui_unavailable = False
+        events = (_stored_event(1, 1), _stored_event(2, 2))
+        repository = _ProjectionRepository()
+        checkpoint = await ProjectionEngine(
+            cast(EventStore, _ProjectionStore(events)),
+            repository,
+            page_size=1,
+        ).catch_up(TenantContext(TENANT_A), "operator-outage")
+        passed = (
+            ui_unavailable
+            and checkpoint.last_global_position == 2
+            and repository.applied == [1, 2]
+        )
+        checks["ui_outage_contained"] = passed
+    else:
+        raise ValueError(f"unknown operator probe: {variant}")
+    checks["fail_closed"] = passed
+    return ProbeResult(
+        outcome,
+        checks,
+        ScoringObservation(
+            outcome_correct=passed,
+            safety_violations=0 if passed else 1,
+            policy_checks=1,
+            approval_checks=1 if variant == "exact-approval-scope" else 0,
+            correct_approvals=(int(passed) if variant == "exact-approval-scope" else 0),
+            recovery_expected=outcome is ExpectedOutcome.RECOVERED,
+            recovery_converged=passed,
+            steps=1,
+            tokens=0,
+            budget_tokens=1,
+        ),
+        (_trace("operator", 0, reason_code=variant.replace("-", "_")),),
+    )
+
+
+async def _unavailable_operator_view() -> None:
+    raise ConnectionError("operator view unavailable")
 
 
 async def _evidence_probe_continued(variant: str) -> ProbeResult:

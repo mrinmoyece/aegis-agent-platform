@@ -17,16 +17,16 @@
   Layer 10 event-grounded memory/RAG are implemented. Arbitrary tools and
   Layer 11 deterministic evaluation contracts/harness are implemented. This is
   a hermetic release-evidence system, not live production qualification.
-- Runtime spans and bounded metric instruments exist, but no production
-  collector dashboards, alert rules, or SLO evidence are claimed.
+- Runtime spans, bounded metric instruments, local dashboards, and alert rules
+  exist, but no production telemetry qualification or SLO attainment is claimed.
 - Three-tier memory, pgvector/lexical retrieval, provenance, scanner/redaction
   hooks, retention/deletion, and context compaction are implemented. Live model
   verification, encrypted production blob/key storage, external DLP/malware
   services, backup expiry, and production load evidence are not.
 - No MCP or A2A endpoint exists. Neither protocol currently provides discovery,
   tool access, external task exchange, streaming, cancellation, or status.
-- CI scans and builds a baseline but does not yet emit an SBOM, provenance,
-  signature, release artifact, or deployment.
+- CI emits a frontend CycloneDX SBOM and builds images, but does not emit signed
+  provenance, a promoted release artifact, or deployment evidence.
 
 ## Current Layer 11 implementation (evaluation and release evidence)
 
@@ -52,10 +52,10 @@
 - `ModelJudgeConfig` enforces disabled-by-default, versioned, delimited,
   never-sole-safety-gate configuration. Model judge execution and large-scale
   human-label calibration do not exist.
-- Full production model/connector qualification, independent penetration
-  testing, large-scale human labeling, operator UI, MCP/A2A,
-  observability/SLOs, HA/DR and multi-region, and final load/chaos certification
-  remain deferred.
+- Full production model/connector qualification, independent penetration/
+  accessibility testing, large-scale human labeling, live production
+  identity/browser qualification, MCP/A2A, production SLO evidence, HA/DR and
+  multi-region, and final load/chaos certification remain deferred.
 
 ## Current Layer 5 implementation (model gateway)
 
@@ -146,7 +146,7 @@
   live network or credentials.
 - These controls do not prove that a model's semantic conclusion is correct.
   Layer 8 supplies the separate human approval and execution boundary. There is
-  no live connector/model/action verification, memory/RAG, operator UI,
+  no live connector/model/action verification, production-qualified operator UI,
   MCP/A2A adapter, broad autonomous remediation, production deployment, HA,
   backup/restore, or operational SLO evidence.
 
@@ -178,8 +178,9 @@
   patch, command, shell input, code, or credential and is tested with a fake
   official client.
 - Unrestricted interactive sandboxing, capability credential brokering,
-  arbitrary or destructive actions, live external verification, memory/RAG,
-  operator UI, MCP/A2A, production Kubernetes deployment, HA/DR, multi-region,
+  arbitrary or destructive actions, live external verification,
+  production-qualified operator UI, MCP/A2A, production Kubernetes deployment,
+  HA/DR, multi-region,
   and broad autonomous remediation remain deferred.
 
 ## Current Layer 9 implementation (hardened ephemeral sandbox)
@@ -219,8 +220,8 @@
 - APIs expose only authenticated bounded redacted request/status/artifact/
   cleanup views. There is no attach, interactive exec, log streaming, raw
   artifact download, or production mutation endpoint.
-- Operator UI, MCP/A2A, live external verification, HA/DR, multi-region, and
-  broad autonomous production mutation remain deferred.
+- Production-qualified operator UI, MCP/A2A, live external verification, HA/DR,
+  multi-region, and broad autonomous production mutation remain deferred.
 
 ## Current Layer 10 implementation (event-grounded memory and RAG)
 
@@ -245,8 +246,9 @@
   erasure is not claimed.
 - APIs, CLI/demo, tests, and evals are deterministic and use no live external
   model. The implemented embedding profile is fixed at eight dimensions.
-- Operator UI, MCP/A2A, live provider verification, production encrypted blob/
-  key management, advanced DLP/malware services, HA/DR, multi-region/global
+- Production-qualified operator identity/browser deployment, MCP/A2A, live provider
+  verification, production encrypted blob/key management, advanced DLP/malware
+  services, HA/DR, multi-region/global
   cache coherence, backup expiry, and final production load evidence remain
   deferred.
 
@@ -334,9 +336,8 @@
 
 Aegis does not currently diagnose live checkout failures, protect production data,
 guarantee exactly-once effects, embedding, indexing, or provider billing, certify
-a production code sandbox, satisfy a
-compliance framework, provide a completed Layer 11 evaluation harness, meet an
-SLO, or support multi-region recovery. Live local
+a production code sandbox, satisfy a compliance framework, demonstrate a
+production SLO, or support multi-region recovery. Live local
 PostgreSQL tests prove specific RLS and durability controls, not production
 deployment hardening or operational readiness.
 
@@ -356,5 +357,25 @@ debugger, tests, and deterministic evals are implemented. The application does
 not yet provide qualified production OTel SDK/exporter evidence, a production
 trace/log backend, long-window production SLI history, external managed backend
 qualification, or a proven 24/7 on-call rotation. Local collector buffering is
-ephemeral. Operator React UI, MCP/A2A, HA/DR/multi-region, final load/chaos,
-independent penetration testing, and compliance certification remain deferred.
+ephemeral. Live production identity/browser qualification, MCP/A2A, HA/DR/multi-region,
+final load/chaos, independent penetration/accessibility testing, and compliance
+certification remain deferred.
+
+## Layer 13 limitations
+
+- The BFF/session/PKCE boundary, secure cookies, CSRF/origin checks, tenant/RBAC
+  behavior, derived views, polling, approvals, audit, React workspace, tests, and
+  static image are implemented.
+- The live OIDC authorization-code exchange, logout propagation, key rotation drill,
+  encrypted distributed session store, reverse-proxy TLS deployment, and production
+  identity lifecycle are not implemented or live-tested. Readiness is false.
+- The canonical incident and auth adapter are deterministic and synthetic. They
+  perform no production network call, effect, or credential use.
+- Automated axe and Chromium tests are regression evidence, not an independent
+  WCAG audit or a supported browser/assistive-technology matrix.
+- Cursor polling is implemented; a production SSE/WebSocket transport is deferred.
+  Either must continue through the same tenant authorization and runtime validation.
+- Dependency audit, permissive-license policy, bundle/source-map/CSP checks, SBOM,
+  and non-root container smoke are CI controls. Image signing, SLSA provenance,
+  managed promotion/rollback, production WAF/CDN behavior, penetration testing,
+  load/chaos, HA/DR/multi-region, and compliance certification remain absent.

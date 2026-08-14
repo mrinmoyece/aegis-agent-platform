@@ -287,9 +287,9 @@ The A2A adapter passes conformance, authentication, authorization,
 tenant-isolation, idempotency, replay, cancellation, downgrade, and malicious
 peer tests; every external task transition is replayable from the event ledger.
 
-Operator UI, MCP/A2A, production observability/SLO evidence, HA/DR and
-multi-region, and final load/chaos certification remain deferred until this
-gate's executable evidence exists.
+Production identity/browser qualification, MCP/A2A, production observability/SLO
+evidence, HA/DR and multi-region, and final load/chaos certification remain
+deferred until their executable evidence exists.
 
 ## Curriculum documentation gates
 
@@ -310,5 +310,21 @@ cardinality guards, structured logs, metrics, component health, configured SLO
 catalog and multi-window burn alerts, ten Grafana dashboards, hardened local
 collector topology, authenticated timeline/SLO/support endpoints, replay CLI,
 and deterministic observability evals. Production telemetry qualification,
-managed backends, operator React UI, MCP/A2A, 24/7 on-call evidence,
-HA/DR/multi-region, final load/chaos, and compliance remain future layers.
+managed backends, MCP/A2A, 24/7 on-call evidence, HA/DR/multi-region, final
+load/chaos, and compliance remain future layers.
+
+## Layer 13 - Secure operator UI and BFF
+
+Implemented: strict React/TypeScript workspace; OpenAPI-derived and runtime-validated
+contracts; server-side HttpOnly session and PKCE boundary; origin/CSRF, tenant/RBAC,
+anti-enumeration, idempotency, and concurrency controls; bounded operator views and
+cursor polling; exact-scope approval UX; synthetic canonical incident; axe and
+Chromium journeys; dependency/license/bundle/CSP/SBOM checks; and a non-root
+read-only static image.
+
+**Acceptance gate:** all backend/frontend contract and security tests, six operator
+invariant evals, full repository checks, locked install, accessibility/e2e,
+dependency audit, Compose rendering, and container smoke pass. Production readiness
+stays false until live OIDC/distributed sessions, supported browser and assistive-
+technology qualification, independent audits, managed rollout, HA/DR/multi-region,
+and final load/chaos evidence exist. MCP/A2A remain deferred.

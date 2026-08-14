@@ -35,6 +35,9 @@ REQUIRED_DOCUMENTS = {
     ROOT / "docs" / "memory-and-rag.md",
     ROOT / "docs" / "evaluation.md",
     ROOT / "docs" / "status.md",
+    ROOT / "docs" / "operator-ui.md",
+    ROOT / "docs" / "operator-accessibility.md",
+    ROOT / "docs" / "adr" / "0021-bff-session-and-derived-operator-views.md",
     ROOT / "docs" / "adr" / "0013-durable-evidence-ingestion.md",
     ROOT / "docs" / "adr" / "0014-governed-durable-specialist-dag.md",
     ROOT / "docs" / "adr" / "0015-exact-approvals-at-least-once-effects.md",
@@ -53,7 +56,9 @@ def markdown_files() -> list[Path]:
     return sorted(
         path
         for path in ROOT.rglob("*.md")
-        if ".venv" not in path.parts and ".git" not in path.parts
+        if ".venv" not in path.parts
+        and ".git" not in path.parts
+        and "node_modules" not in path.parts
     )
 
 
@@ -89,7 +94,7 @@ def main() -> None:
         raise SystemExit("broken documentation links:\n" + "\n".join(failures))
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    if "Current status: Layer 12" not in readme:
+    if "Current status: Layer 13" not in readme:
         raise SystemExit("README must state the current implementation layer")
 
 

@@ -35,6 +35,8 @@ class AuditEventType(StrEnum):
     REMEDIATION_APPROVAL_DECISION = "security.remediation_approval_decision.v1"
     CONTROLLED_ACTION_OUTCOME = "security.controlled_action_outcome.v1"
     OBSERVABILITY_ACCESS = "security.observability_access.v1"
+    OPERATOR_PRIVILEGED_READ = "security.operator_privileged_read.v1"
+    OPERATOR_MUTATION = "security.operator_mutation.v1"
 
 
 class AuditOutcome(StrEnum):

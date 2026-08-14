@@ -165,10 +165,10 @@ reconciliation, postcondition verification, bounded fake sandbox analysis, and
 event-grounded memory/RAG and Layer 11 deterministic evaluation are implemented.
 Live systems, production credentials/cluster sandbox controls, live model/
 connector qualification, production encrypted blob/key storage, model-judge
-execution, independent penetration testing, large-scale human labeling, operator
-UI, MCP/A2A, observability/SLOs, HA/DR/multi-region, final load/chaos
-certification, and incident update remain planned, so the full production
-narrative is not yet claimable.
+execution, independent penetration/accessibility testing, large-scale human
+labeling, live production identity/browser qualification, MCP/A2A, production SLO
+attainment, HA/DR/multi-region, final load/chaos certification, and incident
+update remain planned, so the full production narrative is not yet claimable.
 
 ## Layer 12 demo
 
@@ -177,4 +177,22 @@ execute the six `observability.*` deterministic cases, then replay a bounded
 event export with `python -m aegis_agent_platform.observability`. Demonstrate
 hostile context rejection, secret redaction, retry outcome deduplication,
 exporter-outage containment, time-travel diff, and a digested support report.
+
+## Layer 13 operator demo
+
+1. Run `pnpm --dir frontend dev` and start the visibly synthetic session.
+2. Show health/SLO degradation, the incident queue, and a timeline that distinguishes
+   event facts, model claims, derived state, operator decisions, and unknowns.
+3. Follow specialist DAG evidence through critic abstention and provider-neutral
+   budget accounting.
+4. Open the exact approval scope, copy the immutable digest, inspect target/risk/
+   blast radius/quorum/SoD/expiry, type `APPROVE`, and record the decision.
+5. Emphasize that decision recording and ambiguous provider acknowledgement are not
+   success; show reconciliation and pending verification.
+6. Show sandbox quarantine, memory citation/tombstone, evaluation regression,
+   immutable audit, replay chain, and redacted support mode.
+7. Switch tenant/session and confirm prior data disappears. Inject script-shaped
+   evidence through the test fixture and show it rendered only as text.
+8. Close with `production_ready: false` and the live identity/browser/deployment
+   gaps in [operator-ui.md](operator-ui.md).
 State that SLOs are configured locally and no production attainment is claimed.

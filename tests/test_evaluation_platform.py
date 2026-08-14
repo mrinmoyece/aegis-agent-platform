@@ -93,7 +93,7 @@ def full_report() -> EvaluationReport:
 def test_catalog_covers_every_layer_outcome_and_gate_pack() -> None:
     suite = build_suite()
 
-    assert len(suite.cases) == 97
+    assert len(suite.cases) == 103
     assert {case.layer for case in suite.cases} == {
         "layer-2",
         "layer-3",
@@ -105,6 +105,7 @@ def test_catalog_covers_every_layer_outcome_and_gate_pack() -> None:
         "layer-9",
         "layer-10",
         "layer-12",
+        "layer-13",
         "cross-layer",
     }
     assert set(ExpectedOutcome).issubset(
@@ -125,6 +126,33 @@ def test_catalog_covers_every_layer_outcome_and_gate_pack() -> None:
         case for case in suite.cases if case.case_id == "adversarial.schema-smuggling"
     )
     assert schema_case.fixture_ids == ("quarantined-malformed-v1",)
+    common_operator_invariants = {
+        "no_live_network",
+        "no_production_effect",
+        "bounded_execution",
+        "redacted_output",
+        "fail_closed",
+    }
+    operator_invariants = {
+        case.case_id: {invariant.invariant_id for invariant in case.invariants}
+        - common_operator_invariants
+        for case in suite.cases
+        if case.layer == "layer-13"
+    }
+    assert operator_invariants == {
+        "operator.server-denial": {"server_denial_authoritative"},
+        "operator.exact-approval-scope": {
+            "approval_scope_visible",
+            "approval_exact",
+        },
+        "operator.ambiguous-not-success": {"ambiguous_never_success"},
+        "operator.tenant-switch-clears": {
+            "tenant_switch_clears",
+            "tenant_isolation",
+        },
+        "operator.injected-evidence-data": {"injected_evidence_is_data"},
+        "operator.ui-outage-contained": {"ui_outage_contained"},
+    }
     assert json.loads(catalog_json())[0]["case_id"] == suite.cases[0].case_id
 
 
