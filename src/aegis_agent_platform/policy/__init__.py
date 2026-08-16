@@ -10,8 +10,6 @@ from typing import Protocol
 from aegis_agent_platform.identity import Role, TenantId
 from aegis_agent_platform.tenancy import TenantContext
 
-from aegis_agent_platform.tenancy import TenantContext
-
 
 class Decision(StrEnum):
     """Possible governance outcomes before a side effect is attempted."""
@@ -100,6 +98,7 @@ class PolicyRequest:
 class QuotaUsage:
     """Authoritative tenant-period usage supplied by a later runtime adapter."""
 
+    tenant_id: TenantId
     tenant_tokens_used: int
     tenant_cost_usd: Decimal
     active_runs: int
@@ -134,9 +133,15 @@ class PolicyEvaluator:
         request: PolicyRequest,
         usage: QuotaUsage,
     ) -> PolicyDecision:
+        if request.tenant_id != policy.tenant_id or usage.tenant_id != policy.tenant_id:
+            return PolicyDecision(
+                tenant=TenantContext(policy.tenant_id),
+                decision=Decision.DENY,
+                reasons=("cross_tenant_policy",),
+                policy_version=policy.version,
+                tenant_id=policy.tenant_id,
+            )
         reasons: list[str] = []
-        if request.tenant_id != policy.tenant_id:
-            reasons.append("cross_tenant_policy")
         selectors = (
             ("model_not_allowed", request.model, policy.allowed_models),
             ("tool_not_allowed", request.tool, policy.allowed_tools),
@@ -171,6 +176,7 @@ class PolicyEvaluator:
             reasons.append("tenant_concurrency_limit_exceeded")
         if reasons:
             return PolicyDecision(
+                tenant=TenantContext(policy.tenant_id),
                 decision=Decision.DENY,
                 reasons=tuple(reasons),
                 policy_version=policy.version,
@@ -181,6 +187,7 @@ class PolicyEvaluator:
             or request.tool in policy.tools_requiring_approval
         )
         return PolicyDecision(
+            tenant=TenantContext(policy.tenant_id),
             decision=(
                 Decision.REQUIRE_APPROVAL if requires_approval else Decision.ALLOW
             ),

@@ -33,7 +33,7 @@ class Settings:
     redis_url: str = ""
     oidc_issuer: str = ""
     oidc_jwks_url: str = ""
-    oidc_audience: str = "aegis-control-plane"
+    oidc_audience: str = ""
     oidc_clock_skew_seconds: int = 30
 
     def __post_init__(self) -> None:
@@ -84,7 +84,7 @@ class Settings:
             oidc_jwks_url=values.get("AEGIS_OIDC_JWKS_URL", ""),
             oidc_audience=values.get(
                 "AEGIS_OIDC_AUDIENCE",
-                "aegis-control-plane",
+                "",
             ),
             oidc_clock_skew_seconds=clock_skew_seconds,
         )

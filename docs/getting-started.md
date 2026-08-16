@@ -80,9 +80,13 @@ After startup:
 The imported Keycloak realm has no users and self-registration disabled, so it
 demonstrates the expected configuration shape (issuer, JWKS URL, audience) for
 `RemoteJwksProvider` rather than a ready-to-use login flow. Calling `/v1/me`
-without a bearer token returns `401 missing_token`; obtaining a real token
-against this realm and wiring it through `RemoteJwksProvider` is a deployment
-exercise, not something the fast local checks assume works. PostgreSQL now
+on the exported process returns `503 authentication_not_configured`, regardless
+of the header, because no identity directory adapter is wired. A separately
+constructed `ControlPlaneApp` with injected test fixtures returns
+`401 missing_token` when credentials are absent, as shown in
+`tests/test_api.py`. Obtaining a real token against this realm and wiring the
+process through `RemoteJwksProvider` is a deployment exercise, not something the
+fast local checks assume works. PostgreSQL now
 initializes with the identity/governance migration
 (`migrations/0001_identity_governance.sql`), but the control plane's default
 repositories remain in-memory — no adapter connects them to Postgres yet, so

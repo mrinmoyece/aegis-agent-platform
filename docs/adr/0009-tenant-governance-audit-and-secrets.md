@@ -19,7 +19,7 @@ accidental exposure in logs, exceptions, or telemetry likely.
 
 **Governance and quotas are a pure function of policy, request, and usage.**
 `TenantPolicy` (allowlists, risk thresholds, approver roles, `QuotaLimits`) and
-`PolicyEvaluator.evaluate` accept a `PolicyRequest` and a caller-supplied
+`PolicyEvaluator.evaluate` accept a `PolicyRequest` and a tenant-bound
 `QuotaUsage` snapshot and return a `PolicyDecision` with no I/O, clock access,
 or hidden state. Deciding *limits* is therefore fully deterministic and unit
 testable; accounting the authoritative *usage* the evaluator consumes is a
@@ -36,7 +36,8 @@ redaction. Event type names are additive and versioned
 an existing one, consistent with the platform-wide additive-event invariant.
 `AuditStore` is tenant-scoped and append-only by contract; secret resolution
 likewise requires a `TenantContext` matching the reference. The Postgres
-migration backs this with a real trigger that rejects `UPDATE`/`DELETE`.
+migration backs this with real triggers that reject
+`UPDATE`/`DELETE`/`TRUNCATE`.
 
 **Secrets are typed references, never material, once past the boundary that
 resolves them.** `SecretReference` (provider, name, optional version) is the

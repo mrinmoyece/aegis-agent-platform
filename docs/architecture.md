@@ -33,9 +33,11 @@ flowchart LR
 
 Dashed paths are diagnostic, never authoritative. The Dynatrace and GitHub
 packages currently define read ports only. The control plane now authenticates
-callers and enforces tenant policy (see "Identity, tenancy, and governance
-boundary" below); the event store, durable queue, worker runtime, providers,
-and connector adapters remain planned, not implemented.
+callers, enforces tenant authorization, and exposes tenant-scoped policy
+inspection (see "Identity, tenancy, and governance boundary" below). Pure
+policy/quota evaluation is implemented as a standalone boundary but is not
+invoked by these read-only routes; the event store, durable queue, worker
+runtime, providers, and connector adapters remain planned, not implemented.
 
 ## Package boundaries
 
@@ -80,18 +82,22 @@ sequenceDiagram
   J-->>CP: VerifiedClaims
   CP->>D: resolve(claims)
   D-->>CP: Principal (tenant, roles)
-  CP->>Z: decide(principal, tenant_id, permission)
-  Z-->>CP: AuthorizationDecision
-  CP->>Q: evaluate(policy, request, usage)
-  Q-->>CP: PolicyDecision (allow/deny/require_approval)
-  CP->>A: append(AuthenticationOutcome, AuthorizationDecision)
+  CP->>A: append(AuthenticationOutcome)
+  opt tenant or policy inspection
+    CP->>Z: decide(principal, tenant_id, permission)
+    Z-->>CP: AuthorizationDecision
+    CP->>A: append(AuthorizationDecision, same correlation ID)
+  end
+  Note over Q: standalone pure boundary; no API operation invokes it yet
 ```
 
-This is an implemented vertical slice, not a design sketch, proven by a
+The authenticated identity, tenant, and policy-inspection path is an
+implemented vertical slice, while policy/quota evaluation, audit, and secret
+resolution are tested standalone boundaries. They are proven by a
 committed automated negative-test suite (`tests/test_identity_security.py`,
 `tests/test_policy_security.py`, `tests/test_audit_secrets.py`,
 `tests/test_migrations.py`, and cross-tenant/authentication cases in
-`tests/test_api.py`; 99 tests passing as of this writing). `identity.models`
+`tests/test_api.py`; 135 tests passing as of this writing). `identity.models`
 defines provider-neutral, normalized identifiers (`TenantId`, `UserId`,
 `ServiceIdentity`), a fixed `Role`/`Permission` set, time-bound `RoleBinding`s
 (`assigned_at`/`expires_at`/`revoked_at`), and a `Principal` that must resolve
@@ -133,9 +139,10 @@ per-tenant document with allowlists for models, tools, connectors, and
 environments; a maximum risk level; a risk threshold above which approval is
 required; an explicit approver-role set; and `QuotaLimits` (per-run token/cost
 ceilings, tenant-period token/cost ceilings, and a concurrency ceiling).
-`PolicyEvaluator.evaluate` is a pure, deterministic function with no I/O: it
+`PolicyEvaluator.evaluate` is a pure, deterministic standalone function with no
+I/O: it
 combines allowlist checks, risk comparison, and quota arithmetic against
-caller-supplied `QuotaUsage` to return an auditable `PolicyDecision`
+tenant-bound `QuotaUsage` to return an auditable `PolicyDecision`
 (`allow`/`deny`/`require_approval`, reasons, and required approver roles).
 Quota *usage* accounting itself — the authoritative counters this evaluator
 consumes — is a durable-runtime concern and remains planned with the Layer
@@ -167,7 +174,7 @@ planned.
 and `security_audit_events` tables. Row-level security is enabled and forced
 on every tenant-scoped table, with a policy requiring `tenant_id` to equal the
 session's `aegis.tenant_id` setting, and an append-only trigger rejects
-`UPDATE`/`DELETE` on `security_audit_events`. The control plane's default
+`UPDATE`/`DELETE`/`TRUNCATE` on `security_audit_events`. The control plane's default
 repositories remain the in-memory adapters above; connecting them to this
 schema, and to the event store and worker runtime, is Layer 3/4 work.
 
@@ -178,9 +185,14 @@ in Layer 1), `/v1/me` returning the authenticated principal's tenant and active
 roles, `/v1/tenants/{tenant_id}` returning the tenant record, and
 `/v1/tenants/{tenant_id}/policy` returning the tenant's governance policy and
 quotas. Every `/v1/*` route requires a valid bearer token and a passing
-authorization decision, and both authentication and authorization outcomes are
-recorded as audit events before a response is returned. No other `/v1/*`
-surface should be assumed until it appears in the code and its tests.
+authentication check. Tenant and policy routes additionally require a passing
+authorization decision; `/v1/me` returns the already-authenticated principal
+without a separate permission check. Authentication outcomes are always
+audited, and authorization outcomes are audited when authorization is
+evaluated, using one request correlation ID. The policy route inspects stored
+policy but does not invoke `PolicyEvaluator`, and no route resolves secrets.
+No other `/v1/*` surface should be assumed until it appears in the code and its
+tests.
 
 ## Canonical incident: checkout failures after deployment
 

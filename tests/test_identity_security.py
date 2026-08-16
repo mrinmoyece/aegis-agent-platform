@@ -184,6 +184,8 @@ def test_authoritative_directory_ignores_token_roles_and_rejects_tenant_confusio
     [
         ({"azp": 7}, AuthenticationErrorCode.INVALID_CLAIMS),
         ({"tenant_id": ""}, AuthenticationErrorCode.INVALID_CLAIMS),
+        ({"tenant_id": ["tenant-alpha"]}, AuthenticationErrorCode.INVALID_CLAIMS),
+        ({"tenant_id": None}, AuthenticationErrorCode.INVALID_CLAIMS),
     ],
 )
 def test_invalid_optional_claim_types_are_rejected(
@@ -351,7 +353,11 @@ class FakeResponse:
         return self._payload
 
 
-def jwks_document(signing_key: rsa.RSAPrivateKey) -> bytes:
+def jwks_document(
+    signing_key: rsa.RSAPrivateKey,
+    *,
+    key_id: str = KEY_ID,
+) -> bytes:
     numbers = signing_key.public_key().public_numbers()
 
     def encoded(value: int) -> str:
@@ -362,7 +368,7 @@ def jwks_document(signing_key: rsa.RSAPrivateKey) -> bytes:
         {
             "keys": [
                 {
-                    "kid": KEY_ID,
+                    "kid": key_id,
                     "alg": "RS256",
                     "kty": "RSA",
                     "n": encoded(numbers.n),
@@ -392,6 +398,28 @@ def test_remote_jwks_provider_parses_and_caches_key(
 
     assert first == second
     assert first.pem == signing.public_pem
+    assert calls == [2.0]
+
+
+def test_remote_jwks_provider_negative_lookup_uses_document_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signing = signing_fixture()
+    calls: list[float] = []
+
+    def fake_urlopen(request: object, timeout: float) -> FakeResponse:
+        del request
+        calls.append(timeout)
+        return FakeResponse(jwks_document(signing.private_key))
+
+    monkeypatch.setattr(authentication_module, "urlopen", fake_urlopen)
+    provider = RemoteJwksProvider("https://identity.example/certs")
+
+    for key_id in ("attacker-key-1", "attacker-key-2"):
+        with pytest.raises(AuthenticationError) as captured:
+            provider.get_key(key_id)
+        assert captured.value.code is AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE
+
     assert calls == [2.0]
 
 
@@ -427,12 +455,45 @@ def test_remote_jwks_provider_refreshes_after_bounded_ttl(
     assert rotated.pem == rotated_signing.public_pem
 
 
+def test_remote_jwks_refresh_atomically_removes_retired_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    retired_signing = signing_fixture()
+    rotated_signing = signing_fixture()
+    responses = iter(
+        (
+            jwks_document(retired_signing.private_key),
+            jwks_document(rotated_signing.private_key, key_id="rotated-key"),
+        )
+    )
+    now = [0.0]
+    monkeypatch.setattr(
+        authentication_module,
+        "urlopen",
+        lambda request, timeout: FakeResponse(next(responses)),
+    )
+    provider = RemoteJwksProvider(
+        "https://identity.example/certs",
+        cache_ttl_seconds=30,
+        monotonic=lambda: now[0],
+    )
+
+    assert provider.get_key(KEY_ID).pem == retired_signing.public_pem
+    now[0] = 31.0
+    with pytest.raises(AuthenticationError) as captured:
+        provider.get_key(KEY_ID)
+
+    assert captured.value.code is AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE
+    assert provider.get_key("rotated-key").pem == rotated_signing.public_pem
+
+
 @pytest.mark.parametrize(
     "payload",
     [
         b"[]",
         b'{"keys":[]}',
         b'{"keys":[{"kty":"EC"}]}',
+        b'{"keys":[{"kid":"bad","alg":"RS256","kty":"RSA","n":"***","e":"AQAB"}]}',
     ],
 )
 def test_remote_jwks_invalid_documents_fail_closed(
@@ -476,3 +537,10 @@ def test_remote_jwks_transport_and_scheme_failures_are_classified(
         provider.get_key(KEY_ID)
 
     assert captured.value.code is AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE
+
+
+def test_duplicate_identity_records_fail_closed() -> None:
+    record = identity_record()
+
+    with pytest.raises(ValueError, match="duplicate authoritative"):
+        InMemoryIdentityDirectory((record, record))
