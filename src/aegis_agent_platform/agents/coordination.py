@@ -47,8 +47,16 @@ class InvestigationPlan:
 class ArtifactLedger(Protocol):
     """Only communication channel between incident specialists."""
 
-    async def record(self, artifact: AgentArtifact) -> None:
-        """Persist a typed artifact as an event before it is consumed."""
+    async def record(
+        self,
+        tenant: TenantContext,
+        artifact: AgentArtifact,
+    ) -> None:
+        """Persist one tenant's typed artifact before it is consumed.
+
+        Implementations must reject artifacts whose tenant ID does not match
+        the validated context.
+        """
         ...
 
     async def read_incident(

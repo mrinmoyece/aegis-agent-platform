@@ -15,14 +15,15 @@ class EventStore(Protocol):
     async def append(
         self,
         tenant: TenantContext,
+        aggregate_id: str,
         events: Sequence[EventEnvelope],
         *,
         expected_version: int,
     ) -> int:
         """Append one tenant's events atomically.
 
-        Implementations must reject envelopes whose tenant ID does not match the
-        validated context and return the new aggregate version.
+        Implementations must reject envelopes whose tenant ID or aggregate ID
+        does not match the validated stream context and return its new version.
         """
         ...
 

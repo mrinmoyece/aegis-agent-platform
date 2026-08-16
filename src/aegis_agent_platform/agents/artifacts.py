@@ -7,6 +7,8 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
+from aegis_agent_platform.domain import require_aware_datetime
+
 
 class AgentRole(StrEnum):
     """Fixed roles in the incident-response investigation graph."""
@@ -34,8 +36,7 @@ class ArtifactMetadata:
     def __post_init__(self) -> None:
         if not self.tenant_id.strip() or not self.incident_id.strip():
             raise ValueError("tenant_id and incident_id are required")
-        if self.created_at.tzinfo is None or self.created_at.utcoffset() is None:
-            raise ValueError("created_at must be timezone-aware")
+        require_aware_datetime(self.created_at, field_name="created_at")
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

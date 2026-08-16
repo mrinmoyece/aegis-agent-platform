@@ -7,6 +7,38 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DOMAIN = ROOT / "src" / "aegis_agent_platform" / "domain"
+PROHIBITED_DOMAIN_IMPORTS = {
+    "aiohttp",
+    "fastapi",
+    "httpx",
+    "io",
+    "os",
+    "pathlib",
+    "random",
+    "requests",
+    "secrets",
+    "socket",
+    "sqlite3",
+    "starlette",
+    "subprocess",
+    "urllib",
+    "uvicorn",
+}
+PROHIBITED_DOMAIN_CALLS = {
+    "datetime.date.today",
+    "datetime.datetime.now",
+    "datetime.datetime.utcnow",
+    "open",
+    "random.random",
+    "secrets.token_bytes",
+    "secrets.token_hex",
+    "secrets.token_urlsafe",
+    "time.monotonic",
+    "time.perf_counter",
+    "time.time",
+    "uuid.uuid1",
+    "uuid.uuid4",
+}
 
 
 def imported_modules(path: Path) -> set[str]:
@@ -33,6 +65,44 @@ def is_outward_domain_import(module: str) -> bool:
     )
 
 
+def prohibited_domain_uses(path: Path) -> set[str]:
+    """Find framework, I/O, wall-clock, and random-generation dependencies."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    bindings: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                bindings[alias.asname or alias.name.split(".", maxsplit=1)[0]] = (
+                    alias.name
+                )
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                bindings[alias.asname or alias.name] = f"{node.module}.{alias.name}"
+
+    violations = {
+        module
+        for module in imported_modules(path)
+        if module.lstrip(".").split(".", maxsplit=1)[0] in PROHIBITED_DOMAIN_IMPORTS
+    }
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        call = resolved_name(node.func, bindings)
+        if call in PROHIBITED_DOMAIN_CALLS:
+            violations.add(call)
+    return violations
+
+
+def resolved_name(node: ast.expr, bindings: dict[str, str]) -> str:
+    """Resolve a called name through direct and aliased imports."""
+    if isinstance(node, ast.Name):
+        return bindings.get(node.id, node.id)
+    if isinstance(node, ast.Attribute):
+        owner = resolved_name(node.value, bindings)
+        return f"{owner}.{node.attr}" if owner else node.attr
+    return ""
+
+
 def test_domain_has_no_outward_platform_dependencies() -> None:
     violations = [
         f"{path.relative_to(ROOT)} imports {module}"
@@ -57,6 +127,36 @@ def test_package_root_and_domain_prefix_are_distinguished() -> None:
     assert is_outward_domain_import("aegis_agent_platform.domain_adapter")
     assert not is_outward_domain_import("aegis_agent_platform.domain")
     assert not is_outward_domain_import("aegis_agent_platform.domain.events")
+
+
+def test_domain_has_no_framework_io_clock_or_random_dependencies() -> None:
+    violations = [
+        f"{path.relative_to(ROOT)} uses {use}"
+        for path in sorted(DOMAIN.rglob("*.py"))
+        for use in sorted(prohibited_domain_uses(path))
+    ]
+
+    assert not violations, "\n".join(violations)
+
+
+def test_prohibited_domain_dependencies_are_detected(tmp_path: Path) -> None:
+    source = tmp_path / "module.py"
+    source.write_text(
+        "import os\n"
+        "from datetime import datetime as clock\n"
+        "from uuid import uuid4\n"
+        "first = clock.now()\n"
+        "second = uuid4()\n"
+        "third = open('state')\n",
+        encoding="utf-8",
+    )
+
+    assert prohibited_domain_uses(source) == {
+        "os",
+        "datetime.datetime.now",
+        "uuid.uuid4",
+        "open",
+    }
 
 
 def test_no_agent_framework_dependencies() -> None:

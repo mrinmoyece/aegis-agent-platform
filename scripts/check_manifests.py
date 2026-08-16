@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import tomllib
+from itertools import chain
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,31 @@ def load_yaml(path: Path) -> Any:
     """Load YAML and fail with a path-specific message."""
     with path.open(encoding="utf-8") as handle:
         return yaml.safe_load(handle)
+
+
+def dockerfile_final_user(dockerfile: str) -> tuple[int, str | None]:
+    """Return the stage count and effective user declared in the final stage."""
+    stage_count = 0
+    final_user: str | None = None
+    for raw_line in dockerfile.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split(maxsplit=1)
+        instruction = parts[0]
+        value = parts[1] if len(parts) == 2 else ""
+        if instruction.upper() == "FROM":
+            stage_count += 1
+            final_user = None
+        elif instruction.upper() == "USER":
+            final_user = value.strip()
+    return stage_count, final_user
+
+
+def workflow_paths() -> list[Path]:
+    """Return every workflow extension recognized by GitHub Actions."""
+    workflows = ROOT / ".github" / "workflows"
+    return sorted(chain(workflows.glob("*.yml"), workflows.glob("*.yaml")))
 
 
 def main() -> None:
@@ -53,10 +79,11 @@ def main() -> None:
                 )
 
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
-    if "USER 10001:10001" not in dockerfile or " AS builder" not in dockerfile:
+    stage_count, final_user = dockerfile_final_user(dockerfile)
+    if stage_count < 2 or final_user != "10001:10001":
         raise SystemExit("Dockerfile must be multi-stage and run as non-root")
 
-    for workflow_path in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+    for workflow_path in workflow_paths():
         workflow = load_yaml(workflow_path)
         for job in workflow["jobs"].values():
             for step in job.get("steps", []):

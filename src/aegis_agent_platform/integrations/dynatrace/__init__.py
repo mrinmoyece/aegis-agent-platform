@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
-from aegis_agent_platform.domain import JsonValue
+from aegis_agent_platform.domain import JsonValue, require_aware_datetime
 from aegis_agent_platform.tenancy import TenantContext
 
 
@@ -32,6 +32,10 @@ class TelemetryEvidence:
     observed_at: datetime
     summary: str
     attributes: Mapping[str, JsonValue]
+
+    def __post_init__(self) -> None:
+        """Require a timestamp safe for cross-source incident correlation."""
+        require_aware_datetime(self.observed_at, field_name="observed_at")
 
 
 class DynatraceEvidenceReader(Protocol):

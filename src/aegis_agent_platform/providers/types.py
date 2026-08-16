@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 
-from aegis_agent_platform.domain import JsonValue
+
+class ResponseFormat(StrEnum):
+    """Portable output formats supported by core orchestration."""
+
+    TEXT = "text"
+    JSON = "json"
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,7 +28,17 @@ class ModelRequest:
 
     model: str
     messages: Sequence[ModelMessage]
-    parameters: Mapping[str, JsonValue]
+    temperature: float | None = None
+    max_output_tokens: int | None = None
+    stop_sequences: tuple[str, ...] = ()
+    response_format: ResponseFormat = ResponseFormat.TEXT
+
+    def __post_init__(self) -> None:
+        """Validate portable generation controls."""
+        if self.temperature is not None and not 0.0 <= self.temperature <= 2.0:
+            raise ValueError("temperature must be between 0 and 2")
+        if self.max_output_tokens is not None and self.max_output_tokens <= 0:
+            raise ValueError("max_output_tokens must be positive")
 
 
 @dataclass(frozen=True, slots=True)

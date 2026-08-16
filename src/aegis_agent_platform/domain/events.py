@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from math import isfinite
 from types import MappingProxyType
 from uuid import UUID
 
@@ -36,9 +37,14 @@ class EventEnvelope:
             or not self.event_type.strip()
         ):
             raise ValueError("tenant, aggregate, and event type are required")
-        if self.occurred_at.tzinfo is None or self.occurred_at.utcoffset() is None:
-            raise ValueError("occurred_at must be timezone-aware")
+        require_aware_datetime(self.occurred_at, field_name="occurred_at")
         object.__setattr__(self, "payload", _freeze_json_mapping(self.payload))
+
+
+def require_aware_datetime(value: datetime, *, field_name: str) -> None:
+    """Reject timestamps that cannot participate in deterministic ordering."""
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(f"{field_name} must be timezone-aware")
 
 
 def _freeze_json_mapping(
@@ -49,6 +55,8 @@ def _freeze_json_mapping(
 
 
 def _freeze_json(value: JsonValue) -> JsonValue:
+    if isinstance(value, float) and not isfinite(value):
+        raise ValueError("JSON numbers must be finite")
     if isinstance(value, Mapping):
         return _freeze_json_mapping(value)
     if isinstance(value, Sequence) and not isinstance(value, str):

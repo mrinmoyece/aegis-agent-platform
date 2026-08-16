@@ -8,6 +8,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
+from aegis_agent_platform.domain import require_aware_datetime
 from aegis_agent_platform.tenancy import TenantContext
 
 
@@ -29,6 +30,10 @@ class ChangeEvidence:
     kind: ChangeKind
     observed_at: datetime
     summary: str
+
+    def __post_init__(self) -> None:
+        """Require a timestamp safe for cross-source incident correlation."""
+        require_aware_datetime(self.observed_at, field_name="observed_at")
 
 
 class GitHubEvidenceReader(Protocol):

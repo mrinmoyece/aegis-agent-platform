@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
+from aegis_agent_platform.domain import require_aware_datetime
 from aegis_agent_platform.tenancy import TenantContext
 
 
@@ -20,6 +21,14 @@ class Lease:
     expires_at: datetime
     attempt: int
     fence: int
+
+    def __post_init__(self) -> None:
+        """Validate durable ownership metadata."""
+        if not self.tenant_id.strip():
+            raise ValueError("tenant_id is required")
+        require_aware_datetime(self.expires_at, field_name="expires_at")
+        if self.attempt < 1 or self.fence < 1:
+            raise ValueError("attempt and fence must be positive")
 
 
 class LeaseQueue(Protocol):
