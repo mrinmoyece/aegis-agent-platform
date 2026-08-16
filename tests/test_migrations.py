@@ -61,10 +61,16 @@ def test_migration_numbers_must_be_fixed_width_unique_and_ordered() -> None:
     "statement",
     [
         "ALTER TABLE tenants DISABLE ROW LEVEL SECURITY;",
+        "ALTER TABLE tenants NO FORCE ROW LEVEL SECURITY;",
         "DROP POLICY tenants_tenant_isolation ON tenants;",
         "DROP TRIGGER security_audit_events_no_update ON security_audit_events;",
+        "DROP FUNCTION public.reject_security_audit_mutation() CASCADE;",
         "ALTER TABLE security_audit_events DISABLE TRIGGER ALL;",
         ("GRANT UPDATE, DELETE, TRUNCATE ON security_audit_events TO application;"),
+        "GRANT UPDATE ON TABLE public.security_audit_events TO application;",
+        "GRANT ALL PRIVILEGES ON TABLE security_audit_events TO application;",
+        "TRUNCATE security_audit_events;",
+        "TRUNCATE TABLE public.security_audit_events;",
     ],
 )
 def test_migration_security_reversals_are_rejected(statement: str) -> None:

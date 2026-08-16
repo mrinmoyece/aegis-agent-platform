@@ -8,8 +8,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from threading import Lock
 from typing import Protocol
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 import jwt
@@ -79,7 +81,11 @@ class StaticJwksProvider:
     """Deterministic JWKS test double and offline verifier source."""
 
     def __init__(self, keys: tuple[VerificationKey, ...]) -> None:
-        self._keys = {key.key_id: key for key in keys}
+        self._keys: dict[str, VerificationKey] = {}
+        for key in keys:
+            if key.key_id in self._keys:
+                raise ValueError("duplicate static signing key identifier")
+            self._keys[key.key_id] = key
 
     def get_key(self, key_id: str) -> VerificationKey:
         try:
@@ -103,23 +109,25 @@ class RemoteJwksProvider:
         cache_ttl_seconds: float = 300.0,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
-        if not jwks_url.startswith("https://") and not (
-            allow_http and jwks_url.startswith("http://")
-        ):
-            raise ValueError("JWKS URL must use HTTPS outside explicit development")
+        _require_allowed_jwks_url(jwks_url, allow_http=allow_http)
         if not 1.0 <= cache_ttl_seconds <= 3_600.0:
             raise ValueError("JWKS cache TTL must be between 1 and 3600 seconds")
         self._jwks_url = jwks_url
+        self._allow_http = allow_http
         self._timeout_seconds = timeout_seconds
         self._cache_ttl_seconds = cache_ttl_seconds
         self._monotonic = monotonic
         self._keys: dict[str, VerificationKey] = {}
         self._expires_at = 0.0
+        self._refresh_lock = Lock()
 
     def get_key(self, key_id: str) -> VerificationKey:
         now = self._monotonic()
         if now >= self._expires_at:
-            self._refresh(now)
+            with self._refresh_lock:
+                now = self._monotonic()
+                if now >= self._expires_at:
+                    self._refresh(now)
         try:
             return self._keys[key_id]
         except KeyError as error:
@@ -138,8 +146,24 @@ class RemoteJwksProvider:
                 request,
                 timeout=self._timeout_seconds,
             ) as response:
+                try:
+                    _require_allowed_jwks_url(
+                        response.geturl(),
+                        allow_http=self._allow_http,
+                    )
+                except ValueError as error:
+                    raise AuthenticationError(
+                        AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
+                        "JWKS endpoint redirected to a disallowed transport",
+                    ) from error
                 document = json.loads(response.read())
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as error:
+        except (
+            HTTPError,
+            URLError,
+            TimeoutError,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+        ) as error:
             raise AuthenticationError(
                 AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
                 "JWKS endpoint could not provide signing keys",
@@ -166,6 +190,15 @@ class RemoteJwksProvider:
             )
         self._keys = refreshed
         self._expires_at = now + self._cache_ttl_seconds
+
+
+def _require_allowed_jwks_url(url: str, *, allow_http: bool) -> None:
+    parsed = urlsplit(url)
+    if parsed.scheme == "https" and parsed.netloc:
+        return
+    if allow_http and parsed.scheme == "http" and parsed.netloc:
+        return
+    raise ValueError("JWKS URL must use HTTPS outside explicit development")
 
 
 def _parse_rsa_jwk(raw_key: object) -> VerificationKey | None:
@@ -301,6 +334,11 @@ class JwtVerifier:
                 AuthenticationErrorCode.INVALID_CLAIMS,
                 "bearer token claims are invalid",
             ) from error
+        except (TypeError, OverflowError) as error:
+            raise AuthenticationError(
+                AuthenticationErrorCode.INVALID_CLAIMS,
+                "bearer token claims are invalid",
+            ) from error
         return _verified_claims(payload)
 
 
@@ -382,6 +420,9 @@ class IdentityRecord:
     enabled: bool = True
     user_id: UserId | None = None
     service_identity: ServiceIdentity | None = None
+
+    def __post_init__(self) -> None:
+        self.to_principal()
 
     def to_principal(self) -> Principal:
         return Principal(

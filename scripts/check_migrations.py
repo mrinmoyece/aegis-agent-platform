@@ -9,12 +9,23 @@ ROOT = Path(__file__).resolve().parents[1]
 MIGRATION_NAME = re.compile(r"^(?P<number>\d{4})_[a-z0-9_]+\.sql$")
 SECURITY_REVERSAL_PATTERNS = (
     re.compile(r"(?im)^\s*alter\s+table\b.*\bdisable\s+row\s+level\s+security\b"),
+    re.compile(r"(?im)^\s*alter\s+table\b.*\bno\s+force\s+row\s+level\s+security\b"),
     re.compile(r"(?im)^\s*drop\s+policy\b"),
     re.compile(r"(?im)^\s*drop\s+trigger\b"),
+    re.compile(
+        r"(?im)^\s*drop\s+function\b[^\n;]*"
+        r"\b(?:[a-z_][\w$]*\.)?reject_security_audit_mutation\b"
+    ),
     re.compile(r"(?im)^\s*alter\s+table\b.*\bdisable\s+trigger\b"),
     re.compile(
-        r"(?im)^\s*grant\b.*\b(update|delete|truncate)\b"
-        r".*\bon\s+security_audit_events\b"
+        r"(?im)^\s*grant\b[^\n;]*"
+        r"\b(update|delete|truncate|all(?:\s+privileges)?)\b"
+        r"[^\n;]*\bon\s+(?:table\s+)?"
+        r"(?:[a-z_][\w$]*\.)?security_audit_events\b"
+    ),
+    re.compile(
+        r"(?im)^\s*truncate\s+(?:table\s+)?(?:only\s+)?"
+        r"(?:[a-z_][\w$]*\.)?security_audit_events\b"
     ),
 )
 
@@ -68,7 +79,7 @@ def main() -> None:
     missing = [control for control in required if control not in schema]
     if missing:
         raise SystemExit("migration controls missing: " + ", ".join(missing))
-    if re.search(r"(?m)^\s*(drop\s+table|truncate\s+table)\b", schema):
+    if re.search(r"(?m)^\s*(drop\s+table|truncate(?:\s+table)?)\b", schema):
         raise SystemExit("destructive migration statements are prohibited")
     reversals = security_reversals(schema)
     if reversals:

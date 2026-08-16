@@ -131,6 +131,10 @@ class PolicyDecision:
     tenant_id: TenantId
     required_approver_roles: tuple[Role, ...] = ()
 
+    def __post_init__(self) -> None:
+        if self.tenant.tenant_id != self.tenant_id:
+            raise ValueError("policy decision tenant fields must match")
+
 
 class PolicyEvaluator:
     """Evaluate allowlists, risk, approvals, and quotas without I/O."""
@@ -224,7 +228,11 @@ class InMemoryPolicyRepository:
     """Deterministic policy store for tests and the local API slice."""
 
     def __init__(self, policies: tuple[TenantPolicy, ...]) -> None:
-        self._policies = {policy.tenant_id: policy for policy in policies}
+        self._policies: dict[TenantId, TenantPolicy] = {}
+        for policy in policies:
+            if policy.tenant_id in self._policies:
+                raise ValueError("duplicate tenant policy")
+            self._policies[policy.tenant_id] = policy
 
     def get(self, context: TenantContext) -> TenantPolicy | None:
         return self._policies.get(context.tenant_id)

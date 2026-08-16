@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, tzinfo
 from uuid import uuid4
 
 import pytest
@@ -102,6 +102,35 @@ def test_invalid_audit_event_contracts_are_rejected() -> None:
             correlation_id=uuid4(),
             details={},
             schema_version=2,
+        )
+
+
+class IndeterminateTimezone(tzinfo):
+    """Timezone marker whose UTC offset is undefined."""
+
+    def utcoffset(self, value: datetime | None) -> None:
+        del value
+
+    def dst(self, value: datetime | None) -> None:
+        del value
+
+    def tzname(self, value: datetime | None) -> None:
+        del value
+
+
+def test_audit_event_rejects_indeterminate_timezone_offset() -> None:
+    with pytest.raises(ValueError, match="timezone-aware"):
+        AuditEvent(
+            event_id=uuid4(),
+            tenant_id=TENANT_ID,
+            event_type=AuditEventType.ADMINISTRATIVE_CHANGE,
+            occurred_at=datetime(2026, 1, 1, tzinfo=IndeterminateTimezone()),
+            outcome=AuditOutcome.SUCCESS,
+            actor_id="admin",
+            action="policy:update",
+            resource="policy",
+            correlation_id=uuid4(),
+            details={},
         )
 
 
