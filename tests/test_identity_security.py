@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta, tzinfo
+from threading import Event
 from urllib.error import URLError
 
 import jwt
@@ -367,8 +369,14 @@ def test_invalid_principal_and_key_contracts_fail_closed() -> None:
 class FakeResponse:
     """Minimal urllib response used to keep JWKS tests offline."""
 
-    def __init__(self, payload: bytes) -> None:
+    def __init__(
+        self,
+        payload: bytes,
+        *,
+        final_url: str = "https://identity.example/certs",
+    ) -> None:
         self._payload = payload
+        self._final_url = final_url
 
     def __enter__(self) -> FakeResponse:
         return self
@@ -383,6 +391,9 @@ class FakeResponse:
 
     def read(self) -> bytes:
         return self._payload
+
+    def geturl(self) -> str:
+        return self._final_url
 
 
 def jwks_document(
@@ -526,6 +537,7 @@ def test_remote_jwks_refresh_atomically_removes_retired_keys(
         b'{"keys":[]}',
         b'{"keys":[{"kty":"EC"}]}',
         b'{"keys":[{"kid":"bad","alg":"RS256","kty":"RSA","n":"***","e":"AQAB"}]}',
+        b"\xff",
     ],
 )
 def test_remote_jwks_invalid_documents_fail_closed(
@@ -571,11 +583,78 @@ def test_remote_jwks_transport_and_scheme_failures_are_classified(
     assert captured.value.code is AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE
 
 
+def test_remote_jwks_rejects_https_to_http_redirect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signing = signing_fixture()
+    monkeypatch.setattr(
+        authentication_module,
+        "urlopen",
+        lambda request, timeout: FakeResponse(
+            jwks_document(signing.private_key),
+            final_url="http://identity.example/certs",
+        ),
+    )
+
+    with pytest.raises(AuthenticationError) as captured:
+        RemoteJwksProvider("https://identity.example/certs").get_key(KEY_ID)
+
+    assert captured.value.code is AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE
+
+
+def test_remote_jwks_serializes_concurrent_refresh(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signing = signing_fixture()
+    refresh_started = Event()
+    release_refresh = Event()
+    calls: list[object] = []
+
+    def delayed_urlopen(request: object, timeout: float) -> FakeResponse:
+        del timeout
+        calls.append(request)
+        refresh_started.set()
+        assert release_refresh.wait(timeout=2)
+        return FakeResponse(jwks_document(signing.private_key))
+
+    monkeypatch.setattr(authentication_module, "urlopen", delayed_urlopen)
+    provider = RemoteJwksProvider("https://identity.example/certs")
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(provider.get_key, KEY_ID)
+        assert refresh_started.wait(timeout=2)
+        second = executor.submit(provider.get_key, KEY_ID)
+        release_refresh.set()
+        assert first.result(timeout=2) == second.result(timeout=2)
+
+    assert len(calls) == 1
+
+
 def test_duplicate_identity_records_fail_closed() -> None:
     record = identity_record()
 
     with pytest.raises(ValueError, match="duplicate authoritative"):
         InMemoryIdentityDirectory((record, record))
+
+
+def test_duplicate_static_signing_keys_fail_closed() -> None:
+    signing = signing_fixture()
+    key = VerificationKey(KEY_ID, "RS256", signing.public_pem)
+
+    with pytest.raises(ValueError, match="duplicate static"):
+        StaticJwksProvider((key, key))
+
+
+def test_invalid_identity_record_fails_during_construction() -> None:
+    with pytest.raises(ValueError, match="user principal requires"):
+        IdentityRecord(
+            issuer=ISSUER,
+            subject="oidc-invalid",
+            tenant_id=TENANT_ID,
+            kind=PrincipalKind.USER,
+            role_bindings=(),
+            service_identity=ServiceIdentity("svc-invalid"),
+        )
 
 
 def test_out_of_range_numeric_dates_are_classified() -> None:
@@ -589,3 +668,39 @@ def test_out_of_range_numeric_dates_are_classified() -> None:
         authentication_service(signing).authenticate(f"Bearer {encoded}")
 
     assert captured.value.code is AuthenticationErrorCode.INVALID_CLAIMS
+
+
+@pytest.mark.parametrize("claims", [{"iat": None}, {"exp": float("inf")}])
+def test_malformed_registered_numeric_dates_are_classified(
+    claims: dict[str, object],
+) -> None:
+    signing = signing_fixture()
+
+    with pytest.raises(AuthenticationError) as captured:
+        authentication_service(signing).authenticate(
+            "Bearer " + token(signing, extra_claims=claims)
+        )
+
+    assert captured.value.code is AuthenticationErrorCode.INVALID_CLAIMS
+
+
+class IndeterminateTimezone(tzinfo):
+    """Timezone marker whose UTC offset is undefined."""
+
+    def utcoffset(self, value: datetime | None) -> None:
+        del value
+
+    def dst(self, value: datetime | None) -> None:
+        del value
+
+    def tzname(self, value: datetime | None) -> None:
+        del value
+
+
+def test_role_binding_rejects_indeterminate_timezone_offsets() -> None:
+    indeterminate = datetime(2026, 1, 1, tzinfo=IndeterminateTimezone())
+
+    with pytest.raises(ValueError, match="timezone-aware"):
+        binding(assigned_at=indeterminate)
+    with pytest.raises(ValueError, match="timezone-aware"):
+        binding().is_active(indeterminate)
