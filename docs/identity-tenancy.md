@@ -200,7 +200,7 @@ request = PolicyRequest(
     estimated_tokens=200, estimated_cost_usd=Decimal("1"),
 )
 usage = QuotaUsage(
-    tenant_id=tenant_id,
+    tenant_id=tenant,
     tenant_tokens_used=0,
     tenant_cost_usd=Decimal("0"),
     active_runs=0,
@@ -266,9 +266,12 @@ from aegis_agent_platform.secrets_boundary import (
 from aegis_agent_platform.identity import TenantId
 from aegis_agent_platform.tenancy import TenantContext
 
-provider = EnvironmentSecretProvider({"AEGIS_SECRET_DYNATRACE_TOKEN": "local-only-example"})
 tenant_id = TenantId("tenant-alpha")
 context = TenantContext(tenant_id)
+provider = EnvironmentSecretProvider(
+    tenant_id,
+    {"AEGIS_SECRET_DYNATRACE_TOKEN": "local-only-example"},
+)
 reference = SecretReference(
     tenant_id=tenant_id,
     provider="env",
@@ -283,7 +286,9 @@ print(value.reveal())     # b'local-only-example'
 `EnvironmentSecretProvider` deliberately requires the `AEGIS_SECRET_` prefix so
 a typo cannot accidentally resolve an unrelated environment variable. This is a
 local-development provider; every resolution also requires a matching trusted
-`TenantContext`. It is not a secret broker — there is no rotation,
+`TenantContext`, and each provider instance is bound to one tenant so the same
+environment-variable name cannot be resolved for a different tenant. It is not
+a secret broker — there is no rotation,
 versioning, or centralized access audit yet; see
 [Limitations](limitations.md).
 

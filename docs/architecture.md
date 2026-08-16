@@ -97,7 +97,7 @@ resolution are tested standalone boundaries. They are proven by a
 committed automated negative-test suite (`tests/test_identity_security.py`,
 `tests/test_policy_security.py`, `tests/test_audit_secrets.py`,
 `tests/test_migrations.py`, and cross-tenant/authentication cases in
-`tests/test_api.py`; 135 tests passing as of this writing). `identity.models`
+`tests/test_api.py`). `identity.models`
 defines provider-neutral, normalized identifiers (`TenantId`, `UserId`,
 `ServiceIdentity`), a fixed `Role`/`Permission` set, time-bound `RoleBinding`s
 (`assigned_at`/`expires_at`/`revoked_at`), and a `Principal` that must resolve

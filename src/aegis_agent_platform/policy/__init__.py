@@ -46,8 +46,9 @@ class QuotaLimits:
         )
         if any(value < 0 for value in numeric):
             raise ValueError("quota integer limits cannot be negative")
-        if self.max_run_cost_usd < 0 or self.max_tenant_cost_usd_per_period < 0:
-            raise ValueError("quota cost limits cannot be negative")
+        costs = (self.max_run_cost_usd, self.max_tenant_cost_usd_per_period)
+        if any(not value.is_finite() or value < 0 for value in costs):
+            raise ValueError("quota cost limits must be finite and non-negative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,8 +91,14 @@ class PolicyRequest:
         names = (self.model, self.tool, self.connector, self.environment)
         if any(not value for value in names):
             raise ValueError("policy request selectors are required")
-        if self.estimated_tokens < 0 or self.estimated_cost_usd < 0:
-            raise ValueError("estimated quota consumption cannot be negative")
+        if (
+            self.estimated_tokens < 0
+            or not self.estimated_cost_usd.is_finite()
+            or self.estimated_cost_usd < 0
+        ):
+            raise ValueError(
+                "estimated quota consumption must be finite and non-negative"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,10 +113,11 @@ class QuotaUsage:
     def __post_init__(self) -> None:
         if (
             self.tenant_tokens_used < 0
+            or not self.tenant_cost_usd.is_finite()
             or self.tenant_cost_usd < 0
             or self.active_runs < 0
         ):
-            raise ValueError("quota usage cannot be negative")
+            raise ValueError("quota usage must be finite and non-negative")
 
 
 @dataclass(frozen=True, slots=True)

@@ -103,6 +103,8 @@ class RoleBinding:
     revoked_at: datetime | None = None
 
     def __post_init__(self) -> None:
+        if self.role is Role.PLATFORM_ADMIN and self.tenant_id != PLATFORM_TENANT_ID:
+            raise ValueError("platform_admin must be bound to the platform tenant")
         if self.assigned_at.tzinfo is None:
             raise ValueError("assigned_at must be timezone-aware")
         if self.expires_at is not None:
