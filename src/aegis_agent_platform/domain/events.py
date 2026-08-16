@@ -51,14 +51,26 @@ def _freeze_json_mapping(
     value: Mapping[str, JsonValue],
 ) -> Mapping[str, JsonValue]:
     """Snapshot an event payload so committed event values cannot be aliased."""
-    return MappingProxyType({key: _freeze_json(item) for key, item in value.items()})
+    frozen: dict[str, JsonValue] = {}
+    for key, item in value.items():
+        if not isinstance(key, str):
+            raise ValueError("JSON object keys must be strings")
+        frozen[key] = _freeze_json(item)
+    return MappingProxyType(frozen)
 
 
 def _freeze_json(value: JsonValue) -> JsonValue:
-    if isinstance(value, float) and not isfinite(value):
-        raise ValueError("JSON numbers must be finite")
+    if value is None or isinstance(value, str | bool | int):
+        return value
+    if isinstance(value, float):
+        if not isfinite(value):
+            raise ValueError("JSON numbers must be finite")
+        return value
     if isinstance(value, Mapping):
         return _freeze_json_mapping(value)
-    if isinstance(value, Sequence) and not isinstance(value, str):
+    if isinstance(value, Sequence) and not isinstance(
+        value,
+        bytes | bytearray | memoryview,
+    ):
         return tuple(_freeze_json(item) for item in value)
-    return value
+    raise ValueError(f"unsupported JSON value type: {type(value).__name__}")

@@ -7,28 +7,24 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DOMAIN = ROOT / "src" / "aegis_agent_platform" / "domain"
-PROHIBITED_DOMAIN_IMPORTS = {
-    "aiohttp",
-    "fastapi",
-    "httpx",
-    "io",
-    "os",
-    "pathlib",
-    "random",
-    "requests",
-    "secrets",
-    "socket",
-    "sqlite3",
-    "starlette",
-    "subprocess",
-    "urllib",
-    "uvicorn",
+ALLOWED_DOMAIN_IMPORT_ROOTS = {
+    "__future__",
+    "collections",
+    "dataclasses",
+    "datetime",
+    "math",
+    "types",
+    "typing",
+    "uuid",
 }
 PROHIBITED_DOMAIN_CALLS = {
     "datetime.date.today",
     "datetime.datetime.now",
+    "datetime.datetime.today",
     "datetime.datetime.utcnow",
+    "input",
     "open",
+    "print",
     "random.random",
     "secrets.token_bytes",
     "secrets.token_hex",
@@ -82,7 +78,9 @@ def prohibited_domain_uses(path: Path) -> set[str]:
     violations = {
         module
         for module in imported_modules(path)
-        if module.lstrip(".").split(".", maxsplit=1)[0] in PROHIBITED_DOMAIN_IMPORTS
+        if not module.startswith(".")
+        and not module.startswith("aegis_agent_platform.domain")
+        and module.split(".", maxsplit=1)[0] not in ALLOWED_DOMAIN_IMPORT_ROOTS
     }
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
@@ -146,17 +144,36 @@ def test_prohibited_domain_dependencies_are_detected(tmp_path: Path) -> None:
         "from datetime import datetime as clock\n"
         "from uuid import uuid4\n"
         "first = clock.now()\n"
-        "second = uuid4()\n"
-        "third = open('state')\n",
+        "second = clock.today()\n"
+        "third = uuid4()\n"
+        "fourth = open('state')\n"
+        "fifth = input()\n"
+        "print(fifth)\n",
         encoding="utf-8",
     )
 
     assert prohibited_domain_uses(source) == {
         "os",
         "datetime.datetime.now",
+        "datetime.datetime.today",
         "uuid.uuid4",
         "open",
+        "input",
+        "print",
     }
+
+
+def test_domain_import_allowlist_blocks_io_bypasses(tmp_path: Path) -> None:
+    source = tmp_path / "module.py"
+    source.write_text(
+        "import http.client\n"
+        "import builtins\n"
+        "first = http.client.HTTPConnection('example.test')\n"
+        "second = builtins.open('state')\n",
+        encoding="utf-8",
+    )
+
+    assert prohibited_domain_uses(source) == {"http.client", "builtins"}
 
 
 def test_no_agent_framework_dependencies() -> None:

@@ -55,6 +55,25 @@ def workflow_paths() -> list[Path]:
     return sorted(chain(workflows.glob("*.yml"), workflows.glob("*.yaml")))
 
 
+def unpinned_workflow_actions(workflow: dict[str, Any]) -> list[str]:
+    """Return step actions and reusable workflows not pinned to a commit SHA."""
+    actions: list[str] = []
+    for job in workflow["jobs"].values():
+        reusable_workflow = job.get("uses")
+        if reusable_workflow and not action_is_pinned(reusable_workflow):
+            actions.append(reusable_workflow)
+        for step in job.get("steps", []):
+            action = step.get("uses")
+            if action and not action_is_pinned(action):
+                actions.append(action)
+    return actions
+
+
+def action_is_pinned(action: str) -> bool:
+    """Accept local actions or remote actions pinned to a full commit SHA."""
+    return action.startswith("./") or ACTION_PATTERN.fullmatch(action) is not None
+
+
 def main() -> None:
     """Check parseability and repository security conventions."""
     with (ROOT / "pyproject.toml").open("rb") as handle:
@@ -85,13 +104,11 @@ def main() -> None:
 
     for workflow_path in workflow_paths():
         workflow = load_yaml(workflow_path)
-        for job in workflow["jobs"].values():
-            for step in job.get("steps", []):
-                action = step.get("uses")
-                if action and not ACTION_PATTERN.fullmatch(action):
-                    raise SystemExit(
-                        f"{workflow_path.name} action is not SHA-pinned: {action}"
-                    )
+        unpinned = unpinned_workflow_actions(workflow)
+        if unpinned:
+            raise SystemExit(
+                f"{workflow_path.name} action is not SHA-pinned: {unpinned[0]}"
+            )
 
     for yaml_path in [
         ROOT / ".github" / "dependabot.yml",

@@ -50,3 +50,8 @@ class ModelResponse:
     input_tokens: int
     output_tokens: int
     provider_request_id: str | None = None
+
+    def __post_init__(self) -> None:
+        """Reject impossible usage values before cost accounting."""
+        if self.input_tokens < 0 or self.output_tokens < 0:
+            raise ValueError("token counts cannot be negative")
