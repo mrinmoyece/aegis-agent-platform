@@ -7,6 +7,7 @@ from typing import Protocol
 from uuid import UUID
 
 from aegis_agent_platform.agents.artifacts import AgentArtifact, AgentRole
+from aegis_agent_platform.tenancy import TenantContext
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,6 +17,11 @@ class SpecialistBudget:
     max_steps: int
     max_input_tokens: int
     timeout_seconds: int
+
+    def __post_init__(self) -> None:
+        """Reject disabled or nonsensical execution limits."""
+        if min(self.max_steps, self.max_input_tokens, self.timeout_seconds) <= 0:
+            raise ValueError("specialist budget limits must be positive")
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,7 +52,7 @@ class ArtifactLedger(Protocol):
         ...
 
     async def read_incident(
-        self, tenant_id: str, incident_id: str
+        self, tenant: TenantContext, incident_id: str
     ) -> tuple[
         AgentArtifact,
         ...,

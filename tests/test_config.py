@@ -18,6 +18,11 @@ def test_development_defaults_are_valid() -> None:
     assert settings.port == 8080
 
 
+def test_direct_construction_enforces_validation() -> None:
+    with pytest.raises(ConfigurationError, match="between 1 and 65535"):
+        Settings(port=0)
+
+
 @pytest.mark.parametrize(
     ("environment", "message"),
     [
@@ -39,6 +44,33 @@ def test_invalid_configuration_is_rejected(
 def test_production_requires_external_dependencies_and_identity() -> None:
     with pytest.raises(ConfigurationError, match="AEGIS_DATABASE_URL"):
         Settings.from_env({"AEGIS_ENVIRONMENT": "production"})
+
+
+def test_production_requires_explicit_audience() -> None:
+    environment = {
+        "AEGIS_ENVIRONMENT": "production",
+        "AEGIS_DATABASE_URL": "postgresql://database/aegis",
+        "AEGIS_REDIS_URL": "rediss://cache/0",
+        "AEGIS_OIDC_ISSUER": "https://identity.example/realms/aegis",
+        "AEGIS_OIDC_JWKS_URL": "https://identity.example/realms/aegis/certs",
+    }
+
+    with pytest.raises(ConfigurationError, match="AEGIS_OIDC_AUDIENCE"):
+        Settings.from_env(environment)
+
+
+def test_production_rejects_whitespace_only_dependency() -> None:
+    environment = {
+        "AEGIS_ENVIRONMENT": "production",
+        "AEGIS_DATABASE_URL": " ",
+        "AEGIS_REDIS_URL": "rediss://cache/0",
+        "AEGIS_OIDC_ISSUER": "https://identity.example/realms/aegis",
+        "AEGIS_OIDC_JWKS_URL": "https://identity.example/realms/aegis/certs",
+        "AEGIS_OIDC_AUDIENCE": "aegis",
+    }
+
+    with pytest.raises(ConfigurationError, match="AEGIS_DATABASE_URL"):
+        Settings.from_env(environment)
 
 
 def test_complete_production_configuration_is_valid() -> None:

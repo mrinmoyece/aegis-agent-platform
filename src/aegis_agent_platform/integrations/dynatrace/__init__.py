@@ -9,6 +9,7 @@ from enum import StrEnum
 from typing import Protocol
 
 from aegis_agent_platform.domain import JsonValue
+from aegis_agent_platform.tenancy import TenantContext
 
 
 class SignalKind(StrEnum):
@@ -39,7 +40,7 @@ class DynatraceEvidenceReader(Protocol):
     async def collect(
         self,
         *,
-        tenant_id: str,
+        tenant: TenantContext,
         query: str,
         start: datetime,
         end: datetime,

@@ -15,9 +15,22 @@ def imported_modules(path: Path) -> set[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             imports.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            imports.add("." * node.level + node.module)
+        elif isinstance(node, ast.ImportFrom):
+            imports.add("." * node.level + (node.module or ""))
     return imports
+
+
+def is_outward_domain_import(module: str) -> bool:
+    """Return whether an import crosses the pure-domain package boundary."""
+    if module.startswith(".."):
+        return True
+    if module == "aegis_agent_platform":
+        return True
+    if not module.startswith("aegis_agent_platform."):
+        return False
+    return module != "aegis_agent_platform.domain" and not module.startswith(
+        "aegis_agent_platform.domain."
+    )
 
 
 def test_domain_has_no_outward_platform_dependencies() -> None:
@@ -25,14 +38,25 @@ def test_domain_has_no_outward_platform_dependencies() -> None:
         f"{path.relative_to(ROOT)} imports {module}"
         for path in sorted(DOMAIN.rglob("*.py"))
         for module in imported_modules(path)
-        if (
-            module.startswith("aegis_agent_platform.")
-            and not module.startswith("aegis_agent_platform.domain")
-        )
-        or module.startswith("..")
+        if is_outward_domain_import(module)
     ]
 
     assert not violations, "\n".join(violations)
+
+
+def test_parent_relative_import_without_module_is_detected(tmp_path: Path) -> None:
+    source = tmp_path / "module.py"
+    source.write_text("from .. import config\n", encoding="utf-8")
+
+    assert imported_modules(source) == {".."}
+    assert is_outward_domain_import("..")
+
+
+def test_package_root_and_domain_prefix_are_distinguished() -> None:
+    assert is_outward_domain_import("aegis_agent_platform")
+    assert is_outward_domain_import("aegis_agent_platform.domain_adapter")
+    assert not is_outward_domain_import("aegis_agent_platform.domain")
+    assert not is_outward_domain_import("aegis_agent_platform.domain.events")
 
 
 def test_no_agent_framework_dependencies() -> None:

@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator, Sequence
 from typing import Protocol
 
 from aegis_agent_platform.domain import EventEnvelope
+from aegis_agent_platform.tenancy import TenantContext
 
 
 class EventStore(Protocol):
@@ -13,16 +14,21 @@ class EventStore(Protocol):
 
     async def append(
         self,
+        tenant: TenantContext,
         events: Sequence[EventEnvelope],
         *,
         expected_version: int,
     ) -> int:
-        """Append events atomically and return the new aggregate version."""
+        """Append one tenant's events atomically.
+
+        Implementations must reject envelopes whose tenant ID does not match the
+        validated context and return the new aggregate version.
+        """
         ...
 
     def read_stream(
         self,
-        tenant_id: str,
+        tenant: TenantContext,
         aggregate_id: str,
         *,
         after_version: int = 0,

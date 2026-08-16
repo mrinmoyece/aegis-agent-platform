@@ -15,6 +15,7 @@ services:
       AEGIS_REDIS_URL: redis://redis:6379/0
       AEGIS_OIDC_ISSUER: http://localhost:${AEGIS_KEYCLOAK_PORT:-8081}/realms/aegis
       AEGIS_OIDC_JWKS_URL: http://keycloak:8080/realms/aegis/protocol/openid-connect/certs
+      AEGIS_OIDC_AUDIENCE: aegis-control-plane
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       OTEL_SERVICE_NAME: aegis-control-plane
     ports:

@@ -33,7 +33,11 @@ class Settings:
     redis_url: str = ""
     oidc_issuer: str = ""
     oidc_jwks_url: str = ""
-    oidc_audience: str = "aegis-control-plane"
+    oidc_audience: str = ""
+
+    def __post_init__(self) -> None:
+        """Enforce invariants for every construction path."""
+        self.validate()
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> Settings:
@@ -70,12 +74,8 @@ class Settings:
             redis_url=values.get("AEGIS_REDIS_URL", ""),
             oidc_issuer=values.get("AEGIS_OIDC_ISSUER", ""),
             oidc_jwks_url=values.get("AEGIS_OIDC_JWKS_URL", ""),
-            oidc_audience=values.get(
-                "AEGIS_OIDC_AUDIENCE",
-                "aegis-control-plane",
-            ),
+            oidc_audience=values.get("AEGIS_OIDC_AUDIENCE", ""),
         )
-        settings.validate()
         return settings
 
     def validate(self) -> None:
@@ -94,7 +94,7 @@ class Settings:
                 "AEGIS_OIDC_JWKS_URL": self.oidc_jwks_url,
                 "AEGIS_OIDC_AUDIENCE": self.oidc_audience,
             }
-            missing = [name for name, value in required.items() if not value]
+            missing = [name for name, value in required.items() if not value.strip()]
             if missing:
                 raise ConfigurationError(
                     "production requires: " + ", ".join(sorted(missing))

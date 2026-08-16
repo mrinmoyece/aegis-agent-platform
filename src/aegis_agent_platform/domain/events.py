@@ -30,9 +30,13 @@ class EventEnvelope:
         """Enforce universal envelope invariants."""
         if self.schema_version < 1:
             raise ValueError("schema_version must be positive")
-        if not self.tenant_id or not self.aggregate_id or not self.event_type:
+        if (
+            not self.tenant_id.strip()
+            or not self.aggregate_id.strip()
+            or not self.event_type.strip()
+        ):
             raise ValueError("tenant, aggregate, and event type are required")
-        if self.occurred_at.tzinfo is None:
+        if self.occurred_at.tzinfo is None or self.occurred_at.utcoffset() is None:
             raise ValueError("occurred_at must be timezone-aware")
         object.__setattr__(self, "payload", _freeze_json_mapping(self.payload))
 

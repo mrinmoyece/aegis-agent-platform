@@ -8,6 +8,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
+from aegis_agent_platform.tenancy import TenantContext
+
 
 class ChangeKind(StrEnum):
     """Source and delivery changes relevant to incident correlation."""
@@ -35,7 +37,7 @@ class GitHubEvidenceReader(Protocol):
     async def changes_between(
         self,
         *,
-        tenant_id: str,
+        tenant: TenantContext,
         repository: str,
         start: datetime,
         end: datetime,

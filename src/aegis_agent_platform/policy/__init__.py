@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+from aegis_agent_platform.tenancy import TenantContext
+
 
 class Decision(StrEnum):
     """Possible runtime policy outcomes."""
@@ -18,6 +20,7 @@ class Decision(StrEnum):
 class PolicyDecision:
     """Auditable policy result returned before an effect is attempted."""
 
+    tenant: TenantContext
     decision: Decision
     reason: str
     policy_version: str

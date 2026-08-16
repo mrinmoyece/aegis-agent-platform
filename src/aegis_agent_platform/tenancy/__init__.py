@@ -13,5 +13,5 @@ class TenantContext:
 
     def __post_init__(self) -> None:
         """Reject absent tenant context at the boundary."""
-        if not self.tenant_id:
+        if not self.tenant_id.strip():
             raise ValueError("tenant_id is required")
