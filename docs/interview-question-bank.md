@@ -116,7 +116,7 @@ tenant/role source of truth. The directory is the single place authority is
 looked up, so revoking a user or changing tenant membership takes effect
 immediately without waiting for token expiry.
 
-### Why is `PolicyEvaluator.evaluate` a pure function over a caller-supplied `QuotaUsage` instead of querying live usage itself?
+### Why is `PolicyEvaluator.evaluate` a pure function over a tenant-bound, caller-supplied `QuotaUsage` instead of querying live usage itself?
 
 **Answer outline:** keeping the evaluator pure — no I/O, no wall clock, no
 hidden lookups — makes every policy decision a deterministic, unit-testable

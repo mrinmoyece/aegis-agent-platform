@@ -147,7 +147,7 @@ def test_invalid_configuration_is_not_ready() -> None:
 
 
 def test_current_principal_comes_only_from_verified_identity() -> None:
-    app, encoded, _ = secured_app()
+    app, encoded, audit = secured_app()
 
     status, body, _ = request(
         "/v1/me",
@@ -167,6 +167,10 @@ def test_current_principal_comes_only_from_verified_identity() -> None:
         "tenant_id": "tenant-alpha",
         "roles": ["viewer"],
     }
+    events = audit.query(TenantContext(TENANT_ID))
+    assert [event.event_type for event in events] == [
+        AuditEventType.AUTHENTICATION_OUTCOME
+    ]
 
 
 def test_tenant_resource_and_policy_are_tenant_scoped() -> None:
@@ -194,6 +198,9 @@ def test_tenant_resource_and_policy_are_tenant_scoped() -> None:
         AuditEventType.AUTHENTICATION_OUTCOME,
         AuditEventType.AUTHORIZATION_DECISION,
     ]
+    assert events[0].correlation_id == events[1].correlation_id
+    assert events[2].correlation_id == events[3].correlation_id
+    assert events[0].correlation_id != events[2].correlation_id
 
 
 def test_cross_tenant_confused_deputy_attempt_is_forbidden() -> None:

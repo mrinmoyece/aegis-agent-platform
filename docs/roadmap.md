@@ -34,9 +34,11 @@ abstraction.
 `identity.authorization` (deny-by-default role-based decisions),
 `policy.PolicyEvaluator` (allowlist/risk/quota decisions), `audit`
 (redacted, additive, tenant-scoped events), and `secrets_boundary` (reference-
-only secrets) are implemented and wired into an authenticated control-plane
-vertical slice (`/v1/me`, `/v1/tenants/{tenant_id}`,
-`/v1/tenants/{tenant_id}/policy`). A committed automated test suite
+only secrets) are implemented. Authentication, tenant authorization, policy
+inspection, and audit are wired into a read-only control-plane vertical slice
+(`/v1/me`, `/v1/tenants/{tenant_id}`,
+`/v1/tenants/{tenant_id}/policy`); policy evaluation and secret resolution are
+tested standalone boundaries, not route behavior. A committed automated test suite
 (`tests/test_identity_security.py`, `tests/test_policy_security.py`,
 `tests/test_audit_secrets.py`, `tests/test_migrations.py`, and the
 cross-tenant/authentication cases in `tests/test_api.py`) proves cross-tenant

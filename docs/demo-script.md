@@ -35,8 +35,11 @@ acceptance narrative for later layers.
 - **2–5:** Walk the package map and pure-domain dependency test.
 - **5–8:** Show typed evidence adapters and fixed agent artifacts.
 - **8–11:** Explain event truth, intent-before-effect, and fenced leases.
-- **11–13:** Render Compose, call `/healthz`/`/readyz`, then present a signed
-  JWT fixture to `/v1/me` and `/v1/tenants/{tenant_id}/policy`.
+- **11–13:** Render Compose and call `/healthz`/`/readyz`; then use the injected
+  `ControlPlaneApp` fixture in `tests/test_api.py` to present a signed JWT to
+  `/v1/me` and `/v1/tenants/{tenant_id}/policy`. The exported Compose process
+  intentionally returns `503 authentication_not_configured` on protected routes
+  until a production identity adapter is wired.
 - **13–15:** Trace the future checkout scenario and point to roadmap gates.
 
 ## 30-minute architecture interview demo

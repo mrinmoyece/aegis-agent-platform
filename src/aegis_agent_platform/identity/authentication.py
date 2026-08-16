@@ -113,13 +113,22 @@ class RemoteJwksProvider:
         self._timeout_seconds = timeout_seconds
         self._cache_ttl_seconds = cache_ttl_seconds
         self._monotonic = monotonic
-        self._cache: dict[str, tuple[VerificationKey, float]] = {}
+        self._keys: dict[str, VerificationKey] = {}
+        self._expires_at = 0.0
 
     def get_key(self, key_id: str) -> VerificationKey:
-        cached = self._cache.get(key_id)
         now = self._monotonic()
-        if cached is not None and now < cached[1]:
-            return cached[0]
+        if now >= self._expires_at:
+            self._refresh(now)
+        try:
+            return self._keys[key_id]
+        except KeyError as error:
+            raise AuthenticationError(
+                AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
+                "signing key was not found",
+            ) from error
+
+    def _refresh(self, now: float) -> None:
         request = Request(  # noqa: S310 - URL scheme is constrained above
             self._jwks_url,
             headers={"Accept": "application/json"},
@@ -140,20 +149,23 @@ class RemoteJwksProvider:
                 AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
                 "JWKS document is invalid",
             )
+        refreshed: dict[str, VerificationKey] = {}
         for raw_key in document["keys"]:
             key = _parse_rsa_jwk(raw_key)
             if key is not None:
-                self._cache[key.key_id] = (
-                    key,
-                    now + self._cache_ttl_seconds,
-                )
-        try:
-            return self._cache[key_id][0]
-        except KeyError as error:
+                if key.key_id in refreshed:
+                    raise AuthenticationError(
+                        AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
+                        "JWKS document contains duplicate signing keys",
+                    )
+                refreshed[key.key_id] = key
+        if not refreshed:
             raise AuthenticationError(
                 AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
-                "signing key was not found",
-            ) from error
+                "JWKS document contains no usable signing keys",
+            )
+        self._keys = refreshed
+        self._expires_at = now + self._cache_ttl_seconds
 
 
 def _parse_rsa_jwk(raw_key: object) -> VerificationKey | None:
@@ -164,9 +176,12 @@ def _parse_rsa_jwk(raw_key: object) -> VerificationKey | None:
         return None
     if raw_key["kty"] != "RSA":
         return None
-    modulus = int.from_bytes(jwt.utils.base64url_decode(raw_key["n"]))
-    exponent = int.from_bytes(jwt.utils.base64url_decode(raw_key["e"]))
-    public_key = rsa.RSAPublicNumbers(exponent, modulus).public_key()
+    try:
+        modulus = int.from_bytes(jwt.utils.base64url_decode(raw_key["n"]))
+        exponent = int.from_bytes(jwt.utils.base64url_decode(raw_key["e"]))
+        public_key = rsa.RSAPublicNumbers(exponent, modulus).public_key()
+    except (TypeError, ValueError):
+        return None
     pem = public_key.public_bytes(
         serialization.Encoding.PEM,
         serialization.PublicFormat.SubjectPublicKeyInfo,
@@ -315,16 +330,21 @@ def _verified_claims(payload: Mapping[str, object]) -> VerifiedClaims:
             AuthenticationErrorCode.INVALID_CLAIMS,
             "audience claim has an invalid type",
         )
-    raw_tenant_id = payload.get("tenant_id")
-    try:
-        asserted_tenant_id = (
-            TenantId(raw_tenant_id) if isinstance(raw_tenant_id, str) else None
-        )
-    except ValueError as error:
-        raise AuthenticationError(
-            AuthenticationErrorCode.INVALID_CLAIMS,
-            "tenant claim has an invalid value",
-        ) from error
+    asserted_tenant_id: TenantId | None = None
+    if "tenant_id" in payload:
+        raw_tenant_id = payload["tenant_id"]
+        if not isinstance(raw_tenant_id, str):
+            raise AuthenticationError(
+                AuthenticationErrorCode.INVALID_CLAIMS,
+                "tenant claim has an invalid type",
+            )
+        try:
+            asserted_tenant_id = TenantId(raw_tenant_id)
+        except ValueError as error:
+            raise AuthenticationError(
+                AuthenticationErrorCode.INVALID_CLAIMS,
+                "tenant claim has an invalid value",
+            ) from error
     authorized_party = payload.get("azp")
     if authorized_party is not None and not isinstance(authorized_party, str):
         raise AuthenticationError(
@@ -379,7 +399,12 @@ class InMemoryIdentityDirectory:
     """Deterministic identity repository used by tests and local development."""
 
     def __init__(self, records: tuple[IdentityRecord, ...]) -> None:
-        self._records = {(record.issuer, record.subject): record for record in records}
+        self._records: dict[tuple[str, str], IdentityRecord] = {}
+        for record in records:
+            key = (record.issuer, record.subject)
+            if key in self._records:
+                raise ValueError("duplicate authoritative identity record")
+            self._records[key] = record
 
     def resolve(self, claims: VerifiedClaims) -> Principal:
         try:
