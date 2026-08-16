@@ -94,8 +94,8 @@ runs in code the permission table cannot influence.
 
 **Answer outline:** correctness of signature/issuer/audience/expiry
 verification is a property of the verifier and the key material, not of the
-network. A deterministic fixture (a fixed RSA keypair, fixed `kid`, fixed
-claims) makes tests reproducible, offline, and fast, and lets negative cases
+network. An ephemeral test keypair with stable claim shape and identifiers makes
+tests reproducible, offline, and fast, and lets negative cases
 (wrong `kid`, wrong issuer, expired token) be constructed exactly rather than
 raced against a live IdP's clock and rotation schedule. `RemoteJwksProvider`
 exists specifically so the *same* `JwtVerifier` code path also works against a

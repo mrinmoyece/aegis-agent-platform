@@ -7,6 +7,16 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION_NAME = re.compile(r"^(?P<number>\d{4})_[a-z0-9_]+\.sql$")
+SECURITY_REVERSAL_PATTERNS = (
+    re.compile(r"(?im)^\s*alter\s+table\b.*\bdisable\s+row\s+level\s+security\b"),
+    re.compile(r"(?im)^\s*drop\s+policy\b"),
+    re.compile(r"(?im)^\s*drop\s+trigger\b"),
+    re.compile(r"(?im)^\s*alter\s+table\b.*\bdisable\s+trigger\b"),
+    re.compile(
+        r"(?im)^\s*grant\b.*\b(update|delete|truncate)\b"
+        r".*\bon\s+security_audit_events\b"
+    ),
+)
 
 
 def migration_numbers(migrations: list[Path]) -> list[int]:
@@ -24,6 +34,15 @@ def migration_numbers(migrations: list[Path]) -> list[int]:
     if len(numbers) != len(set(numbers)):
         raise SystemExit("migration numbers must be unique")
     return numbers
+
+
+def security_reversals(schema: str) -> list[str]:
+    """Return statements that weaken durable tenant or audit controls."""
+    return [
+        match.group(0).strip()
+        for pattern in SECURITY_REVERSAL_PATTERNS
+        if (match := pattern.search(schema)) is not None
+    ]
 
 
 def main() -> None:
@@ -51,6 +70,9 @@ def main() -> None:
         raise SystemExit("migration controls missing: " + ", ".join(missing))
     if re.search(r"(?m)^\s*(drop\s+table|truncate\s+table)\b", schema):
         raise SystemExit("destructive migration statements are prohibited")
+    reversals = security_reversals(schema)
+    if reversals:
+        raise SystemExit("security control reversal is prohibited: " + reversals[0])
 
 
 if __name__ == "__main__":

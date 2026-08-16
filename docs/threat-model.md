@@ -138,7 +138,7 @@ evaluation, and redacted audit events are implemented and proven by a
 committed automated test suite (`tests/test_identity_security.py`,
 `tests/test_policy_security.py`, `tests/test_audit_secrets.py`,
 `tests/test_migrations.py`, and cross-tenant/authentication cases in
-`tests/test_api.py`; 135 tests passing) covering cross-tenant denial,
+`tests/test_api.py`) covering cross-tenant denial,
 malformed/expired/wrong-issuer/wrong-audience/unsupported-algorithm tokens,
 expired and revoked role bindings, quota/policy allow-deny-require-approval
 boundaries, and audit redaction/append-only behavior at the application

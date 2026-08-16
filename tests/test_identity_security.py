@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 import aegis_agent_platform.identity.authentication as authentication_module
 from aegis_agent_platform.identity import (
+    PLATFORM_TENANT_ID,
     AuthenticationError,
     AuthenticationErrorCode,
     AuthorizationService,
@@ -261,6 +262,37 @@ def test_authorization_denies_cross_tenant_escalation_and_unknown_permissions() 
     assert escalated.reason == "permission_not_granted"
     assert confused.reason == "cross_tenant_access_denied"
     assert unknown.reason == "unknown_permission"
+
+
+def test_platform_authority_requires_platform_tenant_binding_and_target() -> None:
+    now = datetime.now(UTC)
+    with pytest.raises(ValueError, match="platform tenant"):
+        binding(Role.PLATFORM_ADMIN)
+    platform_principal = principal(
+        (
+            binding(
+                Role.PLATFORM_ADMIN,
+                tenant_id=PLATFORM_TENANT_ID,
+            ),
+        ),
+        tenant_id=PLATFORM_TENANT_ID,
+    )
+
+    allowed = AuthorizationService().decide(
+        principal=platform_principal,
+        tenant_id=PLATFORM_TENANT_ID,
+        permission=Permission.PLATFORM_TENANT_CREATE,
+        at=now,
+    )
+    tenant_local = AuthorizationService().decide(
+        principal=principal((binding(Role.TENANT_ADMIN),)),
+        tenant_id=TENANT_ID,
+        permission=Permission.PLATFORM_TENANT_CREATE,
+        at=now,
+    )
+
+    assert allowed.allowed
+    assert tenant_local.reason == "platform_scope_required"
 
 
 def test_expired_and_revoked_role_bindings_are_stale() -> None:
@@ -544,3 +576,16 @@ def test_duplicate_identity_records_fail_closed() -> None:
 
     with pytest.raises(ValueError, match="duplicate authoritative"):
         InMemoryIdentityDirectory((record, record))
+
+
+def test_out_of_range_numeric_dates_are_classified() -> None:
+    signing = signing_fixture()
+    encoded = token(
+        signing,
+        extra_claims={"exp": 10**30},
+    )
+
+    with pytest.raises(AuthenticationError) as captured:
+        authentication_service(signing).authenticate(f"Bearer {encoded}")
+
+    assert captured.value.code is AuthenticationErrorCode.INVALID_CLAIMS

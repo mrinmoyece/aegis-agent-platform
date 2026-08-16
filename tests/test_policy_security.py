@@ -198,3 +198,37 @@ def test_invalid_policy_inputs_are_rejected(
 ) -> None:
     with pytest.raises(ValueError, match=r"negative|required"):
         constructor()
+
+
+@pytest.mark.parametrize(
+    "constructor",
+    [
+        lambda: QuotaLimits(
+            1,
+            Decimal("Infinity"),
+            1,
+            Decimal("1"),
+            1,
+        ),
+        lambda: QuotaLimits(
+            1,
+            Decimal("1"),
+            1,
+            Decimal("NaN"),
+            1,
+        ),
+        lambda: replace(
+            request(),
+            estimated_cost_usd=Decimal("Infinity"),
+        ),
+        lambda: replace(
+            usage(),
+            tenant_cost_usd=Decimal("NaN"),
+        ),
+    ],
+)
+def test_non_finite_policy_costs_are_rejected(
+    constructor: Callable[[], object],
+) -> None:
+    with pytest.raises(ValueError, match="finite"):
+        constructor()

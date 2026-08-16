@@ -351,12 +351,20 @@ def _verified_claims(payload: Mapping[str, object]) -> VerifiedClaims:
             AuthenticationErrorCode.INVALID_CLAIMS,
             "authorized party claim has an invalid type",
         )
+    try:
+        expires_at_datetime = datetime.fromtimestamp(expires_at, UTC)
+        issued_at_datetime = datetime.fromtimestamp(issued_at, UTC)
+    except (OverflowError, OSError, ValueError) as error:
+        raise AuthenticationError(
+            AuthenticationErrorCode.INVALID_CLAIMS,
+            "token NumericDate claim is outside the supported range",
+        ) from error
     return VerifiedClaims(
         issuer=issuer,
         subject=subject,
         audiences=audiences,
-        expires_at=datetime.fromtimestamp(expires_at, UTC),
-        issued_at=datetime.fromtimestamp(issued_at, UTC),
+        expires_at=expires_at_datetime,
+        issued_at=issued_at_datetime,
         asserted_tenant_id=asserted_tenant_id,
         authorized_party=authorized_party,
     )

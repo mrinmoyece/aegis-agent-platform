@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from scripts.check_migrations import migration_numbers
+from scripts.check_migrations import migration_numbers, security_reversals
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "migrations" / "0001_identity_governance.sql"
@@ -43,6 +43,7 @@ def test_audit_records_are_database_append_only() -> None:
     assert "before truncate on security_audit_events" in schema
     assert "revoke update, delete, truncate" in schema
     assert "security audit records are append-only" in schema
+    assert "role <> 'platform_admin' or tenant_id = 'platform'" in schema
 
 
 def test_migration_numbers_must_be_fixed_width_unique_and_ordered() -> None:
@@ -54,3 +55,17 @@ def test_migration_numbers_must_be_fixed_width_unique_and_ordered() -> None:
         migration_numbers([Path("0001_identity.sql"), Path("0001_audit.sql")])
     with pytest.raises(SystemExit, match="NNNN"):
         migration_numbers([Path("1_identity.sql")])
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "ALTER TABLE tenants DISABLE ROW LEVEL SECURITY;",
+        "DROP POLICY tenants_tenant_isolation ON tenants;",
+        "DROP TRIGGER security_audit_events_no_update ON security_audit_events;",
+        "ALTER TABLE security_audit_events DISABLE TRIGGER ALL;",
+        ("GRANT UPDATE, DELETE, TRUNCATE ON security_audit_events TO application;"),
+    ],
+)
+def test_migration_security_reversals_are_rejected(statement: str) -> None:
+    assert security_reversals(statement)

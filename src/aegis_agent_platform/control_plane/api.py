@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
@@ -154,7 +155,10 @@ class ControlPlaneApp:
             return None
         authorization_header = _single_header(scope, b"authorization")
         try:
-            principal = self._authentication.authenticate(authorization_header)
+            principal = await asyncio.to_thread(
+                self._authentication.authenticate,
+                authorization_header,
+            )
         except AuthenticationError as error:
             self._audit_event(
                 tenant_id=PLATFORM_TENANT_ID,
