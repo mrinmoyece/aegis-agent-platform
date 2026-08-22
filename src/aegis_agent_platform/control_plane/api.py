@@ -22,8 +22,8 @@ from aegis_agent_platform.audit import (
 from aegis_agent_platform.config import ConfigurationError, Settings
 from aegis_agent_platform.domain import EventEnvelope, JsonValue
 from aegis_agent_platform.domain.events import thaw_json
-from aegis_agent_platform.gateway.operations import GatewayOperations
 from aegis_agent_platform.event_store import EventStore, TransientStorageError
+from aegis_agent_platform.gateway.operations import GatewayOperations
 from aegis_agent_platform.identity import (
     PLATFORM_TENANT_ID,
     AuthenticationError,
@@ -147,6 +147,7 @@ class ControlPlaneApp:
                 send,
                 principal,
                 tenant_id,
+                correlation_id=correlation_id,
                 view=segments[3],
             )
             return
@@ -339,6 +340,7 @@ class ControlPlaneApp:
         principal: Principal,
         tenant_id: TenantId,
         *,
+        correlation_id: UUID,
         view: str,
     ) -> None:
         if not await self._authorize(
@@ -346,6 +348,7 @@ class ControlPlaneApp:
             principal,
             tenant_id,
             Permission.MODEL_READ,
+            correlation_id=correlation_id,
             resource=f"tenant/{tenant_id}/{view}",
         ):
             return

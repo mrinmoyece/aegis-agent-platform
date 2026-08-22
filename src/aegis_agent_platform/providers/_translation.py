@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 from collections.abc import Awaitable, Mapping, Sequence
 from contextlib import suppress
 
@@ -137,7 +138,7 @@ def classify_sdk_error(error: Exception) -> ModelGatewayError:
             ModelErrorClass.PROVIDER_UNAVAILABLE,
             "provider_unavailable",
             retryable=True,
-            billing_ambiguous=status is not None,
+            billing_ambiguous=True,
         )
     return ModelGatewayError(
         ModelErrorClass.PROVIDER_BUG,
@@ -154,9 +155,12 @@ def _retry_after(error: Exception) -> float | None:
         return None
     raw = headers.get("retry-after")
     try:
-        return float(raw) if raw is not None else None
+        value = float(raw) if raw is not None else None
     except (TypeError, ValueError):
         return None
+    if value is None or not math.isfinite(value) or value < 0:
+        return None
+    return min(value, 300.0)
 
 
 def all_parts(messages: Sequence[ModelMessage]) -> tuple[object, ...]:

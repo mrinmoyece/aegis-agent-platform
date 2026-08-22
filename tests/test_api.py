@@ -24,7 +24,11 @@ from aegis_agent_platform.domain import (
     ModelIdentity,
     PricingVersion,
 )
-from aegis_agent_platform.event_store import EventPage, EventStore, TransientStorageError
+from aegis_agent_platform.event_store import (
+    EventPage,
+    EventStore,
+    TransientStorageError,
+)
 from aegis_agent_platform.gateway import (
     GatewayOperations,
     ModelCatalog,
@@ -159,8 +163,8 @@ def secured_app(
 
 
 class StaticUsageReader:
-    def usage_summary(self, tenant_id: str) -> dict[str, JsonValue]:
-        assert tenant_id == str(TENANT_ID)
+    def usage_summary(self, context: TenantContext) -> dict[str, JsonValue]:
+        assert context.tenant_id == TENANT_ID
         return {"tokens": 12, "cost_usd": "0.001", "calls": 1}
 
 

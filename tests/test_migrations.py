@@ -128,7 +128,9 @@ def test_model_budget_schema_is_tenant_scoped_fenced_and_versioned() -> None:
     ):
         assert f"alter table {table} force row level security" in schema
         assert f"{table}_tenant_isolation" in schema
-    assert "unique (tenant_id, idempotency_key)" in schema
+    assert "model_budget_reservations_request_active_idx" in schema
+    assert "model_budget_reservations_idempotency_active_idx" in schema
+    assert "where status in ('active', 'charged')" in schema
     assert "price_version text not null" in schema
     assert "lease_generation bigint not null" in schema
     assert "where status = 'active'" in schema

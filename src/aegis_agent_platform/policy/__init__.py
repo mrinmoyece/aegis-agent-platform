@@ -87,6 +87,10 @@ class TenantPolicy:
             raise ValueError("policy version is required")
         if not self.approver_roles:
             raise ValueError("at least one approver role is required")
+        if not self.allowed_providers:
+            raise ValueError("at least one allowed provider is required")
+        if not self.allowed_data_residencies:
+            raise ValueError("at least one allowed data residency is required")
 
 
 @dataclass(frozen=True, slots=True)

@@ -32,7 +32,7 @@ from aegis_agent_platform.gateway.resilience import (
     ProviderControls,
     RetryPolicy,
 )
-from aegis_agent_platform.gateway.structured import validate_object
+from aegis_agent_platform.gateway.structured import validate_object, validate_schema
 from aegis_agent_platform.gateway.telemetry import GatewayMetrics, GatewayTracer
 from aegis_agent_platform.policy import TenantPolicy
 from aegis_agent_platform.providers import CancellationToken, ModelProvider
@@ -81,7 +81,8 @@ class ModelGateway:
         preference: RoutePreference = RoutePreference.COST,
         cancellation: CancellationToken | None = None,
     ) -> ModelResponse:
-        cached = await self._repository.completed(context, request.idempotency_key)
+        self._validate_request(request)
+        cached = await self._repository.completed(context, request)
         if cached is not None:
             return cached
         unavailable = frozenset(
@@ -149,11 +150,13 @@ class ModelGateway:
                         at=self._clock(),
                     )
                 except ModelGatewayError as error:
-                    await self._repository.fail(
+                    await self._repository.record_usage_failure(
                         context,
                         request,
                         lease,
                         reservation,
+                        response,
+                        candidate.pricing,
                         error,
                         at=self._clock(),
                     )
@@ -215,63 +218,82 @@ class ModelGateway:
             )
         provider = self._providers[model.provider]
         last_error: ModelGatewayError | None = None
-        for attempt in range(1, self._retry_policy.max_attempts + 1):
-            if not self._controls.admit(
-                model,
-                request.prompt_token_estimate + request.max_output_tokens,
-            ):
-                last_error = ModelGatewayError(
-                    ModelErrorClass.RATE_LIMIT,
-                    "local_rate_limit",
-                    retryable=True,
-                )
-                self._metrics.add("rate_limits", model)
-                break
-            await self._repository.record_attempt(
-                context,
-                request,
-                lease,
-                reservation,
-                provider=model.provider,
-                model=model.model,
-                attempt=attempt,
-                fallback_index=fallback_index,
-                at=self._clock(),
-            )
-            self._metrics.add("attempts", model)
-            try:
-                async with self._controls.semaphore(model):
-                    with self._tracer.attempt(model):
-                        response = await provider.complete(
-                            request,
-                            model,
-                            cancellation=cancellation,
-                        )
-            except ModelGatewayError as error:
-                last_error = error
-                if error.error_class is ModelErrorClass.MALFORMED_RESPONSE:
-                    self._metrics.add("malformed_responses", model)
-                if error.error_class is ModelErrorClass.RATE_LIMIT:
+        try:
+            for attempt in range(1, self._retry_policy.max_attempts + 1):
+                if not self._controls.admit(
+                    model,
+                    request.prompt_token_estimate + request.max_output_tokens,
+                ):
+                    last_error = ModelGatewayError(
+                        ModelErrorClass.RATE_LIMIT,
+                        "local_rate_limit",
+                        retryable=True,
+                    )
                     self._metrics.add("rate_limits", model)
-                if not self._retry_policy.may_retry(error, attempt):
                     break
-                self._metrics.add("retries", model)
-                delay = (
-                    error.retry_after_seconds
-                    if error.retry_after_seconds is not None
-                    else self._retry_policy.backoff.delay(attempt).total_seconds()
-                )
-                await self._sleep(delay)
-                continue
-            circuit.succeed()
-            return response, None
-        if (
-            last_error is not None
-            and last_error.retryable
-            and last_error.error_class is not ModelErrorClass.RATE_LIMIT
-        ):
+                try:
+                    async with self._controls.semaphore(model):
+                        await self._repository.record_attempt(
+                            context,
+                            request,
+                            lease,
+                            reservation,
+                            provider=model.provider,
+                            model=model.model,
+                            attempt=attempt,
+                            fallback_index=fallback_index,
+                            at=self._clock(),
+                        )
+                        self._metrics.add("attempts", model)
+                        with self._tracer.attempt(model):
+                            response = await provider.complete(
+                                request,
+                                model,
+                                cancellation=cancellation,
+                            )
+                except ModelGatewayError as error:
+                    last_error = error
+                    if error.error_class is ModelErrorClass.MALFORMED_RESPONSE:
+                        self._metrics.add("malformed_responses", model)
+                    if error.error_class is ModelErrorClass.RATE_LIMIT:
+                        self._metrics.add("rate_limits", model)
+                    if not self._retry_policy.may_retry(error, attempt):
+                        break
+                    await self._repository.record_attempt_failure(
+                        context,
+                        request,
+                        lease,
+                        reservation,
+                        error,
+                        provider=model.provider,
+                        model=model.model,
+                        attempt=attempt,
+                        fallback_index=fallback_index,
+                        at=self._clock(),
+                    )
+                    self._metrics.add("retries", model)
+                    delay = (
+                        error.retry_after_seconds
+                        if error.retry_after_seconds is not None
+                        else self._retry_policy.backoff.delay(attempt).total_seconds()
+                    )
+                    await self._sleep(delay)
+                    continue
+                circuit.succeed()
+                return response, None
+        except BaseException:
+            circuit.fail()
+            raise
+        if last_error is not None:
             circuit.fail()
         return None, last_error
+
+    @staticmethod
+    def _validate_request(request: ModelRequest) -> None:
+        if request.response_schema is not None:
+            validate_schema(request.response_schema)
+        for tool in request.tools:
+            validate_schema(tool.input_schema)
 
     @staticmethod
     def _validate_response(request: ModelRequest, response: ModelResponse) -> None:
