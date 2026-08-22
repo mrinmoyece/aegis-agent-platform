@@ -162,7 +162,7 @@ retrieved item has provenance; deletion and retention behavior is auditable.
 Compaction tests preserve material evidence, uncertainty, conflict, approval
 state, and budgets, and semantic retrieval cannot cross tenants.
 
-## Layer 8 — Evaluation and observability
+## Layer 9 — Evaluation and observability
 
 Add versioned datasets, offline and online evaluation, release gates, traces,
 metrics, logs, cost accounting, and safe content handling. Score hypothesis
@@ -173,7 +173,7 @@ and recovery verification on checkout-failure variants.
 event-to-trace correlation works; telemetry contains no disallowed content or
 unbounded tenant labels.
 
-## Layer 9 — Enterprise operations
+## Layer 10 — Enterprise operations
 
 Add deployment automation, SLOs, alerting, runbooks, backup and restore, HA,
 capacity tests, software provenance, signing, governance evidence, and incident

@@ -361,6 +361,20 @@ class EvidenceQueryService:
                 details["retry_after_seconds"] = error.retry_after_seconds
             await self._terminal(context, query, lease, event_type, details)
             raise
+        except PermissionError as error:
+            self._metrics.add("errors", query.source)
+            await self._terminal(
+                context,
+                query,
+                lease,
+                DomainEventType.EVIDENCE_QUERY_FAILED,
+                {
+                    "error_class": ConnectorErrorClass.AUTHORIZATION.value,
+                    "code": str(error) or "connector_authorization_failed",
+                    "retryable": False,
+                },
+            )
+            raise
         except (TypeError, ValueError) as error:
             await self._terminal(
                 context,

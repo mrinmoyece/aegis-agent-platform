@@ -44,6 +44,9 @@ from aegis_agent_platform.integrations.config import (
 from aegis_agent_platform.integrations.dynatrace import DynatraceAdapter
 from aegis_agent_platform.integrations.github import GitHubAdapter
 from aegis_agent_platform.integrations.kubernetes import KubernetesAdapter
+from aegis_agent_platform.integrations.kubernetes.official import (
+    OfficialKubernetesClient,
+)
 from aegis_agent_platform.integrations.runbooks import (
     LocalRunbookSource,
     RunbookAdapter,
@@ -515,6 +518,68 @@ def test_dynatrace_failed_grail_poll_is_contained() -> None:
                 )
             )
         )
+
+
+def test_dynatrace_grail_poll_honors_retry_after(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    transport = MockTransport(
+        (
+            response({"access_token": "short-lived"}),
+            response({"requestToken": "request-1"}),
+            response({"state": "RUNNING"}, headers={"retry-after": "1.5"}),
+            response(
+                {
+                    "state": "SUCCEEDED",
+                    "records": [
+                        {
+                            "timestamp": "2026-08-13T08:59:00Z",
+                            "content": "checkout failed",
+                        }
+                    ],
+                }
+            ),
+        )
+    )
+    sleeps: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    monkeypatch.setattr(
+        "aegis_agent_platform.integrations.dynatrace.asyncio.sleep",
+        fake_sleep,
+    )
+    adapter = DynatraceAdapter(
+        CONTEXT,
+        DynatraceConnectorConfig(
+            TENANT,
+            "production",
+            "https://tenant.live.dynatrace.com",
+            "https://sso.dynatrace.com",
+            CLIENT_ID,
+            CLIENT_SECRET,
+            ("storage:logs:read",),
+            enabled=True,
+        ),
+        InMemorySecretProvider(
+            {CLIENT_ID: b"client-id", CLIENT_SECRET: b"client-secret"}
+        ),
+        transport,
+    )
+
+    page = asyncio.run(
+        adapter.query(
+            evidence_query(
+                EvidenceSourceKind.DYNATRACE,
+                (EvidenceKind.LOG,),
+                {"service": "checkout"},
+            )
+        )
+    )
+
+    assert len(page.records) == 1
+    assert sleeps == [1.5]
 
 
 def test_dynatrace_rejects_unsafe_selector_before_network() -> None:
@@ -1057,6 +1122,51 @@ def test_kubernetes_validation_capabilities_and_malformed_resources() -> None:
             )
         )
 
+    class EventTimestampClient(FakeKubernetesClient):
+        async def list_resources(
+            self,
+            kind: EvidenceKind,
+            namespace: str,
+            *,
+            label_selector: str | None,
+            name: str | None,
+            limit: int,
+            continue_token: str | None,
+            timeout_seconds: float,
+            max_response_bytes: int,
+        ) -> tuple[Sequence[Mapping[str, object]], str | None]:
+            del kind, namespace, label_selector, name
+            del limit, continue_token, timeout_seconds, max_response_bytes
+            return (
+                (
+                    {
+                        "metadata": {
+                            "name": "checkout-event",
+                            "uid": "event-1",
+                            "creationTimestamp": "2026-08-13T08:55:00Z",
+                            "labels": {"app": "checkout"},
+                        },
+                        "eventTime": "2026-08-13T08:56:00Z",
+                        "lastTimestamp": None,
+                        "reason": "ScalingReplicaSet",
+                    },
+                ),
+                None,
+            )
+
+    event_page = asyncio.run(
+        KubernetesAdapter(CONTEXT, config, EventTimestampClient()).query(
+            evidence_query(
+                EvidenceSourceKind.KUBERNETES,
+                (EvidenceKind.EVENT,),
+                {"namespace": "checkout"},
+            )
+        )
+    )
+    assert event_page.records[0].observed_at == datetime(
+        2026, 8, 13, 8, 56, tzinfo=UTC
+    )
+
 
 def test_kubernetes_cursor_resumes_one_collection_and_rejects_multi_kind() -> None:
     class CursorClient(FakeKubernetesClient):
@@ -1127,6 +1237,45 @@ def test_kubernetes_cursor_resumes_one_collection_and_rejects_multi_kind() -> No
     with pytest.raises(ConnectorError, match="connector_cursor_invalid"):
         asyncio.run(
             adapter.query(replace(query, cursor=PaginationCursor("not-base64")))
+        )
+
+
+def test_official_kubernetes_client_rejects_non_object_items() -> None:
+    client = object.__new__(OfficialKubernetesClient)
+
+    async def fake_get(
+        path: str,
+        query: Sequence[tuple[str, str | None]],
+        *,
+        timeout_seconds: float,
+        max_response_bytes: int,
+        accept: str = "application/json",
+    ) -> bytes:
+        del path, query, timeout_seconds, max_response_bytes, accept
+        return json.dumps(
+            {
+                "items": [
+                    {"metadata": {"name": "checkout", "uid": "uid-1"}},
+                    "oops",
+                ],
+                "metadata": {},
+            }
+        ).encode()
+
+    client._get = fake_get  # type: ignore[method-assign]
+
+    with pytest.raises(ConnectorError, match="kubernetes_collection_invalid"):
+        asyncio.run(
+            client.list_resources(
+                EvidenceKind.POD,
+                "checkout",
+                label_selector=None,
+                name=None,
+                limit=10,
+                continue_token=None,
+                timeout_seconds=1,
+                max_response_bytes=1024,
+            )
         )
 
 

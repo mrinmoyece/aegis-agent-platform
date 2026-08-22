@@ -57,8 +57,8 @@ tenant-scoped by digest. Credential- and PII-shaped values pass through
 redaction hooks before persistence. Invalid, oversized, or untrusted records are
 quarantined with bounded metadata; they are not coerced into valid evidence.
 Knowledge records are explicitly distinct from observations. Citations render
-the immutable evidence ID, source, record ID, digest, timestamp, and provenance
-without copying sensitive content.
+the immutable evidence ID together with source/kind, digest, observed time, and
+provenance URI without copying sensitive content.
 
 ## Connector tutorials
 
