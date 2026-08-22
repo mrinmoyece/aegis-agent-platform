@@ -772,6 +772,36 @@ def test_budget_reservation_race_allows_only_one_call() -> None:
     assert sum(isinstance(item, BudgetDeniedError) for item in outcomes) == 1
 
 
+def test_gateway_does_not_open_circuit_on_local_admission_failure() -> None:
+    model_request = request()
+    work_lease = lease()
+    repository = InMemoryGatewayRepository((work_lease,))
+    provider = ScriptedModelProvider("mock-a", (response(model_request),))
+    service = gateway(
+        {"mock-a": provider},
+        repository,
+        (catalog_entry(),),
+        tokens_per_minute=50,
+        max_attempts=1,
+        max_failovers=0,
+    )
+
+    with pytest.raises(ModelGatewayError) as failure:
+        asyncio.run(
+            service.complete(
+                TenantContext(TENANT),
+                model_request,
+                work_lease,
+                policy(models=frozenset({MODEL_A.catalog_key})),
+                environment=Environment.TEST,
+            )
+        )
+
+    assert failure.value.code == "local_rate_limit"
+    assert service._controls.circuit(MODEL_A).state is CircuitState.CLOSED
+    assert provider.calls == []
+
+
 def test_duplicate_request_returns_same_response_without_second_charge() -> None:
     model_request = request(idempotency_key="stable-key")
     work_lease = lease()
@@ -806,6 +836,50 @@ def test_duplicate_request_returns_same_response_without_second_charge() -> None
     assert first is second
     assert len(provider.calls) == 1
     assert repository.usage_summary(TenantContext(TENANT))["calls"] == 1
+
+
+def test_gateway_records_usage_failure_when_provider_exceeds_reservation() -> None:
+    model_request = request()
+    work_lease = lease()
+    repository = InMemoryGatewayRepository((work_lease,))
+    overage = ModelResponse(
+        request_id=model_request.request_id,
+        model=MODEL_A,
+        content=(TextPart("done"),),
+        finish_reason=FinishReason.STOP,
+        safety=SafetyResult(SafetyOutcome.ALLOWED),
+        usage=TokenUsage(111, 10),
+        latency_ms=12,
+        provider_request_id="provider-request-1",
+    )
+    provider = ScriptedModelProvider("mock-a", (overage,))
+    service = gateway(
+        {"mock-a": provider},
+        repository,
+        (catalog_entry(),),
+        max_attempts=1,
+        max_failovers=0,
+    )
+
+    with pytest.raises(ModelGatewayError) as failure:
+        asyncio.run(
+            service.complete(
+                TenantContext(TENANT),
+                model_request,
+                work_lease,
+                policy(models=frozenset({MODEL_A.catalog_key})),
+                environment=Environment.TEST,
+            )
+        )
+
+    assert failure.value.code == "usage_exceeded_token_reservation"
+    assert repository.usage_summary(TenantContext(TENANT))["calls"] == 1
+    assert [event.event_type for event in repository.events[-4:]] == [
+        DomainEventType.MODEL_CALL_FAILED,
+        DomainEventType.MODEL_USAGE_RECORDED,
+        DomainEventType.MODEL_BUDGET_CHARGED,
+        DomainEventType.MODEL_BUDGET_RELEASED,
+    ]
 
 
 def test_zero_token_success_counts_as_completed_call() -> None:
@@ -1207,3 +1281,57 @@ def test_metrics_and_gateway_operations_are_bounded_and_authorized() -> None:
             tenant_policy,
             at=NOW,
         )
+
+
+def test_catalog_view_applies_policy_environment_residency_and_retention_filters(
+) -> None:
+    from security_helpers import binding, principal
+
+    repository = InMemoryGatewayRepository((lease(),))
+    controls = ProviderControls(
+        (MODEL_A, MODEL_B),
+        concurrency=1,
+        requests_per_minute=100,
+        tokens_per_minute=100_000,
+    )
+    tenant_principal = principal(
+        (binding(tenant_id=TENANT, assigned_at=NOW - timedelta(hours=1)),),
+        tenant_id=TENANT,
+    )
+    entries = (
+        catalog_entry(MODEL_A),
+        ModelCatalogEntry(
+            identity=MODEL_B,
+            capabilities=ModelCapabilities(
+                max_context_tokens=8_192,
+                max_output_tokens=2_048,
+                supports_tools=True,
+                supports_vision=True,
+                supports_structured_output=True,
+                supports_reasoning_tokens=True,
+                supports_cache_tokens=True,
+            ),
+            pricing=pricing("mock-b-price-v1"),
+            environments=frozenset({Environment.TEST}),
+            data_residencies=frozenset({"us"}),
+            provider_retains_data=True,
+            cost_rank=1,
+            latency_rank=1,
+        ),
+    )
+    operations = GatewayOperations(
+        ModelCatalog(entries),
+        controls,
+        repository,
+        environment=Environment.PRODUCTION,
+    )
+    tenant_policy = policy(models=frozenset({MODEL_A.catalog_key, MODEL_B.catalog_key}))
+    object.__setattr__(tenant_policy, "allowed_environments", frozenset({"production"}))
+    catalog_view = operations.catalog(
+        tenant_principal,
+        TenantContext(TENANT),
+        tenant_policy,
+        at=NOW,
+    )
+
+    assert [entry["model"] for entry in catalog_view] == [MODEL_A.model]

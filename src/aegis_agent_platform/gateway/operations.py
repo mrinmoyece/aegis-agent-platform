@@ -6,8 +6,9 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Protocol
 
+from aegis_agent_platform.config import Environment
 from aegis_agent_platform.domain import JsonValue, ModelIdentity
-from aegis_agent_platform.gateway.catalog import ModelCatalog
+from aegis_agent_platform.gateway.catalog import ModelCatalog, ModelRouter
 from aegis_agent_platform.gateway.resilience import ProviderControls
 from aegis_agent_platform.identity import (
     AuthorizationService,
@@ -30,11 +31,13 @@ class GatewayOperations:
         catalog: ModelCatalog,
         controls: ProviderControls,
         usage: ModelUsageReader,
+        environment: Environment = Environment.PRODUCTION,
         authorization: AuthorizationService | None = None,
     ) -> None:
         self._catalog = catalog
         self._controls = controls
         self._usage = usage
+        self._environment = environment
         self._authorization = authorization or AuthorizationService()
 
     def catalog(
@@ -50,14 +53,9 @@ class GatewayOperations:
             raise PermissionError("cross_tenant_policy")
         result: list[Mapping[str, JsonValue]] = []
         for entry in self._catalog.entries():
+            if ModelRouter.policy_failures(entry, policy, self._environment):
+                continue
             identity = entry.identity
-            if (
-                identity.catalog_key not in policy.allowed_models
-                and identity.model not in policy.allowed_models
-            ):
-                continue
-            if identity.provider not in policy.allowed_providers:
-                continue
             result.append(
                 {
                     "provider": identity.provider,

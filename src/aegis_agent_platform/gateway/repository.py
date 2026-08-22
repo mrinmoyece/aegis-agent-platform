@@ -16,13 +16,19 @@ from uuid import UUID, uuid4
 from aegis_agent_platform.domain import (
     DomainEventType,
     EventEnvelope,
+    ImagePart,
     JsonValue,
     ModelErrorClass,
     ModelGatewayError,
+    ModelIdentity,
+    ModelMessage,
     ModelRequest,
     ModelResponse,
     PricingVersion,
+    TextPart,
     TokenUsage,
+    ToolCallPart,
+    ToolResultPart,
     WorkLease,
 )
 from aegis_agent_platform.domain.events import thaw_json
@@ -487,7 +493,7 @@ class InMemoryGatewayRepository(GatewayRepository):
         at: datetime,
     ) -> None:
         _validate_request_context(context, request, lease)
-        actual_tokens, actual_cost = _actual_usage(pricing, response, reservation)
+        actual_tokens, actual_cost = _usage_totals(pricing, response)
         async with self._lock:
             self._require_active(reservation)
             self._require_fence(lease, at)
@@ -550,9 +556,15 @@ class InMemoryGatewayRepository(GatewayRepository):
                         DomainEventType.MODEL_BUDGET_RELEASED,
                         {
                             **details,
-                            "tokens_released": reservation.token_limit - actual_tokens,
+                            "tokens_released": max(
+                                reservation.token_limit - actual_tokens,
+                                0,
+                            ),
                             "cost_released_usd": str(
-                                reservation.cost_limit_usd - actual_cost
+                                max(
+                                    reservation.cost_limit_usd - actual_cost,
+                                    Decimal("0"),
+                                )
                             ),
                             "reason": "validation_failed_after_provider_response",
                         },
@@ -764,14 +776,11 @@ def _validate_request_context(
 
 def request_content_digest(request: ModelRequest) -> str:
     payload = {
-        "messages": [repr(message) for message in request.messages],
+        "messages": [_message_payload(message) for message in request.messages],
         "requested_model": (
             None
             if request.requested_model is None
-            else {
-                "provider": request.requested_model.provider,
-                "model": request.requested_model.model,
-            }
+            else _model_identity_payload(request.requested_model)
         ),
         "max_output_tokens": request.max_output_tokens,
         "prompt_token_estimate": request.prompt_token_estimate,
@@ -819,8 +828,7 @@ def _actual_usage(
     response: ModelResponse,
     reservation: BudgetReservation,
 ) -> tuple[int, Decimal]:
-    actual_cost = pricing.cost(response.usage)
-    actual_tokens = response.usage.billable_tokens
+    actual_tokens, actual_cost = _usage_totals(pricing, response)
     if actual_tokens > reservation.token_limit:
         raise ModelGatewayError(
             ModelErrorClass.PROVIDER_BUG,
@@ -836,6 +844,51 @@ def _actual_usage(
             billing_ambiguous=True,
         )
     return actual_tokens, actual_cost
+
+
+def _usage_totals(
+    pricing: PricingVersion,
+    response: ModelResponse,
+) -> tuple[int, Decimal]:
+    return response.usage.billable_tokens, pricing.cost(response.usage)
+
+
+def _message_payload(message: ModelMessage) -> dict[str, object]:
+    return {
+        "role": message.role.value,
+        "name": message.name,
+        "content": [_content_part_payload(part) for part in message.content],
+    }
+
+
+def _content_part_payload(part: object) -> dict[str, object]:
+    if isinstance(part, TextPart):
+        return {"kind": part.kind.value, "text": part.text}
+    if isinstance(part, ImagePart):
+        return {
+            "kind": part.kind.value,
+            "media_type": part.media_type,
+            "uri": part.uri,
+        }
+    if isinstance(part, ToolCallPart):
+        return {
+            "kind": part.kind.value,
+            "call_id": part.proposal.call_id,
+            "tool_name": part.proposal.tool_name,
+            "arguments": thaw_json(part.proposal.arguments),
+        }
+    if isinstance(part, ToolResultPart):
+        return {
+            "kind": part.kind.value,
+            "call_id": part.call_id,
+            "content": thaw_json(part.content),
+            "is_error": part.is_error,
+        }
+    raise TypeError(f"unsupported content part: {type(part)!r}")
+
+
+def _model_identity_payload(identity: ModelIdentity) -> dict[str, str]:
+    return {"provider": identity.provider, "model": identity.model}
 
 
 def _usage_payload(usage: TokenUsage) -> dict[str, JsonValue]:

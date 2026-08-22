@@ -400,7 +400,7 @@ class PostgresGatewayRepository(GatewayRepository):
         at: datetime,
     ) -> None:
         _validate(context, request, lease, at)
-        tokens, cost = _actual_usage(pricing, response, reservation)
+        tokens, cost = _usage_totals(pricing, response)
         common = {
             **_common(request, lease, reservation),
             "provider": response.model.provider,
@@ -433,8 +433,13 @@ class PostgresGatewayRepository(GatewayRepository):
                     DomainEventType.MODEL_BUDGET_RELEASED,
                     {
                         **common,
-                        "tokens_released": reservation.token_limit - tokens,
-                        "cost_released_usd": str(reservation.cost_limit_usd - cost),
+                        "tokens_released": max(reservation.token_limit - tokens, 0),
+                        "cost_released_usd": str(
+                            max(
+                                reservation.cost_limit_usd - cost,
+                                Decimal("0"),
+                            )
+                        ),
                         "reason": "validation_failed_after_provider_response",
                     },
                 ),
@@ -775,16 +780,29 @@ def _actual_usage(
     response: ModelResponse,
     reservation: BudgetReservation,
 ) -> tuple[int, Decimal]:
-    cost = pricing.cost(response.usage)
-    tokens = response.usage.billable_tokens
-    if tokens > reservation.token_limit or cost > reservation.cost_limit_usd:
+    tokens, cost = _usage_totals(pricing, response)
+    if tokens > reservation.token_limit:
         raise ModelGatewayError(
             ModelErrorClass.PROVIDER_BUG,
-            "usage_exceeded_reservation",
+            "usage_exceeded_token_reservation",
+            retryable=False,
+            billing_ambiguous=True,
+        )
+    if cost > reservation.cost_limit_usd:
+        raise ModelGatewayError(
+            ModelErrorClass.PROVIDER_BUG,
+            "usage_exceeded_cost_reservation",
             retryable=False,
             billing_ambiguous=True,
         )
     return tokens, cost
+
+
+def _usage_totals(
+    pricing: PricingVersion,
+    response: ModelResponse,
+) -> tuple[int, Decimal]:
+    return response.usage.billable_tokens, pricing.cost(response.usage)
 
 
 def _event_idempotency_key(

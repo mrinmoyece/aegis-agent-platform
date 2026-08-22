@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from types import SimpleNamespace
+from typing import cast
 from uuid import uuid4
 
 import httpx
@@ -242,6 +243,56 @@ def test_openai_request_serializes_function_items_at_top_level() -> None:
             "output": '{"done":true}',
         },
     ]
+
+
+def test_openai_request_serializes_frozen_nested_arguments() -> None:
+    raw = SimpleNamespace(
+        output=[
+            SimpleNamespace(
+                type="message",
+                content=[SimpleNamespace(type="output_text", text="ok")],
+            )
+        ],
+        usage=SimpleNamespace(
+            input_tokens=4,
+            output_tokens=1,
+            input_tokens_details=SimpleNamespace(cached_tokens=0),
+            output_tokens_details=SimpleNamespace(reasoning_tokens=0),
+        ),
+        _request_id="openai-request",
+    )
+    create = AsyncCreate(raw)
+    factory, _captured = client_factory(create, openai=True)
+    request = model_request(
+        "openai",
+        messages=(
+            ModelMessage(
+                MessageRole.ASSISTANT,
+                (
+                    ToolCallPart(
+                        ToolCallProposal(
+                            "call-1",
+                            "answer",
+                            {"payload": {"nested": True}},
+                        )
+                    ),
+                ),
+            ),
+        ),
+    )
+    adapter = OpenAIAdapter(
+        TenantContext(TENANT),
+        secret_provider(),
+        settings(),
+        client_factory=factory,
+        clock=lambda: 1,
+    )
+
+    asyncio.run(adapter.complete(request, ModelIdentity("openai", "model-1")))
+
+    assert create.kwargs is not None
+    inputs = cast(list[dict[str, object]], create.kwargs["input"])
+    assert inputs[0]["arguments"] == '{"payload":{"nested":true}}'
 
 
 def test_anthropic_translation_structured_output_and_cache_usage() -> None:

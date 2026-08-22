@@ -77,6 +77,30 @@ class RouteDecision:
 class ModelRouter:
     """Pure deterministic selection; runtime health is supplied as bounded keys."""
 
+    @staticmethod
+    def policy_failures(
+        entry: ModelCatalogEntry,
+        policy: TenantPolicy,
+        environment: Environment,
+    ) -> tuple[str, ...]:
+        identity = entry.identity
+        allowed_model = (
+            identity.catalog_key in policy.allowed_models
+            or identity.model in policy.allowed_models
+        )
+        checks = {
+            "model_not_allowed": not allowed_model,
+            "provider_not_allowed": identity.provider not in policy.allowed_providers,
+            "environment_not_allowed": environment not in entry.environments
+            or environment.value not in policy.allowed_environments,
+            "residency_not_allowed": not entry.data_residencies.intersection(
+                policy.allowed_data_residencies
+            ),
+            "retention_not_allowed": entry.provider_retains_data
+            and not policy.allow_provider_retention,
+        }
+        return tuple(name for name, failed in checks.items() if failed)
+
     def route(
         self,
         request: ModelRequest,
@@ -98,22 +122,8 @@ class ModelRouter:
         denied: set[str] = set()
         for entry in entries:
             identity = entry.identity
-            allowed_model = (
-                identity.catalog_key in policy.allowed_models
-                or identity.model in policy.allowed_models
-            )
             checks = {
-                "model_not_allowed": not allowed_model,
-                "provider_not_allowed": (
-                    identity.provider not in policy.allowed_providers
-                ),
-                "environment_not_allowed": environment not in entry.environments
-                or environment.value not in policy.allowed_environments,
-                "residency_not_allowed": not entry.data_residencies.intersection(
-                    policy.allowed_data_residencies
-                ),
-                "retention_not_allowed": entry.provider_retains_data
-                and not policy.allow_provider_retention,
+                **dict.fromkeys(self.policy_failures(entry, policy, environment), True),
                 "provider_unavailable": identity in unavailable,
                 "context_limit_exceeded": (
                     request.prompt_token_estimate + request.max_output_tokens

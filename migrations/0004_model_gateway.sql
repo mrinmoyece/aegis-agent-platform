@@ -83,9 +83,11 @@ CREATE POLICY model_usage_projection_tenant_isolation
     WITH CHECK (tenant_id = current_setting('aegis.tenant_id', true));
 
 GRANT SELECT, INSERT, UPDATE ON tenant_model_budget_locks,
-    model_budget_reservations, model_usage_projection TO aegis_app;
+    model_budget_reservations TO aegis_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON model_usage_projection TO aegis_app;
 REVOKE DELETE, TRUNCATE ON tenant_model_budget_locks,
-    model_budget_reservations, model_usage_projection FROM PUBLIC, aegis_app;
+    model_budget_reservations FROM PUBLIC, aegis_app;
+REVOKE DELETE, TRUNCATE ON model_usage_projection FROM PUBLIC;
 GRANT SELECT, INSERT, UPDATE, DELETE ON tenant_model_budget_locks,
     model_budget_reservations, model_usage_projection TO aegis_maintenance;
 

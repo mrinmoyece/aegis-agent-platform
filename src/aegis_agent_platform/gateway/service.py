@@ -1,9 +1,10 @@
-"""Fenced, budgeted, policy-routed model gateway execution."""
+"""Layer 5 fenced, budgeted, policy-routed model gateway execution."""
 
 from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
+from contextlib import suppress
 from datetime import UTC, datetime
 
 from aegis_agent_platform.config import Environment
@@ -40,7 +41,7 @@ from aegis_agent_platform.tenancy import TenantContext
 
 
 class ModelGateway:
-    """Coordinates durable intent, reservation, invocation, and reconciliation."""
+    """Coordinates durable Layer 5 reservation, invocation, and reconciliation."""
 
     def __init__(
         self,
@@ -90,6 +91,7 @@ class ModelGateway:
             for entry in self._catalog.entries()
             if self._controls.circuit(entry.identity).state.value == "open"
         )
+        deadline = asyncio.get_running_loop().time() + request.timeout_seconds
         route = self._router.route(
             request,
             catalog=self._catalog,
@@ -135,6 +137,7 @@ class ModelGateway:
                 reservation,
                 candidate,
                 fallback_index=fallback_index,
+                deadline=deadline,
                 cancellation=cancellation,
             )
             if response is not None:
@@ -203,6 +206,7 @@ class ModelGateway:
         candidate: ModelCatalogEntry,
         *,
         fallback_index: int,
+        deadline: float,
         cancellation: CancellationToken | None,
     ) -> tuple[ModelResponse | None, ModelGatewayError | None]:
         model = candidate.identity
@@ -232,7 +236,15 @@ class ModelGateway:
                     self._metrics.add("rate_limits", model)
                     break
                 try:
-                    async with self._controls.semaphore(model):
+                    semaphore = self._controls.semaphore(model)
+                    acquired = False
+                    try:
+                        await self._acquire_semaphore(
+                            semaphore,
+                            deadline=deadline,
+                            cancellation=cancellation,
+                        )
+                        acquired = True
                         await self._repository.record_attempt(
                             context,
                             request,
@@ -251,6 +263,9 @@ class ModelGateway:
                                 model,
                                 cancellation=cancellation,
                             )
+                    finally:
+                        if acquired:
+                            semaphore.release()
                 except ModelGatewayError as error:
                     last_error = error
                     if error.error_class is ModelErrorClass.MALFORMED_RESPONSE:
@@ -281,12 +296,74 @@ class ModelGateway:
                     continue
                 circuit.succeed()
                 return response, None
-        except BaseException:
-            circuit.fail()
+        except BaseException as error:
+            if not isinstance(error, asyncio.CancelledError):
+                circuit.fail()
             raise
-        if last_error is not None:
+        if last_error is not None and _provider_health_failure(last_error):
             circuit.fail()
         return None, last_error
+
+    async def _acquire_semaphore(
+        self,
+        semaphore: asyncio.Semaphore,
+        *,
+        deadline: float,
+        cancellation: CancellationToken | None,
+    ) -> None:
+        if cancellation is not None and cancellation.is_set():
+            raise ModelGatewayError(
+                ModelErrorClass.CANCELLED,
+                "gateway_concurrency_cancelled",
+                retryable=False,
+            )
+        remaining_seconds = deadline - asyncio.get_running_loop().time()
+        if remaining_seconds <= 0:
+            raise ModelGatewayError(
+                ModelErrorClass.TIMEOUT,
+                "gateway_concurrency_timeout",
+                retryable=True,
+            )
+        acquire_task = asyncio.create_task(
+            asyncio.wait_for(semaphore.acquire(), timeout=remaining_seconds)
+        )
+        cancellation_task: asyncio.Task[bool] | None = None
+        try:
+            if cancellation is None:
+                await acquire_task
+                return
+            cancellation_task = asyncio.create_task(cancellation.wait())
+            done, _ = await asyncio.wait(
+                (acquire_task, cancellation_task),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if cancellation_task in done:
+                if (
+                    acquire_task in done
+                    and not acquire_task.cancelled()
+                    and acquire_task.exception() is None
+                ):
+                    semaphore.release()
+                else:
+                    acquire_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await acquire_task
+                raise ModelGatewayError(
+                    ModelErrorClass.CANCELLED,
+                    "gateway_concurrency_cancelled",
+                    retryable=False,
+                )
+            await acquire_task
+        except TimeoutError as error:
+            raise ModelGatewayError(
+                ModelErrorClass.TIMEOUT,
+                "gateway_concurrency_timeout",
+                retryable=True,
+            ) from error
+        finally:
+            if cancellation_task is not None and not cancellation_task.done():
+                cancellation_task.cancel()
+            await asyncio.gather(acquire_task, return_exceptions=True)
 
     @staticmethod
     def _validate_request(request: ModelRequest) -> None:
@@ -329,3 +406,16 @@ class ModelGateway:
 
 
 __all__ = ["ModelGateway"]
+
+
+def _provider_health_failure(error: ModelGatewayError) -> bool:
+    if error.error_class is ModelErrorClass.RATE_LIMIT:
+        return error.code != "local_rate_limit"
+    if error.error_class is ModelErrorClass.TIMEOUT:
+        return error.code != "gateway_concurrency_timeout"
+    return error.error_class in {
+        ModelErrorClass.TRANSIENT,
+        ModelErrorClass.PROVIDER_UNAVAILABLE,
+        ModelErrorClass.MALFORMED_RESPONSE,
+        ModelErrorClass.PROVIDER_BUG,
+    }

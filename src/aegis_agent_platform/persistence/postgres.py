@@ -206,12 +206,20 @@ class PostgresPolicyRepository(PolicyRepository):
                     max_tenant_cost_usd_per_period=Decimal(row[5]),
                     max_concurrent_runs=int(row[6]),
                 ),
-                allowed_providers=_string_set(document, "allowed_providers"),
+                allowed_providers=_string_set(
+                    document,
+                    "allowed_providers",
+                    default=frozenset(),
+                ),
                 allowed_data_residencies=_string_set(
-                    document, "allowed_data_residencies"
+                    document,
+                    "allowed_data_residencies",
+                    default=frozenset(),
                 ),
                 allow_provider_retention=_required_bool(
-                    document, "allow_provider_retention"
+                    document,
+                    "allow_provider_retention",
+                    default=False,
                 ),
             )
         except (KeyError, TypeError, ValueError) as error:
@@ -344,11 +352,18 @@ def _role_binding_from_row(tenant_id: TenantId, row: tuple[object, ...]) -> Role
     )
 
 
-def _string_set(document: dict[str, object], key: str) -> frozenset[str]:
-    value = document[key]
+def _string_set(
+    document: dict[str, object],
+    key: str,
+    *,
+    default: frozenset[str] | None = None,
+) -> frozenset[str]:
+    value = document.get(key, default)
     if not isinstance(value, list) or not all(
         isinstance(item, str) and item for item in value
     ):
+        if value == default and default is not None:
+            return default
         raise ValueError(f"{key} must be a list of strings")
     return frozenset(value)
 
@@ -360,9 +375,16 @@ def _required_int(document: dict[str, object], key: str) -> int:
     return value
 
 
-def _required_bool(document: dict[str, object], key: str) -> bool:
-    value = document[key]
+def _required_bool(
+    document: dict[str, object],
+    key: str,
+    *,
+    default: bool | None = None,
+) -> bool:
+    value = document.get(key, default)
     if not isinstance(value, bool):
+        if value == default and default is not None:
+            return default
         raise ValueError(f"{key} must be a boolean")
     return value
 

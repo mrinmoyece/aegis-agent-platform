@@ -811,11 +811,17 @@ class PostgresWorkRepository:
             async with _tenant_transaction(self._connection, self._lock, context):
                 redrive_cursor = await self._connection.execute(
                     """
-                    SELECT w.work_id, o.message_id
+                    SELECT w.work_id, latest.message_id
                     FROM work_items AS w
-                    JOIN outbox_messages AS o
-                      ON o.tenant_id = w.tenant_id
-                     AND o.payload->>'work_id' = w.work_id::text
+                    JOIN LATERAL (
+                        SELECT o.message_id, o.published_at
+                        FROM outbox_messages AS o
+                        WHERE o.tenant_id = w.tenant_id
+                          AND o.payload->>'work_id' = w.work_id::text
+                          AND o.status = 'published'
+                        ORDER BY o.published_at DESC, o.message_id DESC
+                        LIMIT 1
+                    ) AS latest ON true
                     LEFT JOIN work_leases AS l
                       ON l.tenant_id = w.tenant_id
                      AND l.work_id = w.work_id
@@ -823,10 +829,9 @@ class PostgresWorkRepository:
                     WHERE w.tenant_id = %s
                       AND w.status IN ('requested', 'published', 'retry_wait')
                       AND l.work_id IS NULL
-                      AND o.status = 'published'
-                      AND o.published_at <=
+                      AND latest.published_at <=
                           clock_timestamp() - interval '5 minutes'
-                    ORDER BY o.published_at, o.message_id
+                    ORDER BY latest.published_at, latest.message_id
                     LIMIT %s
                     """,
                     (str(context.tenant_id), limit),
@@ -887,6 +892,20 @@ class PostgresWorkRepository:
                       AND w.tenant_id = o.tenant_id
                       AND w.work_id = %s
                       AND w.status IN ('requested', 'published', 'retry_wait')
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM outbox_messages AS newer
+                          WHERE newer.tenant_id = o.tenant_id
+                            AND newer.payload->>'work_id' = w.work_id::text
+                            AND newer.status = 'published'
+                            AND (
+                                newer.published_at > o.published_at
+                                OR (
+                                    newer.published_at = o.published_at
+                                    AND newer.message_id > o.message_id
+                                )
+                            )
+                      )
                       AND NOT EXISTS (
                           SELECT 1 FROM work_leases AS l
                           WHERE l.tenant_id = w.tenant_id
