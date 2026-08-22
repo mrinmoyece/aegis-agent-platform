@@ -1,8 +1,9 @@
 # Durable execution and PostgreSQL ledger
 
 Layer 3 implements persistence mechanics and Layer 4 uses them for reliable work.
-PostgreSQL is authoritative; Redis is at-least-once transport. Models, live
-connectors, specialist reasoning, and remediation remain planned.
+PostgreSQL is authoritative; Redis is at-least-once transport. Model invocation is
+implemented in Layer 5 via `ModelGateway` with OpenAI and Anthropic adapters;
+specialist reasoning, live connectors, and remediation remain planned.
 
 ## Event sourcing instead of mutable run state
 

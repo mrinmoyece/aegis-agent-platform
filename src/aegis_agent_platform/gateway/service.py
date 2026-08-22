@@ -83,7 +83,8 @@ class ModelGateway:
         cancellation: CancellationToken | None = None,
     ) -> ModelResponse:
         self._validate_request(request)
-        cached = await self._repository.completed(context, request)
+        at = self._clock()
+        cached = await self._repository.completed(context, request, lease, at=at)
         if cached is not None:
             return cached
         unavailable = frozenset(

@@ -23,5 +23,5 @@ truth. Global identity numbers order commits but are not promised gapless after
 rollback. Schema evolution remains additive and migrations are forward-only.
 
 Redis workers are explicitly outside this decision and are implemented by Layer
-4 plus ADR 0011. Provider calls, evidence connectors, and agent execution remain
-future layers.
+4 plus ADR 0011. Provider calls are implemented in Layer 5 (ADR 0012); evidence
+connectors and agent execution remain future layers.

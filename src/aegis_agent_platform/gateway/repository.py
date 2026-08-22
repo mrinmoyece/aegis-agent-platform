@@ -70,6 +70,9 @@ class GatewayRepository(Protocol):
         self,
         context: TenantContext,
         request: ModelRequest,
+        lease: WorkLease,
+        *,
+        at: datetime,
     ) -> ModelResponse | None: ...
 
     async def reserve(
@@ -186,7 +189,13 @@ class InMemoryGatewayRepository(GatewayRepository):
         self,
         context: TenantContext,
         request: ModelRequest,
+        lease: WorkLease,
+        *,
+        at: datetime,
     ) -> ModelResponse | None:
+        _validate_request_context(context, request, lease)
+        async with self._lock:
+            self._require_fence(lease, at)
         stored = self._completed.get((str(context.tenant_id), request.idempotency_key))
         if stored is None:
             return None

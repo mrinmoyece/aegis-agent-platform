@@ -53,8 +53,11 @@ class PostgresGatewayRepository(GatewayRepository):
         self,
         context: TenantContext,
         request: ModelRequest,
+        lease: WorkLease,
+        *,
+        at: datetime,
     ) -> ModelResponse | None:
-        del context, request
+        del context, request, lease, at
         # Raw responses are intentionally not persisted without an encrypted artifact
         # store. Durable workers deduplicate before invocation via reservation keys.
         return None
