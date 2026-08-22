@@ -341,6 +341,8 @@ class InMemoryAgentRepository(AgentRepository):
             "version": state.version,
             "used_tokens": state.used_tokens,
             "reserved_tokens": state.reserved_tokens,
+            "used_cost_usd": str(state.used_cost_usd),
+            "reserved_cost_usd": str(state.reserved_cost_usd),
             "final_artifact_id": (
                 str(state.final_artifact_id)
                 if state.final_artifact_id is not None
@@ -356,6 +358,9 @@ class InMemoryAgentRepository(AgentRepository):
                 "status": state.tasks[assignment.assignment_id].status.value,
                 "attempts": state.tasks[assignment.assignment_id].attempts,
                 "used_tokens": state.tasks[assignment.assignment_id].used_tokens,
+                "used_cost_usd": str(
+                    state.tasks[assignment.assignment_id].used_cost_usd
+                ),
                 "artifact_count": len(
                     state.tasks[assignment.assignment_id].artifact_ids
                 ),

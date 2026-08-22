@@ -26,7 +26,7 @@ class AgentRole(StrEnum):
     RUNTIME_INVESTIGATOR = "runtime_investigator"
     KNOWLEDGE_INVESTIGATOR = "knowledge_investigator"
     CRITIC_REVIEWER = "critic_reviewer"
-    HYPOTHESIS_REVIEWER = "critic_reviewer"
+    HYPOTHESIS_REVIEWER = "hypothesis_reviewer"
     REMEDIATION_PLANNER = "remediation_planner"
     VERIFICATION_AGENT = "verification_agent"
 
@@ -542,12 +542,12 @@ def artifact_from_payload(value: Mapping[str, JsonValue]) -> DurableAgentArtifac
             **metadata,
             claim=str(body["claim"]),
             counterclaim=str(body["counterclaim"]),
-            unresolved=bool(body["unresolved"]),
+            unresolved=_json_bool(body["unresolved"], "unresolved"),
         )
     if kind is ArtifactKind.CRITIQUE:
         return CritiqueArtifact(
             **metadata,
-            accepted=bool(body["accepted"]),
+            accepted=_json_bool(body["accepted"], "accepted"),
             unsupported_claims=_strings(body["unsupported_claims"]),
             evidence_gaps=_strings(body["evidence_gaps"]),
             unresolved_contradiction_ids=tuple(
@@ -578,7 +578,7 @@ def artifact_from_payload(value: Mapping[str, JsonValue]) -> DurableAgentArtifac
             risk=str(body["risk"]),
             rollback=str(body["rollback"]),
             hypothesis_id=UUID(str(body["hypothesis_id"])),
-            proposal_only=bool(body["proposal_only"]),
+            proposal_only=_json_bool(body["proposal_only"], "proposal_only"),
         )
     if kind is ArtifactKind.VERIFICATION_PLAN:
         return VerificationPlanArtifact(
@@ -718,7 +718,7 @@ def _metadata_values(value: Mapping[str, JsonValue]) -> _MetadataValues:
         ),
         "citations": tuple(citations),
         "schema_version": int(str(value["schema_version"])),
-        "redacted": bool(value["redacted"]),
+        "redacted": _json_bool(value["redacted"], "redacted"),
     }
 
 
@@ -749,6 +749,12 @@ def _strings(value: JsonValue) -> tuple[str, ...]:
 
 def _optional_uuid(value: JsonValue) -> UUID | None:
     return UUID(str(value)) if value is not None else None
+
+
+def _json_bool(value: JsonValue, field: str) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"{field} must be a JSON boolean")
+    return value
 
 
 def _validate_supported_claim(

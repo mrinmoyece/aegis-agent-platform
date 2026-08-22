@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Protocol
 from uuid import UUID, uuid4
 
@@ -64,12 +65,14 @@ class SpecialistContext:
     assignment: SpecialistAssignment
     upstream_artifacts: tuple[DurableAgentArtifact, ...]
     evidence: tuple[EvidenceCitation, ...]
+    attempt: int = 1
 
 
 @dataclass(frozen=True, slots=True)
 class SpecialistResult:
     artifacts: Sequence[DurableAgentArtifact]
     used_tokens: int
+    used_cost_usd: Decimal = Decimal("0")
 
     def __post_init__(self) -> None:
         artifacts = tuple(self.artifacts)
@@ -77,6 +80,8 @@ class SpecialistResult:
             raise ValueError("specialist result requires at least one artifact")
         if self.used_tokens < 0:
             raise ValueError("specialist token usage cannot be negative")
+        if self.used_cost_usd < 0:
+            raise ValueError("specialist cost usage cannot be negative")
         object.__setattr__(self, "artifacts", artifacts)
 
 
@@ -91,12 +96,21 @@ class SpecialistEngine(Protocol):
         cancellation: CancellationSignal | None = None,
     ) -> SpecialistResult: ...
 
+    def estimate_cost(self, context: SpecialistContext) -> Decimal: ...
+
+
+@dataclass(frozen=True, slots=True)
+class _ScheduledAssignment:
+    assignment: SpecialistAssignment
+    reserved_cost_usd: Decimal = Decimal("0")
+
 
 @dataclass(frozen=True, slots=True)
 class _ExecutionOutcome:
     assignment: SpecialistAssignment
     result: SpecialistResult | None
     event_type: DomainEventType
+    reserved_cost_usd: Decimal = Decimal("0")
     error_code: str | None = None
     budget_exhausted: bool = False
 
@@ -191,21 +205,13 @@ class DurableCoordinator:
                     context,
                     state,
                     lease,
-                    (
-                        self._event(
-                            state.plan,
-                            lease,
-                            DomainEventType.INVESTIGATION_CANCEL_REQUESTED,
-                            {"reason": "operator_or_deadline_cancellation"},
-                            suffix=f"cancel:{state.version}",
-                        ),
-                    ),
+                    self._cancellation_events(state, lease),
                 )
                 return await self._state(context, run_id)
             ready = ready_assignments(state)
             if not ready:
                 return await self._finish_or_fail(context, state, lease)
-            batch = self._bounded_batch(state, ready)
+            batch, budget_reason = self._bounded_batch(state, ready, evidence)
             if not batch:
                 await self._append(
                     context,
@@ -216,14 +222,20 @@ class DurableCoordinator:
                             state.plan,
                             lease,
                             DomainEventType.INVESTIGATION_BUDGET_EXHAUSTED,
-                            {"reason": "global_token_budget_exhausted"},
+                            {
+                                "reason": (
+                                    budget_reason
+                                    or "global_runtime_budget_exhausted"
+                                )
+                            },
                             suffix=f"budget:{state.version}",
                         ),
                     ),
                 )
                 return await self._state(context, run_id)
             intents: list[EventEnvelope] = []
-            for assignment in batch:
+            for scheduled in batch:
+                assignment = scheduled.assignment
                 attempt = state.tasks[assignment.assignment_id].attempts + 1
                 self._metrics.add("tasks_dispatched", role=assignment.role)
                 if attempt > 1:
@@ -241,6 +253,7 @@ class DurableCoordinator:
                                 "reserved_tokens": (
                                     assignment.budget.token_reservation
                                 ),
+                                "reserved_cost_usd": str(scheduled.reserved_cost_usd),
                             },
                             suffix=f"dispatch:{assignment.assignment_id}:{attempt}",
                         ),
@@ -262,12 +275,12 @@ class DurableCoordinator:
                 *(
                     self._execute_one(
                         state,
-                        assignment,
+                        scheduled,
                         lease,
                         evidence,
                         cancellation=cancellation,
                     )
-                    for assignment in batch
+                    for scheduled in batch
                 )
             )
             events: list[EventEnvelope] = []
@@ -336,6 +349,12 @@ class DurableCoordinator:
                     "assignment_id": str(outcome.assignment.assignment_id),
                     "used_tokens": used_tokens,
                     "reserved_tokens": (outcome.assignment.budget.token_reservation),
+                    "used_cost_usd": (
+                        str(outcome.result.used_cost_usd)
+                        if outcome.result is not None
+                        else "0"
+                    ),
+                    "reserved_cost_usd": str(outcome.reserved_cost_usd),
                 }
                 if outcome.error_code is not None:
                     details["error_code"] = outcome.error_code
@@ -383,27 +402,18 @@ class DurableCoordinator:
     async def _execute_one(
         self,
         state: InvestigationState,
-        assignment: SpecialistAssignment,
+        scheduled: _ScheduledAssignment,
         lease: WorkLease,
         evidence: Mapping[str, EvidenceCitation],
         *,
         cancellation: CancellationSignal | None,
     ) -> _ExecutionOutcome:
-        upstream_tasks = set(assignment.depends_on)
-        upstream_artifacts = tuple(
-            artifact
-            for artifact in state.artifacts
-            if artifact.task_id in upstream_tasks
-        )
-        specialist_context = SpecialistContext(
-            tenant_id=state.plan.tenant_id,
-            incident_id=state.plan.incident_id,
-            run_id=state.plan.run_id,
-            assignment=assignment,
-            upstream_artifacts=upstream_artifacts,
-            evidence=tuple(
-                sorted(evidence.values(), key=lambda item: item.evidence_id)
-            ),
+        assignment = scheduled.assignment
+        specialist_context = self._specialist_context(
+            state,
+            assignment,
+            evidence,
+            attempt=state.tasks[assignment.assignment_id].attempts,
         )
         try:
             with self._tracer.task(assignment.role):
@@ -417,6 +427,8 @@ class DurableCoordinator:
                 )
             if result.used_tokens > assignment.budget.token_reservation:
                 raise ArtifactPolicyError("specialist usage exceeded reservation")
+            if result.used_cost_usd > scheduled.reserved_cost_usd:
+                raise ArtifactPolicyError("specialist cost exceeded reservation")
             seen_kinds: set[object] = set()
             for artifact in result.artifacts:
                 kind = artifact_kind(artifact)
@@ -433,20 +445,23 @@ class DurableCoordinator:
                 assignment,
                 result,
                 DomainEventType.SPECIALIST_TASK_SUCCEEDED,
+                reserved_cost_usd=scheduled.reserved_cost_usd,
             )
         except TimeoutError:
             return _ExecutionOutcome(
                 assignment,
                 None,
                 DomainEventType.SPECIALIST_TASK_TIMED_OUT,
-                "specialist_timeout",
+                reserved_cost_usd=scheduled.reserved_cost_usd,
+                error_code="specialist_timeout",
             )
         except BudgetDeniedError:
             return _ExecutionOutcome(
                 assignment,
                 None,
                 DomainEventType.SPECIALIST_TASK_FAILED,
-                "model_budget_denied",
+                reserved_cost_usd=scheduled.reserved_cost_usd,
+                error_code="model_budget_denied",
                 budget_exhausted=True,
             )
         except FencingError:
@@ -456,21 +471,24 @@ class DurableCoordinator:
                 assignment,
                 None,
                 DomainEventType.SPECIALIST_TASK_FAILED,
-                f"model_{error.error_class.value}",
+                reserved_cost_usd=scheduled.reserved_cost_usd,
+                error_code=f"model_{error.error_class.value}",
             )
         except (ArtifactPolicyError, TypeError, ValueError):
             return _ExecutionOutcome(
                 assignment,
                 None,
                 DomainEventType.SPECIALIST_TASK_FAILED,
-                "invalid_specialist_output",
+                reserved_cost_usd=scheduled.reserved_cost_usd,
+                error_code="invalid_specialist_output",
             )
         except Exception:
             return _ExecutionOutcome(
                 assignment,
                 None,
                 DomainEventType.SPECIALIST_TASK_FAILED,
-                "specialist_bug",
+                reserved_cost_usd=scheduled.reserved_cost_usd,
+                error_code="specialist_bug",
             )
 
     async def _finish_or_fail(
@@ -512,7 +530,13 @@ class DurableCoordinator:
             return await self._state(context, state.plan.run_id)
         exhausted = any(
             task.status
-            in {TaskStatus.FAILED, TaskStatus.TIMED_OUT, TaskStatus.CANCELLED}
+            in {
+                TaskStatus.DISPATCHED,
+                TaskStatus.RUNNING,
+                TaskStatus.FAILED,
+                TaskStatus.TIMED_OUT,
+                TaskStatus.CANCELLED,
+            }
             and task.attempts
             >= next(
                 assignment.budget.max_iterations
@@ -543,19 +567,120 @@ class DurableCoordinator:
         self,
         state: InvestigationState,
         ready: Sequence[SpecialistAssignment],
-    ) -> tuple[SpecialistAssignment, ...]:
-        remaining = (
+        evidence: Mapping[str, EvidenceCitation],
+    ) -> tuple[tuple[_ScheduledAssignment, ...], str | None]:
+        remaining_tokens = (
             state.plan.max_total_tokens - state.used_tokens - state.reserved_tokens
         )
-        batch: list[SpecialistAssignment] = []
+        remaining_cost = (
+            state.plan.max_total_cost_usd
+            - state.used_cost_usd
+            - state.reserved_cost_usd
+        )
+        batch: list[_ScheduledAssignment] = []
+        token_blocked = False
+        cost_blocked = False
         for assignment in ready:
             if len(batch) >= state.plan.max_parallel:
                 break
             reservation = assignment.budget.token_reservation
-            if reservation <= remaining:
-                batch.append(assignment)
-                remaining -= reservation
-        return tuple(batch)
+            estimated_cost = self._estimated_cost(state, assignment, evidence)
+            if reservation > remaining_tokens:
+                token_blocked = True
+                continue
+            if estimated_cost > remaining_cost:
+                cost_blocked = True
+                continue
+            batch.append(_ScheduledAssignment(assignment, estimated_cost))
+            remaining_tokens -= reservation
+            remaining_cost -= estimated_cost
+        if batch:
+            return tuple(batch), None
+        if cost_blocked and not token_blocked:
+            return (), "global_cost_budget_exhausted"
+        if token_blocked and not cost_blocked:
+            return (), "global_token_budget_exhausted"
+        return (), "global_runtime_budget_exhausted"
+
+    def _estimated_cost(
+        self,
+        state: InvestigationState,
+        assignment: SpecialistAssignment,
+        evidence: Mapping[str, EvidenceCitation],
+    ) -> Decimal:
+        estimator = getattr(self._engine, "estimate_cost", None)
+        if not callable(estimator):
+            return Decimal("0")
+        context = self._specialist_context(
+            state,
+            assignment,
+            evidence,
+            attempt=state.tasks[assignment.assignment_id].attempts + 1,
+        )
+        try:
+            return estimator(context)
+        except Exception:
+            return Decimal("0")
+
+    def _specialist_context(
+        self,
+        state: InvestigationState,
+        assignment: SpecialistAssignment,
+        evidence: Mapping[str, EvidenceCitation],
+        *,
+        attempt: int,
+    ) -> SpecialistContext:
+        upstream_tasks = set(assignment.depends_on)
+        upstream_artifacts = tuple(
+            artifact
+            for artifact in state.artifacts
+            if artifact.task_id in upstream_tasks
+        )
+        return SpecialistContext(
+            tenant_id=state.plan.tenant_id,
+            incident_id=state.plan.incident_id,
+            run_id=state.plan.run_id,
+            assignment=assignment,
+            upstream_artifacts=upstream_artifacts,
+            evidence=tuple(
+                sorted(evidence.values(), key=lambda item: item.evidence_id)
+            ),
+            attempt=attempt,
+        )
+
+    def _cancellation_events(
+        self,
+        state: InvestigationState,
+        lease: WorkLease,
+    ) -> tuple[EventEnvelope, ...]:
+        events = [
+            self._event(
+                state.plan,
+                lease,
+                DomainEventType.SPECIALIST_TASK_CANCELLED,
+                {
+                    "assignment_id": str(identifier),
+                    "used_tokens": 0,
+                    "reserved_tokens": task.reserved_tokens,
+                    "used_cost_usd": "0",
+                    "reserved_cost_usd": str(task.reserved_cost_usd),
+                    "error_code": "operator_or_deadline_cancellation",
+                },
+                suffix=f"cancel-task:{identifier}:{task.attempts}",
+            )
+            for identifier, task in state.tasks.items()
+            if task.status in {TaskStatus.DISPATCHED, TaskStatus.RUNNING}
+        ]
+        events.append(
+            self._event(
+                state.plan,
+                lease,
+                DomainEventType.INVESTIGATION_CANCEL_REQUESTED,
+                {"reason": "operator_or_deadline_cancellation"},
+                suffix=f"cancel:{state.version}",
+            )
+        )
+        return tuple(events)
 
     async def _state(
         self,

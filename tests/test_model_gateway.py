@@ -894,6 +894,68 @@ def test_sequential_calls_include_charged_usage_in_budget_checks() -> None:
         )
 
 
+def test_estimate_reservation_cost_uses_local_route_candidates() -> None:
+    repository = InMemoryGatewayRepository(())
+    service = gateway(
+        {
+            "mock-a": ScriptedModelProvider("mock-a", ()),
+            "mock-b": ScriptedModelProvider("mock-b", ()),
+        },
+        repository,
+        (
+            catalog_entry(MODEL_A, cost_rank=0, latency_rank=1),
+            catalog_entry(MODEL_B, cost_rank=1, latency_rank=0),
+        ),
+    )
+    estimated = service.estimate_reservation_cost(
+        request(),
+        policy(),
+        environment=Environment.TEST,
+    )
+    assert estimated == Decimal("0.00044")
+
+
+def test_open_circuit_returns_provider_unavailable_without_calling_provider() -> None:
+    model_request = request()
+    work_lease = lease()
+    repository = InMemoryGatewayRepository((work_lease,))
+    provider = ScriptedModelProvider("mock-a", (response(model_request),))
+    entry = catalog_entry()
+    service = gateway(
+        {"mock-a": provider},
+        repository,
+        (entry,),
+        max_attempts=1,
+        max_failovers=0,
+    )
+    circuit = service._controls.circuit(MODEL_A)
+    for _ in range(circuit.failure_threshold):
+        circuit.fail()
+    outcome, error = asyncio.run(
+        service._try_model(
+            TenantContext(TENANT),
+            model_request,
+            work_lease,
+            BudgetReservation(
+                uuid4(),
+                str(TENANT),
+                model_request.run_id,
+                model_request.request_id,
+                120,
+                Decimal("1"),
+                "price-v1",
+            ),
+            entry,
+            fallback_index=0,
+            cancellation=None,
+        )
+    )
+    assert outcome is None
+    assert error is not None
+    assert error.error_class is ModelErrorClass.PROVIDER_UNAVAILABLE
+    assert provider.calls == []
+
+
 def test_tool_arguments_and_structured_output_are_strictly_validated() -> None:
     schema = JsonSchema(
         "answer",
