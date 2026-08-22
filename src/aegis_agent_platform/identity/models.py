@@ -105,6 +105,11 @@ class RoleBinding:
     def __post_init__(self) -> None:
         if self.assigned_at.tzinfo is None:
             raise ValueError("assigned_at must be timezone-aware")
+        if (
+            self.role is Role.PLATFORM_ADMIN
+            and self.tenant_id != PLATFORM_TENANT_ID
+        ):
+            raise ValueError("platform_admin bindings require the platform tenant")
         if self.expires_at is not None:
             if self.expires_at.tzinfo is None:
                 raise ValueError("expires_at must be timezone-aware")

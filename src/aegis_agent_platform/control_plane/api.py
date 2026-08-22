@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
@@ -20,6 +21,7 @@ from aegis_agent_platform.audit import (
 )
 from aegis_agent_platform.config import ConfigurationError, Settings
 from aegis_agent_platform.domain import EventEnvelope, JsonValue
+from aegis_agent_platform.domain.events import thaw_json
 from aegis_agent_platform.event_store import EventStore
 from aegis_agent_platform.identity import (
     PLATFORM_TENANT_ID,
@@ -107,7 +109,8 @@ class ControlPlaneApp:
         if not isinstance(path, str) or not path.startswith("/v1/"):
             await _respond(send, 404, {"status": "not-found"})
             return
-        principal = await self._authenticate(scope, send)
+        correlation_id = uuid4()
+        principal = await self._authenticate(scope, send, correlation_id)
         if principal is None:
             return
         if path == "/v1/me":
@@ -127,10 +130,10 @@ class ControlPlaneApp:
             )
             return
         if len(segments) == 3:
-            await self._get_tenant(send, principal, tenant_id)
+            await self._get_tenant(send, principal, tenant_id, correlation_id)
             return
         if len(segments) == 4 and segments[3] == "policy":
-            await self._get_policy(send, principal, tenant_id)
+            await self._get_policy(send, principal, tenant_id, correlation_id)
             return
         if len(segments) == 4 and segments[3] == "ledger":
             try:
@@ -146,6 +149,7 @@ class ControlPlaneApp:
                 send,
                 principal,
                 tenant_id,
+                correlation_id=correlation_id,
                 after_position=after_position,
             )
             return
@@ -164,6 +168,7 @@ class ControlPlaneApp:
                 principal,
                 tenant_id,
                 segments[4],
+                correlation_id=correlation_id,
                 after_version=after_version,
             )
             return
@@ -172,7 +177,7 @@ class ControlPlaneApp:
             and segments[3] == "projections"
             and segments[4] == "run-status"
         ):
-            await self._get_run_status(send, principal, tenant_id)
+            await self._get_run_status(send, principal, tenant_id, correlation_id)
             return
         await _respond(send, 404, {"status": "not-found"})
 
@@ -210,8 +215,8 @@ class ControlPlaneApp:
         self,
         scope: AsgiMessage,
         send: Send,
+        correlation_id: UUID,
     ) -> Principal | None:
-        correlation_id = uuid4()
         if self._authentication is None:
             await _respond(
                 send,
@@ -221,7 +226,11 @@ class ControlPlaneApp:
             return None
         authorization_header = _single_header(scope, b"authorization")
         try:
-            principal = self._authentication.authenticate(authorization_header)
+            principal = await asyncio.get_event_loop().run_in_executor(
+                None,
+                self._authentication.authenticate,
+                authorization_header,
+            )
         except AuthenticationError as error:
             self._audit_event(
                 tenant_id=PLATFORM_TENANT_ID,
@@ -262,12 +271,14 @@ class ControlPlaneApp:
         send: Send,
         principal: Principal,
         tenant_id: TenantId,
+        correlation_id: UUID,
     ) -> None:
         if not await self._authorize(
             send,
             principal,
             tenant_id,
             Permission.TENANT_READ,
+            correlation_id=correlation_id,
             resource=f"tenant/{tenant_id}",
         ):
             return
@@ -290,12 +301,14 @@ class ControlPlaneApp:
         send: Send,
         principal: Principal,
         tenant_id: TenantId,
+        correlation_id: UUID,
     ) -> None:
         if not await self._authorize(
             send,
             principal,
             tenant_id,
             Permission.POLICY_READ,
+            correlation_id=correlation_id,
             resource=f"tenant/{tenant_id}/policy",
         ):
             return
@@ -311,6 +324,7 @@ class ControlPlaneApp:
         principal: Principal,
         tenant_id: TenantId,
         *,
+        correlation_id: UUID,
         after_position: int,
     ) -> None:
         if not await self._authorize(
@@ -318,6 +332,7 @@ class ControlPlaneApp:
             principal,
             tenant_id,
             Permission.RESOURCE_READ,
+            correlation_id=correlation_id,
             resource=f"tenant/{tenant_id}/ledger",
         ):
             return
@@ -345,6 +360,7 @@ class ControlPlaneApp:
         tenant_id: TenantId,
         run_id: str,
         *,
+        correlation_id: UUID,
         after_version: int,
     ) -> None:
         if not run_id:
@@ -355,6 +371,7 @@ class ControlPlaneApp:
             principal,
             tenant_id,
             Permission.RESOURCE_READ,
+            correlation_id=correlation_id,
             resource=f"tenant/{tenant_id}/runs/{run_id}/timeline",
         ):
             return
@@ -387,12 +404,14 @@ class ControlPlaneApp:
         send: Send,
         principal: Principal,
         tenant_id: TenantId,
+        correlation_id: UUID,
     ) -> None:
         if not await self._authorize(
             send,
             principal,
             tenant_id,
             Permission.RESOURCE_READ,
+            correlation_id=correlation_id,
             resource=f"tenant/{tenant_id}/projections/run-status",
         ):
             return
@@ -409,6 +428,7 @@ class ControlPlaneApp:
         tenant_id: TenantId,
         permission: Permission,
         *,
+        correlation_id: UUID,
         resource: str,
     ) -> bool:
         decision = self._authorization.decide(
@@ -417,7 +437,7 @@ class ControlPlaneApp:
             permission=permission,
             at=datetime.now(UTC),
         )
-        self._audit_authorization(principal, resource, decision)
+        self._audit_authorization(principal, resource, decision, correlation_id)
         if decision.allowed:
             return True
         await _respond(
@@ -437,6 +457,7 @@ class ControlPlaneApp:
         principal: Principal,
         resource: str,
         decision: AuthorizationDecision,
+        correlation_id: UUID,
     ) -> None:
         self._audit_event(
             tenant_id=principal.tenant_id,
@@ -445,7 +466,7 @@ class ControlPlaneApp:
             actor_id=principal.actor_id,
             action=decision.permission,
             resource=resource,
-            correlation_id=uuid4(),
+            correlation_id=correlation_id,
             details={
                 "attempted_tenant_id": str(decision.tenant_id),
                 "reason": decision.reason,
@@ -584,8 +605,8 @@ def _event_body(event: EventEnvelope) -> dict[str, Any]:
         "correlation_id": (
             str(event.correlation_id) if event.correlation_id is not None else None
         ),
-        "payload": dict(redact_details(event.payload)),
-        "metadata": dict(redact_details(event.metadata)),
+        "payload": thaw_json(redact_details(event.payload)),
+        "metadata": thaw_json(redact_details(event.metadata)),
     }
 
 

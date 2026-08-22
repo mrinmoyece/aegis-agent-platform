@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Any
@@ -13,7 +14,7 @@ from aegis_agent_platform.audit import REDACTED, AuditEventType, InMemoryAuditSt
 from aegis_agent_platform.control_plane.api import ControlPlaneApp, application
 from aegis_agent_platform.domain import DomainEventType, EventEnvelope
 from aegis_agent_platform.event_store import EventPage, EventStore
-from aegis_agent_platform.identity import PLATFORM_TENANT_ID
+from aegis_agent_platform.identity import PLATFORM_TENANT_ID, Principal
 from aegis_agent_platform.policy import InMemoryPolicyRepository
 from aegis_agent_platform.tenancy import (
     InMemoryTenantRepository,
@@ -26,6 +27,9 @@ from security_helpers import (
     signing_fixture,
     tenant_policy,
     token,
+)
+from security_helpers import (
+    principal as fixture_principal,
 )
 
 
@@ -241,6 +245,9 @@ def test_tenant_resource_and_policy_are_tenant_scoped() -> None:
         AuditEventType.AUTHENTICATION_OUTCOME,
         AuditEventType.AUTHORIZATION_DECISION,
     ]
+    assert events[0].correlation_id == events[1].correlation_id
+    assert events[2].correlation_id == events[3].correlation_id
+    assert events[0].correlation_id != events[2].correlation_id
 
 
 def test_cross_tenant_confused_deputy_attempt_is_forbidden() -> None:
@@ -306,7 +313,17 @@ def test_authorized_ledger_and_timeline_are_bounded_and_redacted() -> None:
         recorded_at=datetime(2025, 1, 1, tzinfo=UTC),
         aggregate_sequence=1,
         global_position=1,
-        payload={"api_token": "do-not-return", "status": "running"},
+        payload={
+            "context": {
+                "api_token": "do-not-return",
+                "steps": [{"password": "never-return"}],
+            },
+            "status": "running",
+        },
+        metadata={
+            "authorization": "Bearer very-secret",
+            "nested": {"token": "hide-me"},
+        },
     )
     store = TimelineEventStore(item)
     app, encoded, _ = secured_app(event_store=store)  # type: ignore[arg-type]
@@ -327,9 +344,37 @@ def test_authorized_ledger_and_timeline_are_bounded_and_redacted() -> None:
     assert ledger_status == timeline_status == 200
     assert store.after_position == 0
     assert store.after_version == 0
-    assert ledger["events"][0]["payload"]["api_token"] == REDACTED
+    assert ledger["events"][0]["payload"]["context"]["api_token"] == REDACTED
+    assert ledger["events"][0]["payload"]["context"]["steps"][0]["password"] == REDACTED
+    assert ledger["events"][0]["metadata"]["authorization"] == REDACTED
+    assert ledger["events"][0]["metadata"]["nested"]["token"] == REDACTED
     assert timeline["events"][0]["aggregate_sequence"] == 1
     assert timeline["next_cursor"] is None
+
+
+def test_authentication_runs_in_a_worker_thread() -> None:
+    class ThreadRecordingAuthentication:
+        def __init__(self) -> None:
+            self.thread_id: int | None = None
+
+        def authenticate(self, authorization_header: str | None) -> Principal:
+            self.thread_id = threading.get_ident()
+            assert authorization_header == "Bearer test-token"
+            return fixture_principal()
+
+    authentication = ThreadRecordingAuthentication()
+    app = ControlPlaneApp(authentication=authentication)
+
+    status, body, _ = request(
+        "/v1/me",
+        app=app,
+        authorization="Bearer test-token",
+    )
+
+    assert status == 200
+    assert body["actor_id"] == "user-alice"
+    assert authentication.thread_id is not None
+    assert authentication.thread_id != threading.get_ident()
 
 
 def test_storage_routes_fail_closed_when_adapter_is_not_configured() -> None:

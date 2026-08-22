@@ -320,8 +320,10 @@ demonstrate, and you should not assume from it, any of the following:
   (`tests/test_identity_security.py`, `tests/test_policy_security.py`,
   `tests/test_audit_secrets.py`, `tests/test_migrations.py`) does prove
   cross-tenant denial, malformed/expired/rotated-key tokens, and revoked-role
-  handling — but against deterministic fixtures and a mocked JWKS transport,
-  not a running Postgres or Keycloak instance. That live-infrastructure proof
+  handling — but the IdP path is still proven against deterministic fixtures and
+  a mocked JWKS transport rather than a running Keycloak instance. PostgreSQL
+  isolation is covered live in `tests/integration/test_postgres_storage.py`.
+  That remaining live-infrastructure proof
   is the outstanding Layer 2 acceptance-gate work tracked in `roadmap.md`.
 
 ## Where to go next

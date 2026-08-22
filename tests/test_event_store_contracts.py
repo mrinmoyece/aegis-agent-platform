@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from uuid import uuid4
 
 import psycopg
 import pytest
 
+import aegis_agent_platform.event_store.postgres as postgres_module
 from aegis_agent_platform.domain import DomainEventType, EventEnvelope
 from aegis_agent_platform.event_store import (
     ConcurrencyError,
@@ -19,7 +21,12 @@ from aegis_agent_platform.event_store import (
     ReplayCorruptionError,
     TransientStorageError,
 )
-from aegis_agent_platform.event_store.postgres import classify_storage_error
+from aegis_agent_platform.event_store.postgres import (
+    PostgresEventStore,
+    _required_decimal,
+    _required_uuid,
+    classify_storage_error,
+)
 from aegis_agent_platform.identity import TenantId
 from aegis_agent_platform.projections import (
     ProjectionCheckpoint,
@@ -39,6 +46,18 @@ def stored_event(position: int, sequence: int = 1) -> EventEnvelope:
         recorded_at=datetime(2025, 1, 1, tzinfo=UTC),
         aggregate_sequence=sequence,
         global_position=position,
+        payload={},
+    )
+
+
+def pending_event() -> EventEnvelope:
+    return EventEnvelope(
+        event_id=uuid4(),
+        tenant_id="tenant-a",
+        aggregate_id="run-a",
+        event_type=DomainEventType.RUN_STARTED,
+        schema_version=1,
+        occurred_at=datetime(2025, 1, 1, tzinfo=UTC),
         payload={},
     )
 
@@ -168,6 +187,74 @@ def test_postgres_failures_have_stable_retry_classification() -> None:
         classify_storage_error(psycopg.ProgrammingError("bad schema")),
         PermanentStorageError,
     )
+
+
+def test_projection_helpers_classify_invalid_uuid_and_decimal_values() -> None:
+    with pytest.raises(PermanentStorageError, match="uuid artifact_id"):
+        _required_uuid({"artifact_id": "not-a-uuid"}, "artifact_id")
+    with pytest.raises(
+        PermanentStorageError, match="finite non-negative cost_usd"
+    ):
+        _required_decimal({"cost_usd": "NaN"}, "cost_usd")
+
+
+def test_append_ignores_telemetry_failures_after_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class RaisingTelemetry:
+        def append_completed(self, event_count: int, elapsed_seconds: float) -> None:
+            del event_count, elapsed_seconds
+            raise RuntimeError("telemetry down")
+
+        def append_conflicted(self) -> None:
+            raise RuntimeError("telemetry down")
+
+        def outbox_lag_observed(self, lag_seconds: float) -> None:
+            del lag_seconds
+
+        def projection_lag_observed(self, lag_events: int) -> None:
+            del lag_events
+
+    class DummyAsyncConnection:
+        pass
+
+    @asynccontextmanager
+    async def noop_transaction(
+        connection: object, lock: object, context: TenantContext
+    ) -> AsyncIterator[None]:
+        del connection, lock, context
+        yield
+
+    async def fake_append(
+        self: PostgresEventStore,
+        events: Sequence[EventEnvelope],
+        *,
+        expected_version: int,
+        outbox: Sequence[object],
+    ) -> int:
+        del self, outbox
+        return expected_version + len(events)
+
+    monkeypatch.setattr(postgres_module, "_tenant_transaction", noop_transaction)
+    store = PostgresEventStore(
+        DummyAsyncConnection(),  # type: ignore[arg-type]
+        telemetry=RaisingTelemetry(),
+    )
+    monkeypatch.setattr(
+        store,
+        "_append_in_transaction",
+        fake_append.__get__(store, PostgresEventStore),
+    )
+
+    version = asyncio.run(
+        store.append(
+            TenantContext(TenantId("tenant-a")),
+            [pending_event()],
+            expected_version=0,
+        )
+    )
+
+    assert version == 1
 
 
 def test_projection_rejects_invalid_page_size_and_positions() -> None:
