@@ -262,6 +262,8 @@ class WorkerSupervisor:
         while scheduler:
             while len(self._active) >= self._max_concurrency:
                 await self._wait_one()
+            if self._draining:  # drain() may have fired while blocked above
+                break
             delivery = scheduler.pop()
             if delivery is None:
                 break
@@ -441,13 +443,18 @@ class WorkerSupervisor:
         except FencingError:
             if not await self._state.cancellation_requested(tenant, lease.work_id):
                 return
-            await self._state.cancel(
-                tenant,
-                delivery,
-                lease,
-                at=self._clock(),
-            )
-            self._telemetry.cancelled()
+            try:
+                await self._state.cancel(
+                    tenant,
+                    delivery,
+                    lease,
+                    at=self._clock(),
+                )
+                self._telemetry.cancelled()
+            except FencingError:
+                # Lease was reclaimed between the fenced start() and cancel();
+                # the new holder is responsible for the durable outcome.
+                return
         except asyncio.CancelledError:
             # Preserve the pending entry and live lease for expiry-based recovery.
             raise

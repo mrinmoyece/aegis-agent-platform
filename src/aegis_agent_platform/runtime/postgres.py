@@ -746,6 +746,7 @@ class PostgresWorkRepository:
                 at=at,
                 reason="retry_scheduled",
                 retry_at=retry_at,
+                running_only=True,
             )
 
         await self._events.append_fenced(
@@ -1662,7 +1663,14 @@ class PostgresWorkRepository:
         at: datetime,
         reason: str,
         retry_at: datetime,
+        running_only: bool = False,
     ) -> None:
+        """Release a lease back to retry_wait.
+
+        Set ``running_only=True`` when called from ``fail()`` to restrict the
+        eligible status to ``running``, preventing an invalid ``CLAIMED →
+        RETRY_WAIT`` transition that ``next_status()`` would reject on replay.
+        """
         cursor = await connection.execute(
             """
             UPDATE work_leases
@@ -1682,14 +1690,24 @@ class PostgresWorkRepository:
         )
         if cursor.rowcount != 1:
             raise FencingError(lease.generation, 0)
-        cursor = await connection.execute(
+        if running_only:
+            status_sql = """
+            UPDATE work_items
+            SET status = 'retry_wait', available_at = %s
+            WHERE tenant_id = %s AND work_id = %s
+              AND status = 'running'
+              AND cancel_requested_at IS NULL
             """
+        else:
+            status_sql = """
             UPDATE work_items
             SET status = 'retry_wait', available_at = %s
             WHERE tenant_id = %s AND work_id = %s
               AND status IN ('claimed', 'running')
               AND cancel_requested_at IS NULL
-            """,
+            """
+        cursor = await connection.execute(
+            status_sql,
             (retry_at, lease.tenant_id, lease.work_id),
         )
         if cursor.rowcount != 1:

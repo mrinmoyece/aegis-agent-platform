@@ -103,6 +103,7 @@ class OutboxPublisher:
             lease_expires_at=now + self._lease_duration,
             now=now,
             limit=self._batch_size,
+            destination="aegis.work",
         )
         published = failed = 0
         for raw_claim in claims:
@@ -122,6 +123,7 @@ class OutboxPublisher:
                         context,
                         claim.message.message_id,
                         lease_owner=claim.lease_owner,
+                        lease_expires_at=claim.lease_expires_at,
                         published_at=now,
                     )
             except RetryableQueueError:
@@ -157,6 +159,7 @@ class OutboxPublisher:
             context,
             claim.message.message_id,
             lease_owner=claim.lease_owner,
+            lease_expires_at=claim.lease_expires_at,
             retry_at=now + self._retry_delay(claim.attempt_count),
             error_code=error_code,
         )

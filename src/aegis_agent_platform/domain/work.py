@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import StrEnum
 from types import MappingProxyType
+from typing import ClassVar, Self, cast
 from uuid import UUID
 
 from aegis_agent_platform.domain.events import (
@@ -17,28 +17,54 @@ from aegis_agent_platform.domain.events import (
 )
 
 
-class WorkStatus(StrEnum):
+class _StringConstant(str):
+    _values: ClassVar[dict[str, Self]]
+
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
+        cls._values = {}
+
+    def __new__(cls, value: str) -> Self:
+        try:
+            return cls._values[value]
+        except KeyError as error:
+            raise ValueError(f"{value!r} is not a valid {cls.__name__}") from error
+
+    @classmethod
+    def _define(cls, value: str) -> Self:
+        member = cast(Self, str.__new__(cls, value))
+        cls._values[value] = member
+        return member
+
+    @property
+    def value(self) -> str:
+        return str(self)
+
+
+class WorkStatus(_StringConstant):
     """Authoritative lifecycle states reconstructed from work events."""
 
-    REQUESTED = "requested"
-    PUBLISHED = "published"
-    CLAIMED = "claimed"
-    RUNNING = "running"
-    RETRY_WAIT = "retry_wait"
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-    DEAD_LETTER = "dead_letter"
+
+WorkStatus.REQUESTED = WorkStatus._define("requested")
+WorkStatus.PUBLISHED = WorkStatus._define("published")
+WorkStatus.CLAIMED = WorkStatus._define("claimed")
+WorkStatus.RUNNING = WorkStatus._define("running")
+WorkStatus.RETRY_WAIT = WorkStatus._define("retry_wait")
+WorkStatus.SUCCEEDED = WorkStatus._define("succeeded")
+WorkStatus.FAILED = WorkStatus._define("failed")
+WorkStatus.CANCELLED = WorkStatus._define("cancelled")
+WorkStatus.DEAD_LETTER = WorkStatus._define("dead_letter")
 
 
-class FailureClass(StrEnum):
+class FailureClass(_StringConstant):
     """Stable retry policy classification, independent of exception classes."""
 
-    RETRYABLE = "retryable"
-    PERMANENT = "permanent"
-    CANCELLED = "cancelled"
-    TIMEOUT = "timeout"
-    WORKER_BUG = "worker_bug"
+
+FailureClass.RETRYABLE = FailureClass._define("retryable")
+FailureClass.PERMANENT = FailureClass._define("permanent")
+FailureClass.CANCELLED = FailureClass._define("cancelled")
+FailureClass.TIMEOUT = FailureClass._define("timeout")
+FailureClass.WORKER_BUG = FailureClass._define("worker_bug")
 
 
 TERMINAL_WORK_STATUSES = frozenset(
@@ -119,7 +145,7 @@ class WorkTransition:
     lease: WorkLease | None = None
 
     def __post_init__(self) -> None:
-        if not self.event_type.value.startswith("work."):
+        if not str(self.event_type).startswith("work."):
             raise ValueError("work transition requires a work event type")
         if self.occurred_at.tzinfo is None:
             raise ValueError("transition time must be timezone-aware")
@@ -163,9 +189,7 @@ class WorkTransition:
             payload=payload,
             correlation_id=request.correlation_id,
             causation_id=causation_id or request.causation_id,
-            idempotency_key=(
-                f"{request.idempotency_key}:{self.event_type.value}:{event_id}"
-            ),
+            idempotency_key=f"{request.idempotency_key}:{self.event_type}:{event_id}",
         )
 
 
@@ -222,12 +246,12 @@ def next_status(current: WorkStatus | None, event_type: DomainEventType) -> Work
         DomainEventType.WORK_RECONCILED,
     }:
         if current is None or current in TERMINAL_WORK_STATUSES:
-            raise ValueError(f"{event_type.value} is invalid from {current}")
+            raise ValueError(f"{event_type} is invalid from {current}")
         return current
     try:
         return transitions[(current, event_type)]
     except KeyError as error:
-        raise ValueError(f"{event_type.value} is invalid from {current}") from error
+        raise ValueError(f"{event_type} is invalid from {current}") from error
 
 
 __all__ = [
