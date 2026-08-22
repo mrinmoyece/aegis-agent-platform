@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from math import inf, nan
+from typing import Any
 from uuid import uuid4
 
 import pytest
 from scripts.check_manifests import (
     dockerfile_final_user,
+    keycloak_mapper_matches,
     unpinned_workflow_actions,
 )
 
@@ -20,6 +22,35 @@ from aegis_agent_platform.integrations.dynatrace import (
 from aegis_agent_platform.integrations.github import ChangeEvidence, ChangeKind
 from aegis_agent_platform.providers import ModelMessage, ModelRequest, ModelResponse
 from aegis_agent_platform.queueing import Lease
+
+
+def test_keycloak_mapper_validation_checks_security_configuration() -> None:
+    mapper: dict[str, Any] = {
+        "protocol": "openid-connect",
+        "protocolMapper": "oidc-audience-mapper",
+        "config": {
+            "included.client.audience": "aegis-control-plane",
+            "access.token.claim": "true",
+        },
+    }
+
+    assert keycloak_mapper_matches(
+        mapper,
+        mapper_type="oidc-audience-mapper",
+        required_config={
+            "included.client.audience": "aegis-control-plane",
+            "access.token.claim": "true",
+        },
+    )
+    mapper["config"]["access.token.claim"] = "false"
+    assert not keycloak_mapper_matches(
+        mapper,
+        mapper_type="oidc-audience-mapper",
+        required_config={
+            "included.client.audience": "aegis-control-plane",
+            "access.token.claim": "true",
+        },
+    )
 
 
 @pytest.mark.parametrize("value", [nan, inf, -inf])

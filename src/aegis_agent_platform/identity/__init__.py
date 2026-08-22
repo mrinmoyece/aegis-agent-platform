@@ -1,14 +1,55 @@
-"""Authentication principal contracts."""
+"""Identity, authentication, and authorization boundaries."""
 
-from __future__ import annotations
+from aegis_agent_platform.identity.authentication import (
+    AuthenticationError,
+    AuthenticationErrorCode,
+    AuthenticationService,
+    IdentityRecord,
+    InMemoryIdentityDirectory,
+    JwtValidationConfig,
+    JwtVerifier,
+    RemoteJwksProvider,
+    StaticJwksProvider,
+    VerificationKey,
+    VerifiedClaims,
+)
+from aegis_agent_platform.identity.authorization import (
+    AuthorizationDecision,
+    AuthorizationService,
+)
+from aegis_agent_platform.identity.models import (
+    PLATFORM_TENANT_ID,
+    Permission,
+    Principal,
+    PrincipalKind,
+    Role,
+    RoleBinding,
+    ServiceIdentity,
+    TenantId,
+    UserId,
+)
 
-from dataclasses import dataclass
-
-
-@dataclass(frozen=True, slots=True)
-class Principal:
-    """Authenticated subject before tenant authorization is applied."""
-
-    subject: str
-    issuer: str
-    roles: frozenset[str]
+__all__ = [
+    "PLATFORM_TENANT_ID",
+    "AuthenticationError",
+    "AuthenticationErrorCode",
+    "AuthenticationService",
+    "AuthorizationDecision",
+    "AuthorizationService",
+    "IdentityRecord",
+    "InMemoryIdentityDirectory",
+    "JwtValidationConfig",
+    "JwtVerifier",
+    "Permission",
+    "Principal",
+    "PrincipalKind",
+    "RemoteJwksProvider",
+    "Role",
+    "RoleBinding",
+    "ServiceIdentity",
+    "StaticJwksProvider",
+    "TenantId",
+    "UserId",
+    "VerificationKey",
+    "VerifiedClaims",
+]

@@ -34,6 +34,7 @@ class Settings:
     oidc_issuer: str = ""
     oidc_jwks_url: str = ""
     oidc_audience: str = ""
+    oidc_clock_skew_seconds: int = 30
 
     def __post_init__(self) -> None:
         """Enforce invariants for every construction path."""
@@ -57,6 +58,13 @@ class Settings:
             port = int(port_raw)
         except ValueError as error:
             raise ConfigurationError("AEGIS_PORT must be an integer") from error
+        clock_skew_raw = values.get("AEGIS_OIDC_CLOCK_SKEW_SECONDS", "30")
+        try:
+            clock_skew_seconds = int(clock_skew_raw)
+        except ValueError as error:
+            raise ConfigurationError(
+                "AEGIS_OIDC_CLOCK_SKEW_SECONDS must be an integer"
+            ) from error
 
         settings = cls(
             environment=environment,
@@ -74,7 +82,11 @@ class Settings:
             redis_url=values.get("AEGIS_REDIS_URL", ""),
             oidc_issuer=values.get("AEGIS_OIDC_ISSUER", ""),
             oidc_jwks_url=values.get("AEGIS_OIDC_JWKS_URL", ""),
-            oidc_audience=values.get("AEGIS_OIDC_AUDIENCE", ""),
+            oidc_audience=values.get(
+                "AEGIS_OIDC_AUDIENCE",
+                "",
+            ),
+            oidc_clock_skew_seconds=clock_skew_seconds,
         )
         return settings
 
@@ -86,6 +98,10 @@ class Settings:
             raise ConfigurationError("AEGIS_LOG_LEVEL is not recognized")
         if not self.service_name.strip():
             raise ConfigurationError("AEGIS_SERVICE_NAME cannot be empty")
+        if not 0 <= self.oidc_clock_skew_seconds <= 300:
+            raise ConfigurationError(
+                "AEGIS_OIDC_CLOCK_SKEW_SECONDS must be between 0 and 300"
+            )
         if self.environment is Environment.PRODUCTION:
             required = {
                 "AEGIS_DATABASE_URL": self.database_url,

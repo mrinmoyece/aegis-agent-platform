@@ -2,10 +2,15 @@
 
 ## Current implementation
 
-Layer 1 can demonstrate architecture contracts, local infrastructure, tests, and
-the health-only API. It cannot query Dynatrace or GitHub, run specialists,
-approve actions, roll back a deployment, or update a real incident. Future
-steps below are the acceptance narrative for later layers.
+Layer 1 and Layer 2 can demonstrate architecture contracts, local
+infrastructure, tests, and an authenticated control-plane vertical slice for
+identity, tenancy, and governance (JWT verification, deny-by-default
+authorization, policy/quota decisions, redacted audit events — see
+`identity-tenancy.md`). The demo cannot yet query Dynatrace or GitHub, run
+specialists, approve actions, roll back a deployment, or update a real
+incident, and the identity/tenancy slice runs against deterministic fixtures
+rather than a live-network Keycloak realm. Future steps below are the
+acceptance narrative for later layers.
 
 ## Canonical story: checkout failures after deployment
 
@@ -26,11 +31,15 @@ steps below are the acceptance narrative for later layers.
 
 ## 15-minute foundation demo
 
-- **0–2:** Give the elevator pitch and state Layer 1 limitations.
+- **0–2:** Give the elevator pitch and state current Layer 1/2 limitations.
 - **2–5:** Walk the package map and pure-domain dependency test.
 - **5–8:** Show typed evidence adapters and fixed agent artifacts.
 - **8–11:** Explain event truth, intent-before-effect, and fenced leases.
-- **11–13:** Render Compose and call `/healthz` and `/readyz`.
+- **11–13:** Render Compose and call `/healthz`/`/readyz`; then use the injected
+  `ControlPlaneApp` fixture in `tests/test_api.py` to present a signed JWT to
+  `/v1/me` and `/v1/tenants/{tenant_id}/policy`. The exported Compose process
+  intentionally returns `503 authentication_not_configured` on protected routes
+  until a production identity adapter is wired.
 - **13–15:** Trace the future checkout scenario and point to roadmap gates.
 
 ## 30-minute architecture interview demo

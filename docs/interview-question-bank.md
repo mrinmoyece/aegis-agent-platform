@@ -67,6 +67,90 @@ intent persistence, controlled tool validation, and sandbox/egress controls.
 to the ledger. No direct chat, recursive spawning, hidden scratchpad authority,
 or capability transfer.
 
+## Identity and tenancy deep dive
+
+> Layer 2 implements a real vertical slice for these questions
+> (`identity/authentication.py`, `identity/authorization.py`, `policy/`,
+> `audit.py`, `secrets_boundary.py`, `migrations/0001_identity_governance.sql`),
+> proven by a committed automated negative-test suite
+> (`tests/test_identity_security.py`, `tests/test_policy_security.py`,
+> `tests/test_audit_secrets.py`, `tests/test_migrations.py`). Durable Postgres
+> wiring, live-Keycloak drills, and quota usage accounting remain planned —
+> see `limitations.md` and `roadmap.md` before claiming the full gate is met.
+
+### Why does `AuthorizationService.decide` check tenant match before checking permission?
+
+**Answer outline:** deny-by-default means the cheapest, least-ambiguous check
+runs first. A caller from tenant A must never learn *anything* about tenant
+B's roles or permissions — not even "the permission would have been denied
+anyway." Checking tenant identity first and returning
+`cross_tenant_access_denied` collapses the entire cross-tenant surface to a
+single reason code, so no permission-specific detail leaks across a tenant
+boundary. It also means a bug in `ROLE_PERMISSIONS` can never accidentally
+grant cross-tenant access, because the tenant check is unconditional and
+runs in code the permission table cannot influence.
+
+### Why verify JWTs against a deterministic `StaticJwksProvider` fixture instead of a live Keycloak realm in tests and the tutorial?
+
+**Answer outline:** correctness of signature/issuer/audience/expiry
+verification is a property of the verifier and the key material, not of the
+network. An ephemeral test keypair with stable claim shape and identifiers makes
+tests reproducible, offline, and fast, and lets negative cases
+(wrong `kid`, wrong issuer, expired token) be constructed exactly rather than
+raced against a live IdP's clock and rotation schedule. `RemoteJwksProvider`
+exists specifically so the *same* `JwtVerifier` code path also works against a
+real Keycloak-compatible JWKS endpoint — the fixture proves the verifier
+logic; a deployment-time integration check proves reachability. Conflating
+the two would make unit tests flaky for reasons that have nothing to do with
+the code under test.
+
+### Why does `AuthenticationService` resolve identity through `IdentityDirectory` instead of trusting claims already inside the verified JWT?
+
+**Answer outline:** a verified signature only proves the issuer signed those
+claims at issuance time — it does not prove the subject is still enabled,
+still belongs to the tenant it claims, or still holds the roles a client
+might embed in a custom claim. Treating the JWT as authoritative for
+authorization would let a valid-but-stale or attacker-influenced claim (e.g.
+a role claim from an over-broad IdP mapping) bypass this system's own
+tenant/role source of truth. The directory is the single place authority is
+looked up, so revoking a user or changing tenant membership takes effect
+immediately without waiting for token expiry.
+
+### Why is `PolicyEvaluator.evaluate` a pure function over a tenant-bound, caller-supplied `QuotaUsage` instead of querying live usage itself?
+
+**Answer outline:** keeping the evaluator pure — no I/O, no wall clock, no
+hidden lookups — makes every policy decision a deterministic, unit-testable
+fold over its inputs, consistent with the domain-purity invariant. It also
+makes the *boundary* between "what counts as usage" (a runtime/accounting
+concern, planned for later layers) and "what a limit means" (a governance
+concern, implemented now) explicit and independently testable. If the
+evaluator queried usage itself, testing policy edge cases would require
+faking a stateful usage store instead of just constructing a `QuotaUsage`
+value.
+
+### Why are secrets modeled as `SecretReference`/`SecretValue` instead of plain strings?
+
+**Answer outline:** a plain string secret can be logged, serialized into an
+audit event, or captured in a stack trace by accident — there is no type
+system to stop it. `SecretReference` carries only provider, name, and version
+metadata, so a component can request a secret without ever holding it.
+`SecretValue` wraps the revealed material in a slotted object whose `repr`
+and `str` are redacted by construction, and `.reveal()` is the single
+explicit call site where material becomes visible — making every accidental
+leak path (logging, string interpolation, equality against a log line) fail
+safe instead of fail open.
+
+### Why does `AuditEvent.__post_init__` redact `details` unconditionally instead of trusting the caller to redact first?
+
+**Answer outline:** an append-only, tamper-evident audit log is only useful if
+it can never be revoked from bad callers — but caller discipline is exactly
+the kind of invariant that erodes over time as new call sites are added.
+Redacting inside the frozen dataclass's constructor means there is no way to
+construct an `AuditEvent` instance carrying an unredacted secret, regardless
+of which route, specialist, or future caller creates it. This is the same
+"fail closed by construction" pattern as `SecretValue`: the safety property
+lives in the type, not in caller convention.
+
 ## Evidence and evaluation
 
 ### How do you avoid blaming the nearest deployment?

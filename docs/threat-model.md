@@ -2,10 +2,13 @@
 
 ## Scope and assumptions
 
-This model covers the intended platform and marks Layer 1 controls honestly.
-The system assumes model output, tool output, retrieved content, and tenant
-input can be hostile. Cloud, identity provider, model provider, and operator
-accounts can be compromised. Prompt instructions are never trusted as controls.
+This model covers the intended platform and marks control status honestly.
+Layer 1 established contracts and guardrails; Layer 2 adds a real identity,
+tenancy, and governance vertical slice described below and in
+`architecture.md`. The system assumes model output, tool output, retrieved
+content, and tenant input can be hostile. Cloud, identity provider, model
+provider, and operator accounts can be compromised. Prompt instructions are
+never trusted as controls.
 
 ## Assets
 
@@ -33,18 +36,18 @@ accounts can be compromised. Prompt instructions are never trusted as controls.
 
 ## Principal threats and required controls
 
-| Threat | Example impact | Required control | Layer 1 status |
+| Threat | Example impact | Required control | Current status |
 | --- | --- | --- | --- |
-| Tenant confusion | Cross-tenant reads or work claims | Explicit tenant context, database policy, negative tests | Contract only |
-| Identity spoofing | Attacker acts as an operator | OIDC validation, key rotation, audience checks | Local IdP scaffold |
+| Tenant confusion | Cross-tenant reads or work claims | Explicit tenant context, database policy, negative tests | Deny-by-default authorization and tenant-scoped repositories implemented (in-memory) with a committed cross-tenant negative-test suite (`tests/test_identity_security.py`, `tests/test_api.py`); Postgres row-level security defined in migration and asserted statically (`tests/test_migrations.py`), but not yet exercised against a live database |
+| Identity spoofing | Attacker acts as an operator | OIDC validation, key rotation, audience checks | Standards-correct JWT signature/issuer/audience/expiry/algorithm verification implemented against deterministic fixtures and a Keycloak-compatible JWKS config, with a committed negative-test suite for malformed/expired/wrong-issuer/wrong-audience/unsupported-algorithm tokens; live-IdP key-rotation drills against a running Keycloak remain a deployment-time check |
 | Prompt injection | Model invokes unauthorized tool | Typed tool allowlist, runtime policy, approval | Boundary only |
 | Confused deputy | Tool uses broader platform privilege | Scoped capability token per invocation | Planned |
 | Duplicate delivery | Repeated financial or external effect | Intent event, idempotency key, reconciliation | Invariant only |
-| Event tampering | False state or missing audit evidence | Append controls, hashes/retention, restricted roles | Planned |
+| Event tampering | False state or missing audit evidence | Append controls, hashes/retention, restricted roles | Redacted, additive-schema audit events implemented (in-memory) with a committed test suite proving redaction and append-only behavior at the application layer (`tests/test_audit_secrets.py`); append-only database trigger and row-level security defined in migration and asserted statically, but durable wiring, retention, and access review remain planned |
 | Sandbox escape | Host or network compromise | Strong isolation, deny-by-default egress, quotas | Boundary only |
-| Secret exfiltration | Credentials in prompts or telemetry | Brokered secrets, redaction, content policy | `.gitignore` only |
+| Secret exfiltration | Credentials in prompts or telemetry | Brokered secrets, redaction, content policy | Secret-reference abstraction, redacted `SecretValue`, and audit-detail redaction implemented; only a local environment-variable provider exists, no vault-backed broker |
 | Provider data leakage | Sensitive content retained externally | Provider policy, classification, regional routing | Planned |
-| Resource exhaustion | Runaway token/tool loop | Budgets, deadlines, queue backpressure, quotas | Planned |
+| Resource exhaustion | Runaway token/tool loop | Budgets, deadlines, queue backpressure, quotas | Pure tenant quota/risk policy evaluator implemented; authoritative usage accounting and runtime enforcement planned with the durable runtime |
 | Supply-chain compromise | Malicious build dependency/action | Pinned actions, review, scanning, attestations | Partial |
 | Telemetry leakage | Tenant data in labels or traces | Redaction and bounded-cardinality conventions | Planned |
 | Evaluation poisoning | Unsafe release passes gates | Dataset provenance, immutable results, approvals | Planned |
@@ -121,9 +124,35 @@ claims.
 
 ## Layer 1 residual risk
 
-Nearly all runtime controls are unimplemented. Dynatrace and GitHub contracts do
-not authenticate or call vendor APIs. The health endpoint is
-unauthenticated by design and carries no sensitive data. The Compose stack uses
-local-only credentials and exposes ports on loopback, but a developer workstation
-remains outside the production threat model. Do not use Layer 1 for real tenant
-or provider data.
+Most agent-runtime controls are still unimplemented. Dynatrace and GitHub
+contracts do not authenticate or call vendor APIs. The health endpoints are
+unauthenticated by design and carry no sensitive data. The Compose stack uses
+local-only credentials and exposes ports on loopback, but a developer
+workstation remains outside the production threat model. Do not use this
+repository for real tenant or provider data.
+
+## Layer 2 residual risk
+
+Authentication, deny-by-default authorization, tenant-scoped policy/quota
+evaluation, and redacted audit events are implemented and proven by a
+committed automated test suite (`tests/test_identity_security.py`,
+`tests/test_policy_security.py`, `tests/test_audit_secrets.py`,
+`tests/test_migrations.py`, and cross-tenant/authentication cases in
+`tests/test_api.py`) covering cross-tenant denial,
+malformed/expired/wrong-issuer/wrong-audience/unsupported-algorithm tokens,
+expired and revoked role bindings, quota/policy allow-deny-require-approval
+boundaries, and audit redaction/append-only behavior at the application
+layer — all against deterministic fixtures. What remains open: the default
+repositories (`InMemoryIdentityDirectory`, `InMemoryTenantRepository`,
+`InMemoryPolicyRepository`, `InMemoryAuditStore`) are deterministic in-process
+fixtures; the Postgres migration defines the durable, row-level-secured
+equivalents and its schema is asserted statically
+(`tests/test_migrations.py`), but no adapter connects them yet, so restart
+loses all state and the row-level-security policies have not been exercised
+against a running database. `RemoteJwksProvider` is tested against a mocked
+HTTPS transport, not a live Keycloak realm — whether that realm is reachable,
+populated with users, and rotated correctly is a deployment concern not
+verified by these tests. Quota *limits* are evaluated deterministically;
+quota *usage* accounting has no authoritative source until the durable
+runtime lands. Secrets remain local-environment-variable only; there is no
+vault-backed broker, rotation, or leak-scanning pipeline.

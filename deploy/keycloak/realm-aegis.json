@@ -4,6 +4,16 @@
   "displayName": "Aegis local development",
   "registrationAllowed": false,
   "resetPasswordAllowed": false,
+  "roles": {
+    "realm": [
+      {"name": "viewer"},
+      {"name": "investigator"},
+      {"name": "approver"},
+      {"name": "operator"},
+      {"name": "tenant_admin"},
+      {"name": "platform_admin"}
+    ]
+  },
   "clients": [
     {
       "clientId": "aegis-control-plane",
@@ -12,6 +22,34 @@
       "publicClient": true,
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
+      "protocolMappers": [
+        {
+          "name": "aegis-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "aegis-control-plane",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "tenant-id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "tenant_id",
+            "claim.name": "tenant_id",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "false",
+            "multivalued": "false"
+          }
+        }
+      ],
       "redirectUris": [
         "http://localhost:8080/*"
       ],

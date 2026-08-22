@@ -22,14 +22,47 @@ tenant-scoped and vendor objects stay at adapters; docs make no claims about
 working connectors or unimplemented runtime behavior. Agent roles are fixed and
 their only communication port persists typed artifacts.
 
-## Layer 2 — Identity and tenancy
+## Layer 2 — Identity, tenancy, and governance
 
-Validate OIDC tokens, model principals and tenant memberships, enforce
-tenant-scoped authorization, and isolate tenant records.
+Validate OIDC/JWT tokens against a Keycloak-compatible configuration, model
+principals and tenant memberships, enforce deny-by-default tenant-scoped
+authorization, isolate tenant records, and add tenant governance policy/quota
+decisioning, redacted append-only security audit events, and a secret-reference
+abstraction.
 
-**Acceptance gate:** cross-tenant negative tests cover API and persistence;
-issuer, audience, expiry, and key rotation are tested; no operation defaults to
-an implicit tenant.
+**Status:** `identity.authentication` (JWT verification, JWKS providers),
+`identity.authorization` (deny-by-default role-based decisions),
+`policy.PolicyEvaluator` (allowlist/risk/quota decisions), `audit`
+(redacted, additive, tenant-scoped events), and `secrets_boundary` (reference-
+only secrets) are implemented. Authentication, tenant authorization, policy
+inspection, and audit are wired into a read-only control-plane vertical slice
+(`/v1/me`, `/v1/tenants/{tenant_id}`,
+`/v1/tenants/{tenant_id}/policy`); policy evaluation and secret resolution are
+tested standalone boundaries, not route behavior. A committed automated test suite
+(`tests/test_identity_security.py`, `tests/test_policy_security.py`,
+`tests/test_audit_secrets.py`, `tests/test_migrations.py`, and the
+cross-tenant/authentication cases in `tests/test_api.py`) proves cross-tenant
+denial, invalid/expired/wrong-issuer/wrong-audience/malformed tokens,
+unsupported algorithms, expired and revoked role bindings, quota/policy
+allow-deny-require-approval boundaries, redaction, and audit append-only
+behavior — all against deterministic fixtures, not a live network. The
+Postgres migration `0001_identity_governance.sql` defines tenant-isolated,
+row-level-secured tables and an append-only audit trigger, and
+`tests/test_migrations.py` asserts the schema contains those constraints
+statically; no adapter connects the in-memory ports above to a running
+Postgres yet, and the row-level-security policies have not been exercised
+against a live database.
+
+**Acceptance gate:** cross-tenant negative tests cover the API — done; the
+same coverage against a live, row-level-secured Postgres instance remains
+open. Issuer, audience, expiry, and unsupported-algorithm rejection are
+tested — done; live Keycloak key rotation against a running IdP is a
+deployment-time check, not yet exercised by these tests. No operation
+defaults to an implicit tenant — done. Quota and policy decisions have
+deterministic tests covering allow/deny/require-approval and limit-exceeded
+cases — done. Audit events are proven redacted and append-only at the
+application layer — done; proving the database trigger against a live
+Postgres instance remains open.
 
 ## Layer 3 — Events and durable orchestration
 

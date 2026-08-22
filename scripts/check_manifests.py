@@ -74,6 +74,22 @@ def action_is_pinned(action: str) -> bool:
     return action.startswith("./") or ACTION_PATTERN.fullmatch(action) is not None
 
 
+def keycloak_mapper_matches(
+    mapper: dict[str, Any],
+    *,
+    mapper_type: str,
+    required_config: dict[str, str],
+) -> bool:
+    """Validate the mapper type and every security-relevant setting."""
+    config = mapper.get("config")
+    return (
+        mapper.get("protocol") == "openid-connect"
+        and mapper.get("protocolMapper") == mapper_type
+        and isinstance(config, dict)
+        and all(config.get(key) == value for key, value in required_config.items())
+    )
+
+
 def main() -> None:
     """Check parseability and repository security conventions."""
     with (ROOT / "pyproject.toml").open("rb") as handle:
@@ -124,6 +140,45 @@ def main() -> None:
         realm = json.load(handle)
     if realm["realm"] != "aegis" or realm.get("registrationAllowed") is not False:
         raise SystemExit("local Keycloak realm must disable self-registration")
+    client = next(
+        (
+            item
+            for item in realm["clients"]
+            if item.get("clientId") == "aegis-control-plane"
+        ),
+        None,
+    )
+    if client is None or client.get("directAccessGrantsEnabled") is not False:
+        raise SystemExit("Keycloak control-plane client must disable password grants")
+    mappers = {
+        mapper.get("name"): mapper for mapper in client.get("protocolMappers", [])
+    }
+    audience_mapper = mappers.get("aegis-audience")
+    tenant_mapper = mappers.get("tenant-id")
+    if not isinstance(audience_mapper, dict) or not keycloak_mapper_matches(
+        audience_mapper,
+        mapper_type="oidc-audience-mapper",
+        required_config={
+            "included.client.audience": "aegis-control-plane",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+        },
+    ):
+        raise SystemExit("Keycloak client audience mapper is unsafe")
+    if not isinstance(tenant_mapper, dict) or not keycloak_mapper_matches(
+        tenant_mapper,
+        mapper_type="oidc-usermodel-attribute-mapper",
+        required_config={
+            "user.attribute": "tenant_id",
+            "claim.name": "tenant_id",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "false",
+            "multivalued": "false",
+        },
+    ):
+        raise SystemExit("Keycloak client requires audience and tenant claim mappers")
 
 
 if __name__ == "__main__":

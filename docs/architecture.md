@@ -4,8 +4,12 @@
 
 Aegis separates decision-making from effects so an interrupted incident
 investigation can be explained, resumed, and audited. Its reference product is
-an enterprise incident-response agent. Layer 1 establishes package and trust
-boundaries; connectors, investigation, and orchestration arrive in later layers.
+an enterprise incident-response agent. Layer 1 established package and trust
+boundaries. Layer 2 adds a real, test-suite-verified control-plane vertical
+slice for identity, tenancy, and governance: JWT authentication, deny-by-default
+tenant authorization, tenant policy/quota evaluation, and redacted audit
+evidence. Connectors, durable investigation, and orchestration arrive in later
+layers.
 
 ```mermaid
 flowchart LR
@@ -28,8 +32,12 @@ flowchart LR
 ```
 
 Dashed paths are diagnostic, never authoritative. The Dynatrace and GitHub
-packages currently define read ports only. Boxes beyond health and configuration
-contracts are planned, not implemented.
+packages currently define read ports only. The control plane now authenticates
+callers, enforces tenant authorization, and exposes tenant-scoped policy
+inspection (see "Identity, tenancy, and governance boundary" below). Pure
+policy/quota evaluation is implemented as a standalone boundary but is not
+invoked by these read-only routes; the event store, durable queue, worker
+runtime, providers, and connector adapters remain planned, not implemented.
 
 ## Package boundaries
 
@@ -57,6 +65,134 @@ and implement ports defined toward the core.
 `integrations.dynatrace` and `integrations.github` expose provider-neutral,
 tenant-scoped evidence contracts. Future adapters will translate vendor APIs at
 those edges. Investigation logic cannot import vendor SDK objects or credentials.
+
+## Identity, tenancy, and governance boundary
+
+```mermaid
+sequenceDiagram
+  participant C as Caller
+  participant CP as Control plane
+  participant J as JwtVerifier + JWKS provider
+  participant D as IdentityDirectory
+  participant Z as AuthorizationService
+  participant Q as PolicyEvaluator
+  participant A as AuditStore
+  C->>CP: Bearer JWT
+  CP->>J: verify signature, issuer, audience, expiry
+  J-->>CP: VerifiedClaims
+  CP->>D: resolve(claims)
+  D-->>CP: Principal (tenant, roles)
+  CP->>A: append(AuthenticationOutcome)
+  opt tenant or policy inspection
+    CP->>Z: decide(principal, tenant_id, permission)
+    Z-->>CP: AuthorizationDecision
+    CP->>A: append(AuthorizationDecision, same correlation ID)
+  end
+  Note over Q: standalone pure boundary; no API operation invokes it yet
+```
+
+The authenticated identity, tenant, and policy-inspection path is an
+implemented vertical slice, while policy/quota evaluation, audit, and secret
+resolution are tested standalone boundaries. They are proven by a
+committed automated negative-test suite (`tests/test_identity_security.py`,
+`tests/test_policy_security.py`, `tests/test_audit_secrets.py`,
+`tests/test_migrations.py`, and cross-tenant/authentication cases in
+`tests/test_api.py`). `identity.models`
+defines provider-neutral, normalized identifiers (`TenantId`, `UserId`,
+`ServiceIdentity`), a fixed `Role`/`Permission` set, time-bound `RoleBinding`s
+(`assigned_at`/`expires_at`/`revoked_at`), and a `Principal` that must resolve
+to exactly one internal user or service identity whose role bindings all match
+its own tenant.
+
+**Authentication (`identity.authentication`).** `JwtVerifier` validates
+signature, algorithm allowlist, `iss`, `aud`, `exp`/`iat` with bounded clock
+skew, and requires `kid`-addressed key lookup through a small `JwksProvider`
+port. Two providers exist: `StaticJwksProvider` is a deterministic in-memory
+fixture used by tests and local development with no network dependency, and
+`RemoteJwksProvider` is a small cached HTTPS adapter compatible with a
+Keycloak realm's JWKS endpoint, sourced from the existing
+`AEGIS_OIDC_ISSUER`/`AEGIS_OIDC_JWKS_URL`/`AEGIS_OIDC_AUDIENCE` settings. Once a
+token verifies, `AuthenticationService` resolves the verified claims against an
+authoritative local `IdentityDirectory` — it never trusts a caller-supplied
+identity or tenant header, and rejects unknown, disabled, or tenant-mismatched
+subjects with a classified, secret-safe `AuthenticationError`. Whether a real
+Keycloak realm is reachable over the network is a deployment concern; the
+verifier and directory are exercised end to end today using deterministic RSA
+key fixtures and in-memory identity records, with no live IdP call required.
+
+**Authorization (`identity.authorization`).** `AuthorizationService.decide` is
+a pure function that denies cross-tenant access before it ever inspects a
+permission, then checks only role bindings active at a caller-supplied instant
+against a fixed `ROLE_PERMISSIONS` table (`viewer`, `investigator`, `approver`,
+`operator`, `tenant_admin`, `platform_admin`). The result is a fully auditable
+`AuthorizationDecision` with the allow/deny outcome, reason, tenant, permission,
+and the active roles considered — deny-by-default, never inferred from
+resource payloads.
+
+**Tenancy (`tenancy`).** `TenantContext` only ever wraps a validated `TenantId`
+and every repository port (`TenantRepository`, `PolicyRepository`,
+`AuditStore`) accepts that trusted context as an explicit parameter rather than
+reading a tenant identifier out of request data.
+
+**Governance, policy, and quotas (`policy`).** `TenantPolicy` is a versioned,
+per-tenant document with allowlists for models, tools, connectors, and
+environments; a maximum risk level; a risk threshold above which approval is
+required; an explicit approver-role set; and `QuotaLimits` (per-run token/cost
+ceilings, tenant-period token/cost ceilings, and a concurrency ceiling).
+`PolicyEvaluator.evaluate` is a pure, deterministic standalone function with no
+I/O: it
+combines allowlist checks, risk comparison, and quota arithmetic against
+tenant-bound `QuotaUsage` to return an auditable `PolicyDecision`
+(`allow`/`deny`/`require_approval`, reasons, and required approver roles).
+Quota *usage* accounting itself — the authoritative counters this evaluator
+consumes — is a durable-runtime concern and remains planned with the Layer
+3/4 event store and worker runtime.
+
+**Audit (`audit`).** Security events use additive, versioned type names
+(`security.authentication_outcome.v1`, `security.authorization_decision.v1`,
+`security.policy_evaluation.v1`, `security.approval_identity_recorded.v1`,
+`security.administrative_change.v1`); existing names are never repurposed, only
+new ones added. Every `AuditEvent` unconditionally redacts fields whose keys
+look like credentials, tokens, prompts, or secrets, and scrubs inline bearer
+values from any remaining string content, before the frozen dataclass is
+constructed — a caller cannot bypass redaction. `InMemoryAuditStore` is a
+deterministic, tenant-scoped, append-only store used by the current vertical
+slice; a durable Postgres-backed adapter is described by migration
+`0001_identity_governance.sql` (see below) but not yet wired up.
+
+**Secrets (`secrets_boundary`).** Tools and adapters carry a `SecretReference`
+(provider, name, optional version) rather than raw material. `SecretValue`
+never exposes its bytes through `repr`/`str`; only an explicit `.reveal()` call
+at the adapter boundary returns them. `EnvironmentSecretProvider` only resolves
+names prefixed `AEGIS_SECRET_` from an explicit environment snapshot — it does
+not implicitly read arbitrary process environment variables. This is a local
+development provider, not a secret broker; a vault-backed provider remains
+planned.
+
+**Durable persistence.** `migrations/0001_identity_governance.sql` creates
+`tenants`, `identities`, `role_bindings`, `tenant_policies`, `tenant_quotas`,
+and `security_audit_events` tables. Row-level security is enabled and forced
+on every tenant-scoped table, with a policy requiring `tenant_id` to equal the
+session's `aegis.tenant_id` setting, and an append-only trigger rejects
+`UPDATE`/`DELETE`/`TRUNCATE` on `security_audit_events`. The control plane's default
+repositories remain the in-memory adapters above; connecting them to this
+schema, and to the event store and worker runtime, is Layer 3/4 work.
+
+**Control-plane API surface.** `ControlPlaneApp` composes the pieces above
+behind a small route set: `/healthz` and `/health/live` for liveness,
+`/readyz` and `/health/ready` for configuration readiness (unauthenticated, as
+in Layer 1), `/v1/me` returning the authenticated principal's tenant and active
+roles, `/v1/tenants/{tenant_id}` returning the tenant record, and
+`/v1/tenants/{tenant_id}/policy` returning the tenant's governance policy and
+quotas. Every `/v1/*` route requires a valid bearer token and a passing
+authentication check. Tenant and policy routes additionally require a passing
+authorization decision; `/v1/me` returns the already-authenticated principal
+without a separate permission check. Authentication outcomes are always
+audited, and authorization outcomes are audited when authorization is
+evaluated, using one request correlation ID. The policy route inspects stored
+policy but does not invoke `PolicyEvaluator`, and no route resolves secrets.
+No other `/v1/*` surface should be assumed until it appears in the code and its
+tests.
 
 ## Canonical incident: checkout failures after deployment
 
@@ -222,16 +358,26 @@ The browser-to-control-plane, control-plane-to-identity-provider,
 runtime-to-provider, and runtime-to-sandbox paths are separate trust crossings.
 Tenant input, model output, provider responses, tool output, retrieved memory,
 event payloads, incident evidence, runbooks, and source-control metadata are all
-untrusted until validated for their destination.
+untrusted until validated for their destination. A bearer token is untrusted
+until `JwtVerifier` checks its signature, issuer, audience, and expiry; a
+verified token is still untrusted as tenant/role authority until
+`IdentityDirectory` resolves it against an authoritative local record.
 
-PostgreSQL will own the event log and durable projections. Redis will be used
-only where data loss cannot violate correctness. OpenTelemetry carries
-correlation metadata with tenant-safe cardinality; sensitive content is excluded
-by default.
+PostgreSQL will own the event log and durable projections; migration
+`0001_identity_governance.sql` already defines its tenant, identity,
+role-binding, policy, quota, and append-only audit tables with row-level
+security, ahead of the durable event store landing in Layer 3. Redis will be
+used only where data loss cannot violate correctness. OpenTelemetry carries
+correlation metadata with tenant-safe cardinality; sensitive content is
+excluded by default, and audit-event redaction follows the same principle.
 
 ## Local topology
 
-Compose provides pgvector-enabled PostgreSQL, Redis, Keycloak, an OpenTelemetry
-Collector, Prometheus, Grafana, and the health-only API. Ports bind to loopback.
-The API runs read-only as a non-root user with Linux capabilities dropped.
-These are developer conveniences, not a production deployment model.
+Compose provides pgvector-enabled PostgreSQL (now initialized with the
+identity/governance migration), Redis, Keycloak, an OpenTelemetry Collector,
+Prometheus, Grafana, and the control-plane API. Ports bind to loopback. The API
+runs as a non-root user with Linux capabilities dropped. The imported Keycloak
+realm has no users and self-registration disabled; it is a config-shape
+reference for the JWKS/issuer/audience abstraction, not a live-tested identity
+path in the fast local checks. These are developer conveniences, not a
+production deployment model.
