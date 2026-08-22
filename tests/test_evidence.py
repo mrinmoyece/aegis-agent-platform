@@ -8,6 +8,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -761,8 +762,7 @@ def test_query_execution_records_redaction_dedup_quarantine_and_cursor() -> None
     repository = InMemoryEvidenceRepository()
     source = raw(
         summary=(
-            "alice@example.com token=secret-token-value "
-            "client_secret=very-secret-value"
+            "alice@example.com token=secret-token-value client_secret=very-secret-value"
         ),
         fields={
             "api_token": "hidden-token-value",
@@ -1169,4 +1169,4 @@ def test_evidence_query_selectors_are_immutable() -> None:
 
     assert query_value.selectors["service"] == "checkout"
     with pytest.raises(TypeError):
-        query_value.selectors["service"] = "orders"
+        cast("dict[str, str]", query_value.selectors)["service"] = "orders"

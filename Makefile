@@ -23,13 +23,13 @@ type: ## Run strict type checks
 	$(PYTHON) -m mypy
 
 test: ## Run deterministic unit tests with coverage
-	$(PYTHON) -m pytest --cov --cov-report=term-missing
+	PYTHONPATH=src:tests:$$PYTHONPATH $(PYTHON) -m pytest --cov --cov-report=term-missing
 
 postgres-test: ## Run live PostgreSQL integration tests (requires AEGIS_TEST_DATABASE_URL)
-	$(PYTHON) -m pytest tests/integration
+	PYTHONPATH=src:tests:$$PYTHONPATH $(PYTHON) -m pytest tests/integration
 
 integration-test: ## Run live PostgreSQL and Redis integration tests
-	$(PYTHON) -m pytest tests/integration
+	PYTHONPATH=src:tests:$$PYTHONPATH $(PYTHON) -m pytest tests/integration
 
 docs-check: ## Validate documentation links and required content
 	$(PYTHON) scripts/check_docs.py

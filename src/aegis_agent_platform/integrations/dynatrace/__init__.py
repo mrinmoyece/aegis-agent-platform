@@ -20,11 +20,11 @@ from aegis_agent_platform.domain import (
     EvidenceSourceKind,
     JsonValue,
     PartialResult,
-    require_aware_datetime,
     ServiceIdentity,
     SpanReference,
     TraceReference,
     TrustStatus,
+    require_aware_datetime,
 )
 from aegis_agent_platform.evidence import (
     CancellationSignal,
@@ -44,6 +44,8 @@ from aegis_agent_platform.secrets_boundary import SecretProvider
 from aegis_agent_platform.tenancy import TenantContext
 
 _SELECTOR = re.compile(r"^[A-Za-z0-9_.:/-]{1,256}$")
+
+
 class SignalKind(StrEnum):
     """Dynatrace evidence classes used during incident correlation."""
 
@@ -460,9 +462,7 @@ def _grail_poll_delay(
     deadline: float,
 ) -> float | None:
     try:
-        hinted_seconds = (
-            None if retry_after is None else max(0.0, float(retry_after))
-        )
+        hinted_seconds = None if retry_after is None else max(0.0, float(retry_after))
     except ValueError:
         hinted_seconds = None
     remaining = max(0.0, deadline - time.monotonic())
@@ -746,4 +746,9 @@ def _seconds(value: int) -> timedelta:
     return timedelta(seconds=value)
 
 
-__all__ = ["DynatraceAdapter", "DynatraceEvidenceReader", "SignalKind", "TelemetryEvidence"]
+__all__ = [
+    "DynatraceAdapter",
+    "DynatraceEvidenceReader",
+    "SignalKind",
+    "TelemetryEvidence",
+]

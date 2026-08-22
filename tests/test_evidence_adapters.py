@@ -1163,9 +1163,7 @@ def test_kubernetes_validation_capabilities_and_malformed_resources() -> None:
             )
         )
     )
-    assert event_page.records[0].observed_at == datetime(
-        2026, 8, 13, 8, 56, tzinfo=UTC
-    )
+    assert event_page.records[0].observed_at == datetime(2026, 8, 13, 8, 56, tzinfo=UTC)
 
 
 def test_kubernetes_cursor_resumes_one_collection_and_rejects_multi_kind() -> None:

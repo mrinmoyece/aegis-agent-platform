@@ -8,13 +8,12 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from typing import Protocol
 from urllib.parse import quote, urlencode
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
-
-from typing import Protocol
 
 from aegis_agent_platform.domain import (
     ChangeReference,
@@ -47,6 +46,7 @@ from aegis_agent_platform.integrations._pagination import decode_cursor, encode_
 from aegis_agent_platform.integrations.config import GitHubConnectorConfig
 from aegis_agent_platform.secrets_boundary import SecretProvider
 from aegis_agent_platform.tenancy import TenantContext
+
 
 class ChangeKind(StrEnum):
     """Source and delivery changes relevant to incident correlation."""
