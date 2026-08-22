@@ -6,9 +6,11 @@ import asyncio
 import json
 import re
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import cast
+from enum import StrEnum
+from typing import Protocol, cast
 from urllib.parse import urlencode
 
 from aegis_agent_platform.domain import (
@@ -18,6 +20,7 @@ from aegis_agent_platform.domain import (
     EvidenceSourceKind,
     JsonValue,
     PartialResult,
+    require_aware_datetime,
     ServiceIdentity,
     SpanReference,
     TraceReference,
@@ -41,6 +44,48 @@ from aegis_agent_platform.secrets_boundary import SecretProvider
 from aegis_agent_platform.tenancy import TenantContext
 
 _SELECTOR = re.compile(r"^[A-Za-z0-9_.:/-]{1,256}$")
+class SignalKind(StrEnum):
+    """Dynatrace evidence classes used during incident correlation."""
+
+    LOG = "log"
+    TRACE = "trace"
+    METRIC = "metric"
+    TOPOLOGY = "topology"
+    PROBLEM = "problem"
+    EVENT = "event"
+
+
+@dataclass(frozen=True, slots=True)
+class TelemetryEvidence:
+    """Normalized evidence with an immutable vendor reference."""
+
+    reference: str
+    kind: SignalKind
+    observed_at: datetime
+    summary: str
+    attributes: Mapping[str, JsonValue]
+
+    def __post_init__(self) -> None:
+        """Require a timestamp safe for cross-source incident correlation."""
+        require_aware_datetime(self.observed_at, field_name="observed_at")
+
+
+class DynatraceEvidenceReader(Protocol):
+    """Tenant-scoped read port; implementations arrive in a later layer."""
+
+    async def collect(
+        self,
+        *,
+        tenant: TenantContext,
+        query: str,
+        start: datetime,
+        end: datetime,
+        kinds: Sequence[SignalKind],
+    ) -> Sequence[TelemetryEvidence]:
+        """Collect normalized incident evidence for a bounded time window."""
+        ...
+
+
 _SUPPORTED = (
     EvidenceKind.LOG,
     EvidenceKind.METRIC,
@@ -701,4 +746,4 @@ def _seconds(value: int) -> timedelta:
     return timedelta(seconds=value)
 
 
-__all__ = ["DynatraceAdapter"]
+__all__ = ["DynatraceAdapter", "DynatraceEvidenceReader", "SignalKind", "TelemetryEvidence"]

@@ -92,6 +92,8 @@ def policy() -> TenantPolicy:
         frozenset(),
         frozenset({Role.TENANT_ADMIN}),
         QuotaLimits(0, Decimal(0), 0, Decimal(0), 10),
+        frozenset({"openai"}),
+        frozenset({"us"}),
     )
 
 
@@ -739,6 +741,8 @@ def test_query_policy_is_tenant_environment_connector_and_window_bound() -> None
         denied.tools_requiring_approval,
         denied.approver_roles,
         denied.quotas,
+        denied.allowed_providers,
+        denied.allowed_data_residencies,
     )
     with pytest.raises(PermissionError, match="connector_not_allowed"):
         asyncio.run(service.request(CONTEXT, request, denied, actor_id="alice"))

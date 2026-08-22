@@ -183,6 +183,7 @@ class ControlPlaneApp:
                 receive,
                 principal,
                 tenant_id,
+                correlation_id=correlation_id,
             )
             return
         if (
@@ -201,6 +202,7 @@ class ControlPlaneApp:
                 principal,
                 tenant_id,
                 segments[4],
+                correlation_id=correlation_id,
                 cursor=cursor,
             )
             return
@@ -214,6 +216,7 @@ class ControlPlaneApp:
                 principal,
                 tenant_id,
                 segments[5],
+                correlation_id=correlation_id,
             )
             return
         if (
@@ -226,6 +229,7 @@ class ControlPlaneApp:
                 principal,
                 tenant_id,
                 segments[5],
+                correlation_id=correlation_id,
             )
             return
         if len(segments) == 4 and segments[3] == "ledger":
@@ -280,12 +284,15 @@ class ControlPlaneApp:
         receive: Receive,
         principal: Principal,
         tenant_id: TenantId,
+        *,
+        correlation_id: UUID,
     ) -> None:
         if not await self._authorize(
             send,
             principal,
             tenant_id,
             Permission.EVIDENCE_QUERY,
+            correlation_id=correlation_id,
             resource=f"tenant/{tenant_id}/evidence/queries",
         ):
             return
@@ -340,6 +347,7 @@ class ControlPlaneApp:
         tenant_id: TenantId,
         view: str,
         *,
+        correlation_id: UUID,
         cursor: tuple[int, int] | None,
     ) -> None:
         if not await self._authorize(
@@ -347,6 +355,7 @@ class ControlPlaneApp:
             principal,
             tenant_id,
             Permission.EVIDENCE_READ,
+            correlation_id=correlation_id,
             resource=f"tenant/{tenant_id}/evidence/{view}",
         ):
             return
@@ -400,12 +409,15 @@ class ControlPlaneApp:
         principal: Principal,
         tenant_id: TenantId,
         query_id: str,
+        *,
+        correlation_id: UUID,
     ) -> None:
         if not await self._authorize(
             send,
             principal,
             tenant_id,
             Permission.EVIDENCE_READ,
+            correlation_id=correlation_id,
             resource=f"tenant/{tenant_id}/evidence/query",
         ):
             return
@@ -439,12 +451,15 @@ class ControlPlaneApp:
         principal: Principal,
         tenant_id: TenantId,
         bundle_id: str,
+        *,
+        correlation_id: UUID,
     ) -> None:
         if not await self._authorize(
             send,
             principal,
             tenant_id,
             Permission.EVIDENCE_READ,
+            correlation_id=correlation_id,
             resource=f"tenant/{tenant_id}/evidence/bundle",
         ):
             return

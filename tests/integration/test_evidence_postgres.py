@@ -105,6 +105,8 @@ def _policy() -> TenantPolicy:
         tools_requiring_approval=frozenset(),
         approver_roles=frozenset({Role.TENANT_ADMIN}),
         quotas=QuotaLimits(0, Decimal(0), 0, Decimal(0), 10),
+        allowed_providers=frozenset({"openai"}),
+        allowed_data_residencies=frozenset({"us"}),
     )
 
 
