@@ -51,12 +51,37 @@ PROHIBITED_DOMAIN_CALLS = {
 
 def imported_modules(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    package_parts = _package_parts(path)
     imports: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             imports.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
-            imports.add("." * node.level + (node.module or ""))
+            imports.update(_import_from_modules(node, package_parts))
+    return imports
+
+
+def _package_parts(path: Path) -> tuple[str, ...]:
+    relative = path.relative_to(ROOT / "src")
+    return relative.parts[:-1]
+
+
+def _import_from_modules(
+    node: ast.ImportFrom,
+    package_parts: tuple[str, ...],
+) -> set[str]:
+    if node.level:
+        base_parts = package_parts[: len(package_parts) - (node.level - 1)]
+    else:
+        base_parts = ()
+    module_parts = tuple(node.module.split(".")) if node.module else ()
+    prefix = ".".join((*base_parts, *module_parts))
+    imports = {prefix} if prefix and node.module else set()
+    imports.update(
+        ".".join((*base_parts, *module_parts, alias.name))
+        for alias in node.names
+        if alias.name != "*"
+    )
     return imports
 
 
@@ -242,3 +267,18 @@ def test_evaluation_never_becomes_a_runtime_dependency() -> None:
     ]
 
     assert not violations
+
+
+def test_import_helper_tracks_from_import_targets_and_relative_imports() -> None:
+    absolute_node = ast.parse("from aegis_agent_platform import evals").body[0]
+    relative_node = ast.parse("from . import evals").body[0]
+
+    assert isinstance(absolute_node, ast.ImportFrom)
+    assert isinstance(relative_node, ast.ImportFrom)
+    assert _import_from_modules(absolute_node, ("aegis_agent_platform",)) == {
+        "aegis_agent_platform",
+        "aegis_agent_platform.evals",
+    }
+    assert _import_from_modules(relative_node, ("aegis_agent_platform",)) == {
+        "aegis_agent_platform.evals"
+    }

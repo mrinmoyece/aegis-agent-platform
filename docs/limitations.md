@@ -334,9 +334,8 @@
 
 Aegis does not currently diagnose live checkout failures, protect production data,
 guarantee exactly-once effects, embedding, indexing, or provider billing, certify
-a production code sandbox, satisfy a
-compliance framework, provide a completed Layer 11 evaluation harness, meet an
-SLO, or support multi-region recovery. Live local
+a production code sandbox, satisfy a compliance framework, meet an SLO, or
+support multi-region recovery. Live local
 PostgreSQL tests prove specific RLS and durability controls, not production
 deployment hardening or operational readiness.
 

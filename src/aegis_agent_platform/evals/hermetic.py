@@ -14,7 +14,13 @@ class HermeticityError(RuntimeError):
 
 
 class HermeticExecutionGuard:
-    """Deny network sockets, child processes, and ambient shell execution."""
+    """Deny common network/process effects during deterministic evaluation.
+
+    This in-process monkey-patching is a best-effort guard only: pull-request code
+    can still bypass selected patched names via lower-level or pre-bound aliases.
+    Production evaluation must therefore run inside a network- and process-isolated
+    container or equivalent OS-level sandbox.
+    """
 
     def __init__(self) -> None:
         self._stack = ExitStack()
