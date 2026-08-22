@@ -13,7 +13,11 @@ from uuid import UUID
 from aegis_agent_platform.domain import FailureClass, JsonValue, WorkLease
 from aegis_agent_platform.event_store import ConcurrencyError, FencingError
 from aegis_agent_platform.identity import TenantId
-from aegis_agent_platform.observability.runtime import RuntimeTracer
+from aegis_agent_platform.observability.runtime import (
+    RuntimeMetrics,
+    RuntimeTracer,
+    shared_runtime_metrics,
+)
 from aegis_agent_platform.queueing import QueueDelivery, WorkQueue
 from aegis_agent_platform.runtime.backoff import ExponentialBackoff
 from aegis_agent_platform.tenancy import TenantContext
@@ -144,31 +148,37 @@ class WorkerStateStore(Protocol):
 
 
 class RuntimeTelemetry:
-    """No-op bounded-cardinality metrics sink."""
+    """Bounded-cardinality runtime metrics sink backed by a shared registry."""
+
+    def __init__(self, metrics: RuntimeMetrics | None = None) -> None:
+        self._metrics = metrics or shared_runtime_metrics()
 
     def claim_conflict(self) -> None:
-        pass
+        self._metrics.add("claim_conflicts")
 
     def active_leases(self, value: int) -> None:
-        del value
+        self._metrics.set_gauge("active_leases", float(value))
 
     def heartbeat_failure(self) -> None:
-        pass
+        self._metrics.add("heartbeat_failures")
 
     def retry(self) -> None:
-        pass
+        self._metrics.add("retries")
 
     def dead_letter(self) -> None:
-        pass
+        self._metrics.add("dead_letters")
 
     def completed(self, latency_seconds: float) -> None:
-        del latency_seconds
+        self._metrics.add("work_latency", latency_seconds)
 
     def cancelled(self) -> None:
-        pass
+        self._metrics.add("cancellations")
 
     def reconciliation(self, outcome: str) -> None:
-        del outcome
+        if outcome == "failure":
+            self._metrics.add("reconciliation_failure")
+            return
+        self._metrics.add("reconciliation_success")
 
 
 class FairTenantScheduler:
@@ -275,6 +285,8 @@ class WorkerSupervisor:
             count=min(count, self._max_concurrency * 4),
             block_milliseconds=block_milliseconds,
         )
+        if self._drain_requested():
+            return 0
         await self.run_batch(deliveries)
         return len(deliveries)
 
@@ -292,6 +304,8 @@ class WorkerSupervisor:
             minimum_idle_milliseconds=minimum_idle_milliseconds,
             count=min(count, self._max_concurrency * 4),
         )
+        if self._drain_requested():
+            return 0
         await self.run_batch(deliveries)
         return len(deliveries)
 
@@ -317,6 +331,9 @@ class WorkerSupervisor:
         self._telemetry.active_leases(len(self._active))
         for task in done:
             task.result()
+
+    def _drain_requested(self) -> bool:
+        return self._draining
 
     async def _process(self, delivery: QueueDelivery) -> None:
         try:
@@ -364,9 +381,9 @@ class WorkerSupervisor:
             ):
                 await self._queue.acknowledge(delivery)
             return
-        await self._state.start(tenant, delivery, lease, at=self._clock())
         cancellation = asyncio.Event()
         try:
+            await self._state.start(tenant, delivery, lease, at=self._clock())
             with self._tracer.span("work.execute"):
                 result = await self._execute_handler(
                     tenant,
@@ -404,6 +421,8 @@ class WorkerSupervisor:
             )
         except WorkerExecutionError as error:
             if error.failure_class is FailureClass.CANCELLED:
+                if not await self._state.cancellation_requested(tenant, lease.work_id):
+                    return
                 await self._state.cancel(
                     tenant,
                     delivery,

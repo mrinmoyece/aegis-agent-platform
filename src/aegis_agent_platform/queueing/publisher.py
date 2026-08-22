@@ -10,7 +10,11 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 from aegis_agent_platform.event_store import ClaimedOutboxMessage
-from aegis_agent_platform.observability.runtime import RuntimeTracer
+from aegis_agent_platform.observability.runtime import (
+    RuntimeMetrics,
+    RuntimeTracer,
+    shared_runtime_metrics,
+)
 from aegis_agent_platform.queueing import (
     MessageEnvelope,
     OutboxRepository,
@@ -24,14 +28,18 @@ from aegis_agent_platform.tenancy import TenantContext
 class PublisherTelemetry:
     """Bounded-cardinality publisher metrics interface."""
 
+    def __init__(self, metrics: RuntimeMetrics | None = None) -> None:
+        self._metrics = metrics or shared_runtime_metrics()
+
     def outbox_lag(self, seconds: float) -> None:
-        del seconds
+        self._metrics.set_gauge("outbox_lag", seconds)
 
     def published(self) -> None:
         pass
 
     def failed(self, *, retryable: bool) -> None:
         del retryable
+        self._metrics.add("publish_failures")
 
 
 @dataclass(frozen=True, slots=True)

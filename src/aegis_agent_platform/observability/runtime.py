@@ -1,4 +1,10 @@
-"""OpenTelemetry runtime spans and bounded in-process metric instruments."""
+"""OpenTelemetry runtime spans and bounded in-process metric instruments.
+
+TODO: queue-wide gauges such as ``stream_pending_depth``, ``oldest_pending_age``,
+and ``dlq_depth`` still need bounded transport snapshots from the runtime loop.
+The shared in-process registry below keeps those metric names reserved so future
+queue inspections can publish them without changing the public telemetry surface.
+"""
 
 from __future__ import annotations
 
@@ -23,6 +29,7 @@ class RuntimeMetrics:
             "active_leases",
             "heartbeat_failures",
             "retries",
+            "dead_letters",
             "dlq_depth",
             "work_latency",
             "cancellations",
@@ -56,6 +63,14 @@ class RuntimeMetrics:
             return dict(self._values)
 
 
+_SHARED_RUNTIME_METRICS = RuntimeMetrics()
+
+
+def shared_runtime_metrics() -> RuntimeMetrics:
+    """Return the process-wide bounded runtime metric registry."""
+    return _SHARED_RUNTIME_METRICS
+
+
 class RuntimeTracer:
     """Small OTel adapter that records operation classes, never identifiers."""
 
@@ -79,4 +94,4 @@ class RuntimeTracer:
             yield
 
 
-__all__ = ["RuntimeMetrics", "RuntimeTracer"]
+__all__ = ["RuntimeMetrics", "RuntimeTracer", "shared_runtime_metrics"]

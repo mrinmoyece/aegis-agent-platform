@@ -36,9 +36,38 @@ from aegis_agent_platform.queueing import QueueDelivery
 from aegis_agent_platform.runtime.operations import RequeueApproval
 from aegis_agent_platform.tenancy import TenantContext
 
+_MAX_UUID = UUID(int=(1 << 128) - 1)
+_KeysetCursor = tuple[datetime, UUID]
+_RedriveRow = tuple[UUID, UUID]
+_ExpiredLeaseRow = tuple[
+    UUID,
+    UUID,
+    int,
+    str,
+    int,
+    datetime,
+    datetime,
+    datetime,
+    datetime | None,
+    int,
+]
+
 
 class _ClaimUnavailableError(Exception):
     pass
+
+
+def _descending_cursor(cursor: _KeysetCursor | datetime | None) -> _KeysetCursor:
+    if cursor is None:
+        return (datetime.max.replace(tzinfo=UTC), _MAX_UUID)
+    if isinstance(cursor, tuple):
+        requested_at, work_id = cursor
+        if requested_at.tzinfo is None:
+            raise ValueError("cursor timestamps must be timezone-aware")
+        return (requested_at, work_id)
+    if cursor.tzinfo is None:
+        raise ValueError("cursor timestamps must be timezone-aware")
+    return (cursor, _MAX_UUID)
 
 
 class PostgresWorkRepository:
@@ -199,7 +228,7 @@ class PostgresWorkRepository:
                     SELECT attempt_count, max_attempts
                     FROM work_items
                     WHERE tenant_id = %s AND work_id = %s
-                      AND status IN ('requested', 'published', 'retry_wait')
+                      AND status IN ('published', 'retry_wait')
                       AND cancel_requested_at IS NULL
                     """,
                     (request.tenant_id, request.work_id),
@@ -273,7 +302,7 @@ class PostgresWorkRepository:
                 SET status = 'claimed', attempt_count = %s
                 WHERE tenant_id = %s AND work_id = %s
                   AND attempt_count = %s
-                  AND status IN ('requested', 'published', 'retry_wait')
+                  AND status IN ('published', 'retry_wait')
                   AND available_at <= clock_timestamp()
                   AND cancel_requested_at IS NULL
                 """,
@@ -801,31 +830,34 @@ class PostgresWorkRepository:
                     """,
                     (str(context.tenant_id), limit),
                 )
-                redrive_rows = await redrive_cursor.fetchall()
-                cursor = await self._connection.execute(
-                    """
-                    SELECT l.work_id, l.lease_token, l.generation, l.owner,
-                        w.attempt_count, l.acquired_at, l.heartbeat_at,
-                        l.expires_at, w.cancel_requested_at, w.max_attempts
-                    FROM work_leases AS l
-                    JOIN work_items AS w
-                      ON w.tenant_id = l.tenant_id
-                     AND w.work_id = l.work_id
-                    WHERE l.tenant_id = %s AND l.released_at IS NULL
-                      AND l.expires_at <= %s
-                    ORDER BY l.expires_at, l.work_id
-                    LIMIT %s
-                    """,
-                    (str(context.tenant_id), now, limit),
-                )
-                rows = await cursor.fetchall()
+                redrive_rows = cast(list[_RedriveRow], await redrive_cursor.fetchall())
+                remaining = max(limit - len(redrive_rows), 0)
+                rows: list[_ExpiredLeaseRow] = []
+                if remaining > 0:
+                    cursor = await self._connection.execute(
+                        """
+                        SELECT l.work_id, l.lease_token, l.generation, l.owner,
+                            w.attempt_count, l.acquired_at, l.heartbeat_at,
+                            l.expires_at, w.cancel_requested_at, w.max_attempts
+                        FROM work_leases AS l
+                        JOIN work_items AS w
+                          ON w.tenant_id = l.tenant_id
+                         AND w.work_id = l.work_id
+                        WHERE l.tenant_id = %s AND l.released_at IS NULL
+                          AND l.expires_at <= %s
+                        ORDER BY l.expires_at, l.work_id
+                        LIMIT %s
+                        """,
+                        (str(context.tenant_id), now, remaining),
+                    )
+                    rows = cast(list[_ExpiredLeaseRow], await cursor.fetchall())
         except psycopg.Error as error:
             raise classify_storage_error(error) from error
 
         reconciled: list[UUID] = []
-        for row in redrive_rows:
-            work_id = UUID(str(row[0]))
-            message_id = UUID(str(row[1]))
+        for redrive_row in redrive_rows:
+            work_id = UUID(str(redrive_row[0]))
+            message_id = UUID(str(redrive_row[1]))
             request = await self._load_request(context, work_id)
             event = WorkTransition(
                 DomainEventType.WORK_RECONCILED,
@@ -882,22 +914,22 @@ class PostgresWorkRepository:
                 continue
             reconciled.append(work_id)
 
-        for row in rows:
-            work_id = UUID(str(row[0]))
+        for expired_row in rows:
+            work_id = UUID(str(expired_row[0]))
             lease = WorkLease(
                 work_id=work_id,
                 tenant_id=str(context.tenant_id),
-                token=row[1],
-                generation=int(row[2]),
-                owner=str(row[3]),
-                attempt=int(row[4]),
-                acquired_at=row[5],
-                heartbeat_at=row[6],
-                expires_at=row[7],
+                token=expired_row[1],
+                generation=int(expired_row[2]),
+                owner=str(expired_row[3]),
+                attempt=int(expired_row[4]),
+                acquired_at=expired_row[5],
+                heartbeat_at=expired_row[6],
+                expires_at=expired_row[7],
             )
-            cancel_requested_at = row[8]
+            cancel_requested_at = expired_row[8]
             cancel_requested = cancel_requested_at is not None
-            exhausted = int(row[4]) >= int(row[9])
+            exhausted = int(expired_row[4]) >= int(expired_row[9])
             request = await self._load_request(context, work_id)
             expired = WorkTransition(
                 DomainEventType.WORK_LEASE_EXPIRED,
@@ -1185,12 +1217,12 @@ class PostgresWorkRepository:
         *,
         status: WorkStatus | None = None,
         limit: int = 100,
-        cursor: datetime | None = None,
+        cursor: _KeysetCursor | datetime | None = None,
     ) -> tuple[Mapping[str, JsonValue], ...]:
         """Return a bounded payload-free tenant status page."""
         if not 1 <= limit <= 200:
             raise ValueError("status limit must be between 1 and 200")
-        before = cursor or datetime.max.replace(tzinfo=UTC)
+        before_requested_at, before_work_id = _descending_cursor(cursor)
         try:
             async with _tenant_transaction(self._connection, self._lock, context):
                 query = """
@@ -1198,13 +1230,18 @@ class PostgresWorkRepository:
                         attempt_count, max_attempts, cancel_requested_at,
                         last_error_code
                     FROM work_items
-                    WHERE tenant_id = %s AND requested_at < %s
+                    WHERE tenant_id = %s
+                      AND (requested_at, work_id) < (%s, %s)
                 """
-                parameters: list[object] = [str(context.tenant_id), before]
+                parameters: list[object] = [
+                    str(context.tenant_id),
+                    before_requested_at,
+                    before_work_id,
+                ]
                 if status is not None:
                     query += " AND status = %s"
                     parameters.append(status.value)
-                query += " ORDER BY requested_at DESC, work_id LIMIT %s"
+                query += " ORDER BY requested_at DESC, work_id DESC LIMIT %s"
                 parameters.append(limit)
                 rows = await (
                     await self._connection.execute(query, tuple(parameters))
@@ -1231,12 +1268,12 @@ class PostgresWorkRepository:
         context: TenantContext,
         *,
         limit: int = 100,
-        cursor: datetime | None = None,
+        cursor: _KeysetCursor | datetime | None = None,
     ) -> tuple[Mapping[str, JsonValue], ...]:
         """Return tenant-scoped pending state from PostgreSQL, never the global PEL."""
         if not 1 <= limit <= 200:
             raise ValueError("pending limit must be between 1 and 200")
-        before = cursor or datetime.max.replace(tzinfo=UTC)
+        before_available_at, before_work_id = _descending_cursor(cursor)
         try:
             async with _tenant_transaction(self._connection, self._lock, context):
                 rows = await (
@@ -1255,11 +1292,16 @@ class PostgresWorkRepository:
                               'requested', 'published', 'claimed',
                               'running', 'retry_wait'
                           )
-                          AND w.available_at < %s
-                        ORDER BY w.available_at DESC, w.work_id
+                          AND (w.available_at, w.work_id) < (%s, %s)
+                        ORDER BY w.available_at DESC, w.work_id DESC
                         LIMIT %s
                         """,
-                        (str(context.tenant_id), before, limit),
+                        (
+                            str(context.tenant_id),
+                            before_available_at,
+                            before_work_id,
+                            limit,
+                        ),
                     )
                 ).fetchall()
         except psycopg.Error as error:

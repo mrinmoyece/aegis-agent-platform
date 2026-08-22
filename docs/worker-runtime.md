@@ -103,10 +103,12 @@ pending state, cancel, DLQ approval/requeue, and reconciliation. Reads cap at
 200 and return no work payload. Reconciliation requires administrator authority;
 requeue additionally requires durable two-actor approval.
 
-OpenTelemetry spans use fixed operation names. Metrics cover outbox lag,
-publication failures, pending depth/age, claim conflict, active lease, heartbeat
-failure, retry, DLQ, latency, cancellation, and reconciliation. The API accepts
-no tenant, run, work, or message label.
+OpenTelemetry spans use fixed operation names. The shared runtime metric registry
+currently emits outbox lag, publication failures, claim conflict, active lease,
+heartbeat failure, retry, dead-letter events, latency, cancellation, and
+reconciliation without any tenant, run, work, or message labels. Queue-wide
+pending depth/age and DLQ depth remain reserved metric names for a future
+bounded transport-inspection pass.
 
 ## Executable evidence
 
