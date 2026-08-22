@@ -54,6 +54,49 @@ ActorKind.SYSTEM = ActorKind._define("system")
 class DomainEventType(_StringConstant):
     """Implemented additive event names; existing meanings are never repurposed."""
 
+    INVESTIGATION_REQUESTED: ClassVar[DomainEventType]
+    RUN_STARTED: ClassVar[DomainEventType]
+    RUN_STATUS_CHANGED: ClassVar[DomainEventType]
+    RUN_COMPLETED: ClassVar[DomainEventType]
+    RUN_FAILED: ClassVar[DomainEventType]
+    ARTIFACT_RECORDED: ClassVar[DomainEventType]
+    APPROVAL_REQUESTED: ClassVar[DomainEventType]
+    APPROVAL_DECIDED: ClassVar[DomainEventType]
+    USAGE_RECORDED: ClassVar[DomainEventType]
+    SIDE_EFFECT_INTENT_RECORDED: ClassVar[DomainEventType]
+    SIDE_EFFECT_COMPLETED: ClassVar[DomainEventType]
+    SIDE_EFFECT_FAILED: ClassVar[DomainEventType]
+    OUTBOX_DEAD_LETTERED: ClassVar[DomainEventType]
+    TENANT_REGISTERED: ClassVar[DomainEventType]
+    WORK_REQUESTED: ClassVar[DomainEventType]
+    WORK_PUBLISHED: ClassVar[DomainEventType]
+    WORK_CLAIMED: ClassVar[DomainEventType]
+    WORK_STARTED: ClassVar[DomainEventType]
+    WORK_HEARTBEAT: ClassVar[DomainEventType]
+    WORK_LEASE_EXPIRED: ClassVar[DomainEventType]
+    WORK_SUCCEEDED: ClassVar[DomainEventType]
+    WORK_FAILED: ClassVar[DomainEventType]
+    WORK_RETRY_SCHEDULED: ClassVar[DomainEventType]
+    WORK_CANCEL_REQUESTED: ClassVar[DomainEventType]
+    WORK_CANCELLED: ClassVar[DomainEventType]
+    WORK_DEAD_LETTERED: ClassVar[DomainEventType]
+    WORK_RECONCILED: ClassVar[DomainEventType]
+    MODEL_CALL_REQUESTED: ClassVar[DomainEventType]
+    MODEL_CALL_STARTED: ClassVar[DomainEventType]
+    MODEL_CALL_ATTEMPTED: ClassVar[DomainEventType]
+    MODEL_CALL_SUCCEEDED: ClassVar[DomainEventType]
+    MODEL_CALL_FAILED: ClassVar[DomainEventType]
+    MODEL_CALL_TIMED_OUT: ClassVar[DomainEventType]
+    MODEL_CALL_RATE_LIMITED: ClassVar[DomainEventType]
+    MODEL_CALL_CANCELLED: ClassVar[DomainEventType]
+    MODEL_USAGE_RECORDED: ClassVar[DomainEventType]
+    MODEL_ROUTE_DECIDED: ClassVar[DomainEventType]
+    MODEL_FALLBACK_SELECTED: ClassVar[DomainEventType]
+    MODEL_BUDGET_RESERVED: ClassVar[DomainEventType]
+    MODEL_BUDGET_RELEASED: ClassVar[DomainEventType]
+    MODEL_BUDGET_CHARGED: ClassVar[DomainEventType]
+
+
 DomainEventType.INVESTIGATION_REQUESTED = DomainEventType._define(
     "investigation.requested.v1"
 )
@@ -114,9 +157,7 @@ DomainEventType.MODEL_CALL_CANCELLED = DomainEventType._define(
 DomainEventType.MODEL_USAGE_RECORDED = DomainEventType._define(
     "model.usage_recorded.v1"
 )
-DomainEventType.MODEL_ROUTE_DECIDED = DomainEventType._define(
-    "model.route_decided.v1"
-)
+DomainEventType.MODEL_ROUTE_DECIDED = DomainEventType._define("model.route_decided.v1")
 DomainEventType.MODEL_FALLBACK_SELECTED = DomainEventType._define(
     "model.fallback_selected.v1"
 )

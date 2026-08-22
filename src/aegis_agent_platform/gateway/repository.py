@@ -805,11 +805,13 @@ def _billing_period_start(at: datetime) -> datetime:
 
 
 def _failure_event_type(error: ModelGatewayError) -> DomainEventType:
-    return {
-        ModelErrorClass.TIMEOUT: DomainEventType.MODEL_CALL_TIMED_OUT,
-        ModelErrorClass.RATE_LIMIT: DomainEventType.MODEL_CALL_RATE_LIMITED,
-        ModelErrorClass.CANCELLED: DomainEventType.MODEL_CALL_CANCELLED,
-    }.get(error.error_class, DomainEventType.MODEL_CALL_FAILED)
+    if error.error_class is ModelErrorClass.TIMEOUT:
+        return DomainEventType.MODEL_CALL_TIMED_OUT
+    if error.error_class is ModelErrorClass.RATE_LIMIT:
+        return DomainEventType.MODEL_CALL_RATE_LIMITED
+    if error.error_class is ModelErrorClass.CANCELLED:
+        return DomainEventType.MODEL_CALL_CANCELLED
+    return DomainEventType.MODEL_CALL_FAILED
 
 
 def _actual_usage(
