@@ -2,6 +2,7 @@
 .PHONY: help install format format-check lint type test evals eval-behavioral eval-deterministic eval-adversarial eval-recovery eval-baseline eval-fixtures eval-meta eval-integration postgres-test integration-test docs-check manifest-check migration-check observability-check check compose-config container-check
 
 PYTHON ?= python3
+export PYTHONPATH ?= src
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*?##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)

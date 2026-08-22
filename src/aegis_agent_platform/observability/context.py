@@ -21,6 +21,10 @@ _TRACEPARENT = re.compile(
 )
 _BAGGAGE_KEY = re.compile(r"^[a-z][a-z0-9_.-]{0,63}$")
 _BAGGAGE_VALUE = re.compile(r"^[A-Za-z0-9_.:/-]{1,64}$")
+_TRACESTATE_KEY = re.compile(
+    r"^(?:[a-z][a-z0-9_\-\*/]{0,255}|"
+    r"[a-z0-9][a-z0-9_\-\*/]{0,240}@[a-z][a-z0-9_\-\*/]{0,13})$"
+)
 
 BAGGAGE_ALLOWLIST = frozenset(
     {
@@ -188,9 +192,33 @@ def _parse_tracestate(value: str | None) -> str | None:
     if len(value.encode()) > MAX_TRACESTATE_BYTES or "\n" in value or "\r" in value:
         raise TraceContextError("tracestate is invalid or oversized")
     members = value.split(",")
-    if len(members) > 32 or any("=" not in member for member in members):
+    if len(members) > 32:
         raise TraceContextError("tracestate member is invalid")
-    return value
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for member in members:
+        if not member or member != member.strip() or len(member.encode("ascii")) > 256:
+            raise TraceContextError("tracestate member is invalid")
+        key, separator, member_value = member.partition("=")
+        if (
+            not separator
+            or key in seen
+            or _TRACESTATE_KEY.fullmatch(key) is None
+            or not _valid_tracestate_value(member_value)
+        ):
+            raise TraceContextError("tracestate member is invalid")
+        seen.add(key)
+        normalized.append(f"{key}={member_value}")
+    return ",".join(normalized)
+
+
+def _valid_tracestate_value(value: str) -> bool:
+    if not value or value != value.strip(" "):
+        return False
+    return all(
+        32 <= ord(character) <= 126 and character not in {",", "="}
+        for character in value
+    )
 
 
 def _parse_baggage(value: str | None) -> Mapping[str, str]:

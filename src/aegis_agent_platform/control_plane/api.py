@@ -56,12 +56,16 @@ from aegis_agent_platform.identity import (
 from aegis_agent_platform.memory.api import MemoryHttpApi
 from aegis_agent_platform.memory.operations import MemoryOperations
 from aegis_agent_platform.observability.context import (
+    PropagationContext,
     TraceContextError,
     extract_context,
 )
 from aegis_agent_platform.observability.health import HealthRegistry
 from aegis_agent_platform.observability.operations import ObservabilityOperations
-from aegis_agent_platform.observability.replay import SupportReportTooLargeError
+from aegis_agent_platform.observability.replay import (
+    SupportReportRangeError,
+    SupportReportTooLargeError,
+)
 from aegis_agent_platform.observability.runtime import RuntimeTracer
 from aegis_agent_platform.policy import (
     InMemoryPolicyRepository,
@@ -166,13 +170,15 @@ class ControlPlaneApp:
             )
             return
         with self._tracer.span("api.request", parent=parent):
-            await self._handle(scope, receive, send)
+            await self._handle(scope, receive, send, parent=parent)
 
     async def _handle(
         self,
         scope: AsgiMessage,
         receive: Receive,
         send: Send,
+        *,
+        parent: PropagationContext | None,
     ) -> None:
         if scope.get("type") != "http":
             return
@@ -297,6 +303,7 @@ class ControlPlaneApp:
                 receive,
                 principal,
                 tenant_id,
+                propagation=parent,
             )
             return
         if method == "POST" and len(segments) == 4 and segments[3] == "sandboxes":
@@ -305,6 +312,7 @@ class ControlPlaneApp:
                 receive,
                 principal,
                 tenant_id,
+                propagation=parent,
             )
             return
         if method == "GET" and len(segments) == 4 and segments[3] == "sandboxes":
@@ -418,7 +426,7 @@ class ControlPlaneApp:
                 receive,
                 principal,
                 tenant_id,
-                correlation_id=correlation_id,
+                propagation=parent,
             )
             return
         if (
@@ -581,7 +589,7 @@ class ControlPlaneApp:
         principal: Principal,
         tenant_id: TenantId,
         *,
-        correlation_id: UUID,
+        propagation: PropagationContext | None,
     ) -> None:
         if not await self._authorize(
             send,
@@ -608,6 +616,7 @@ class ControlPlaneApp:
                 query,
                 policy,
                 at=datetime.now(UTC),
+                propagation=propagation,
             )
         except EvidenceIdempotencyConflictError:
             await _respond(
@@ -642,6 +651,8 @@ class ControlPlaneApp:
         receive: Receive,
         principal: Principal,
         tenant_id: TenantId,
+        *,
+        propagation: PropagationContext | None,
     ) -> None:
         if self._sandbox_operations is None:
             await _respond(
@@ -672,6 +683,7 @@ class ControlPlaneApp:
                 TenantContext(tenant_id),
                 sandbox_request,
                 approval,
+                propagation=propagation,
             )
         except SandboxIdempotencyConflictError:
             await _respond(
@@ -870,6 +882,8 @@ class ControlPlaneApp:
         receive: Receive,
         principal: Principal,
         tenant_id: TenantId,
+        *,
+        propagation: PropagationContext | None,
     ) -> None:
         if self._remediation_operations is None:
             await _respond(
@@ -892,6 +906,7 @@ class ControlPlaneApp:
                 TenantContext(tenant_id),
                 plan,
                 idempotency_key=idempotency_key,
+                propagation=propagation,
             )
         except RemediationIdempotencyConflictError:
             await _respond(
@@ -1695,6 +1710,13 @@ class ControlPlaneApp:
                 {"error": {"code": "support_report_too_large"}},
             )
             return
+        except SupportReportRangeError:
+            await _respond(
+                send,
+                422,
+                {"error": {"code": "support_report_range_exceeded"}},
+            )
+            return
         await _respond(
             send,
             200,
@@ -1712,6 +1734,8 @@ class ControlPlaneApp:
                     "stream_digest": report.validation.stream_digest,
                     "reason_codes": list(report.validation.reason_codes),
                 },
+                "state": _support_report_state(report),
+                "causal_chain": _support_report_causal_chain(report),
                 "authoritative_source": "event_ledger",
             },
         )
@@ -2200,3 +2224,30 @@ async def _respond(
 
 
 application = ControlPlaneApp()
+
+
+def _support_report_state(report: object) -> Mapping[str, JsonValue]:
+    state = report.state
+    return {
+        "sequence": state.sequence,
+        "last_event_type": state.last_event_type,
+        "lifecycle_status": state.lifecycle_status,
+        "event_counts": dict(state.event_counts),
+        "blocked_reason_codes": list(state.blocked_reason_codes),
+        "failed_reason_codes": list(state.failed_reason_codes),
+        "facts": [dict(fact) for fact in state.facts],
+        "interpretations": list(state.interpretations),
+    }
+
+
+def _support_report_causal_chain(report: object) -> tuple[Mapping[str, JsonValue], ...]:
+    return tuple(
+        {
+            "sequence": item.sequence,
+            "event_type": item.event_type,
+            "occurred_at": item.occurred_at,
+            "causation_sequence": item.causation_sequence,
+            "trace_link_present": item.trace_link_present,
+        }
+        for item in report.causal_chain
+    )

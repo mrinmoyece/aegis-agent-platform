@@ -7477,7 +7477,7 @@
       "weight": "1"
     },
     {
-      "case_digest": "08898336cf0ac66eb4f75e06dffb86d83f55fd3c097d04da7477c44f5ba1ce5d",
+      "case_digest": "865c027e544cc14976113f95eeea739de2bb91cabe2c5b76ef61fbd878d4f7eb",
       "case_id": "observability.causal-coverage",
       "metrics": {
         "abstention_correctness": {
@@ -7592,7 +7592,7 @@
       "weight": "1"
     },
     {
-      "case_digest": "cb98c32d03fe4194ba6a0c7f520b279ef235e130fed2dd23f9b52149ad0e3419",
+      "case_digest": "782f11db5489ddbce4191997ff7c2f9cba85cf1a3ed9192e5b4239492f1d9898",
       "case_id": "observability.exporter-outage",
       "metrics": {
         "abstention_correctness": {
@@ -7707,7 +7707,7 @@
       "weight": "1"
     },
     {
-      "case_digest": "541ecc2eef41542c27dc774124b392848f08d182a8c3c323341d6641e09e0abc",
+      "case_digest": "42b81fd7879b18676cbc1f8b363f569c43272135a7704cbd7fe3e94d08fbbdc5",
       "case_id": "observability.replay-convergence",
       "metrics": {
         "abstention_correctness": {
@@ -7822,7 +7822,7 @@
       "weight": "1"
     },
     {
-      "case_digest": "b9cf7d9edb47e0758d2ddcea85ac50598b8bbee11c03e4333a0afbc1afdd1db4",
+      "case_digest": "9a529a58354f8f44635eeb00000d324a40898c5926ead79b0aa31a628c3ad5ab",
       "case_id": "observability.retry-deduplication",
       "metrics": {
         "abstention_correctness": {
@@ -7937,7 +7937,7 @@
       "weight": "1"
     },
     {
-      "case_digest": "96c855cb3cd90da935d63eac3f45365fe963704130b589704ef45e926973b86c",
+      "case_digest": "0e66cf774944934a9de8dc54282ee18b45a1b63232195cd19c04466f506e70f4",
       "case_id": "observability.safety-alert",
       "metrics": {
         "abstention_correctness": {
@@ -8052,7 +8052,7 @@
       "weight": "1"
     },
     {
-      "case_digest": "5eceb53eecbf23bd2a1e5d0b6a3788b06ee4ea08f96e3cf11e57dab93908f40c",
+      "case_digest": "1bfbc19045dd0d123aedeb183fabb8b0cd38f79f15f76d52a4310ae739b333df",
       "case_id": "observability.secret-redaction",
       "metrics": {
         "abstention_correctness": {
@@ -11159,7 +11159,7 @@
   ],
   "dataset_digest": "31c906a1bf12b2bc4c65b18f63cd0d430e7e04c3027ef9a7f38ffb4782f92d1d",
   "generated_at": "2026-08-13T12:00:00Z",
-  "review_reference": "layer-12-observability-review",
+  "review_reference": "reviewed://canonical-v1",
   "schema_version": 1,
-  "suite_digest": "a4a124d9521ec7774dc6732301120e9aac726540255d3919547458fcef4e514f"
+  "suite_digest": "407b8267e59cfd4a42f510f525eb141cdbfb2358874b53b884ae79c161a3a5ac"
 }

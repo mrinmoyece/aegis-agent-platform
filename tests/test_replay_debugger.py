@@ -7,10 +7,12 @@ import json
 from collections.abc import AsyncIterator, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import Mock
 from uuid import UUID
 
 import pytest
 
+from aegis_agent_platform.audit import InMemoryAuditStore
 from aegis_agent_platform.domain import (
     DomainEventType,
     EventEnvelope,
@@ -19,11 +21,18 @@ from aegis_agent_platform.domain import (
 )
 from aegis_agent_platform.event_store import AppendResult, EventPage, OutboxMessage
 from aegis_agent_platform.identity import TenantId
+from aegis_agent_platform.observability import ObservabilityOperations, SloSummary
 from aegis_agent_platform.observability import replay as replay_module
-from aegis_agent_platform.observability.__main__ import _FileEventStore, main
+from aegis_agent_platform.observability.__main__ import (
+    _FileEventStore,
+    _load_events,
+    _state_json,
+    main,
+)
 from aegis_agent_platform.observability.replay import (
     ReplayDebugger,
     ReplayQuery,
+    SupportReportRangeError,
     SupportReportTooLargeError,
 )
 from aegis_agent_platform.tenancy import TenantContext
@@ -329,3 +338,164 @@ def test_replay_cli_file_store_is_read_only_and_input_is_bounded(
                 "run-a",
             ]
         )
+
+
+def test_observability_operations_enforce_bounds_and_export_ranges() -> None:
+    principal = Mock(actor_id="user-1")
+    authorization = Mock()
+    authorization.decide.return_value = Mock(allowed=True)
+    operations = ObservabilityOperations(
+        debugger(
+            (
+                event(1, DomainEventType.RUN_STARTED),
+                event(2, DomainEventType.RUN_COMPLETED),
+            )
+        ),
+        InMemoryAuditStore(),
+        identifier_hash_key=b"h" * 32,
+        hash_key_version="ops-v1",
+        authorization=authorization,
+        slo_reader=lambda: (SloSummary("api", "30d", "99.9%", "measured", True, "ok"),),
+    )
+
+    timeline = asyncio.run(
+        operations.timeline(
+            principal,
+            TENANT,
+            "run-a",
+            at=NOW,
+            after_sequence=0,
+            limit=1,
+        )
+    )
+    assert timeline["next_cursor"] == 1
+    report = asyncio.run(
+        operations.support_report(
+            principal,
+            TENANT,
+            "run-a",
+            at=NOW,
+            signer="reviewer",
+            signing_key=b"s" * 32,
+        )
+    )
+    assert report.signature_algorithm == "hmac-sha256"
+    assert operations.slo_summary(principal, TENANT, at=NOW)[0].objective == "api"
+    with pytest.raises(ValueError, match="between 1 and 100"):
+        asyncio.run(operations.timeline(principal, TENANT, "run-a", at=NOW, limit=101))
+
+    large_operations = ObservabilityOperations(
+        debugger(
+            tuple(event(index, DomainEventType.RUN_STARTED) for index in range(1, 5002))
+        ),
+        InMemoryAuditStore(),
+        identifier_hash_key=b"h" * 32,
+        hash_key_version="ops-v1",
+        authorization=authorization,
+    )
+    with pytest.raises(SupportReportRangeError, match="bounded replay range"):
+        asyncio.run(large_operations.support_report(principal, TENANT, "run-a", at=NOW))
+
+
+def test_replay_cli_helpers_cover_ndjson_state_json_and_bounds(tmp_path: Path) -> None:
+    ndjson = tmp_path / "events.ndjson"
+    ndjson.write_text(
+        "\n".join(
+            (
+                json.dumps(
+                    {
+                        "event_id": str(UUID(int=1)),
+                        "tenant_id": "tenant-a",
+                        "aggregate_id": "run-a",
+                        "event_type": str(DomainEventType.RUN_STARTED),
+                        "schema_version": 1,
+                        "occurred_at": (NOW + timedelta(seconds=1)).isoformat(),
+                        "payload": {},
+                        "aggregate_sequence": 1,
+                        "global_position": 1,
+                        "recorded_at": (NOW + timedelta(seconds=1)).isoformat(),
+                    }
+                ),
+                json.dumps(
+                    {
+                        "event_id": str(UUID(int=2)),
+                        "tenant_id": "tenant-a",
+                        "aggregate_id": "run-a",
+                        "event_type": str(DomainEventType.RUN_COMPLETED),
+                        "schema_version": 1,
+                        "occurred_at": (NOW + timedelta(seconds=2)).isoformat(),
+                        "payload": {},
+                        "aggregate_sequence": 2,
+                        "global_position": 2,
+                        "recorded_at": (NOW + timedelta(seconds=2)).isoformat(),
+                    }
+                ),
+            )
+        ),
+        encoding="utf-8",
+    )
+    loaded = _load_events(ndjson)
+    store = _FileEventStore(loaded)
+    streamed = list(asyncio.run(_collect(store.read_stream(TENANT, "run-a", limit=1))))
+    page = asyncio.run(store.read_all(TENANT, limit=1))
+    state = debugger(loaded).fold(loaded, aggregate_id="run-a")
+
+    assert len(streamed) == 1
+    assert page.next_cursor == 1
+    assert _state_json(state)["sequence"] == 2
+    with pytest.raises(TypeError, match="invalid replay state"):
+        _state_json(object())
+
+    corrupt = tmp_path / "corrupt.json"
+    corrupt.write_text(
+        json.dumps(
+            [
+                {
+                    "event_id": str(UUID(int=1)),
+                    "tenant_id": "tenant-a",
+                    "aggregate_id": "run-a",
+                    "event_type": str(DomainEventType.RUN_STARTED),
+                    "schema_version": 1,
+                    "occurred_at": (NOW + timedelta(seconds=1)).isoformat(),
+                    "payload": {},
+                    "aggregate_sequence": 1,
+                    "global_position": 1,
+                    "recorded_at": (NOW + timedelta(seconds=1)).isoformat(),
+                },
+                "corrupt",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="JSON objects"):
+        _load_events(corrupt)
+
+
+async def _collect(stream: AsyncIterator[EventEnvelope]) -> list[EventEnvelope]:
+    return [item async for item in stream]
+
+
+def test_replay_cli_loader_rejects_missing_and_oversized_ranges(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="bounded event export file"):
+        _load_events(tmp_path / "missing.json")
+    oversized = tmp_path / "oversized.json"
+    oversized.write_text(
+        json.dumps([
+            {
+                "event_id": str(UUID(int=index)),
+                "tenant_id": "tenant-a",
+                "aggregate_id": "run-a",
+                "event_type": str(DomainEventType.RUN_STARTED),
+                "schema_version": 1,
+                "occurred_at": (NOW + timedelta(seconds=index)).isoformat(),
+                "payload": {},
+                "aggregate_sequence": index,
+                "global_position": index,
+                "recorded_at": (NOW + timedelta(seconds=index)).isoformat(),
+            }
+            for index in range(1, 5002)
+        ]),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="replay event bound"):
+        _load_events(oversized)

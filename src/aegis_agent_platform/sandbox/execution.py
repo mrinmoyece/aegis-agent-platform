@@ -40,6 +40,10 @@ from aegis_agent_platform.identity import (
     Permission,
     Principal,
 )
+from aegis_agent_platform.observability.context import (
+    PropagationContext,
+    durable_trace_context,
+)
 from aegis_agent_platform.sandbox.egress import EgressBroker
 from aegis_agent_platform.sandbox.policy import (
     SandboxPolicy,
@@ -452,6 +456,7 @@ class SandboxRequestService:
         request: SandboxRequest,
         policy: SandboxPolicy,
         binding: SandboxApprovalBinding,
+        propagation: PropagationContext | None = None,
     ) -> SandboxRequestDecision:
         at = self._clock()
         _authorize(
@@ -542,6 +547,7 @@ class SandboxRequestService:
                 "spec_digest": request.spec.digest,
                 "task_id": str(request.linkage.task_id),
             },
+            trace_context=durable_trace_context(propagation),
             max_attempts=request.spec.retry_policy.max_attempts,
             timeout_seconds=request.spec.resources.timeout_seconds,
         )

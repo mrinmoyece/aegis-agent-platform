@@ -215,6 +215,9 @@ def _default_retry_delay(attempt: int) -> timedelta:
     return timedelta(seconds=min(300, 2 ** min(attempt, 8)))
 
 
+# NOTE: durable propagation headers are only present when the producer boundary
+# explicitly threaded validated trace context into the outbox request. Internal
+# producers that omit that handoff remain unlinked until they plumb trace context.
 def _propagation_context(envelope: MessageEnvelope) -> PropagationContext | None:
     headers = {
         key: value

@@ -15,6 +15,8 @@ from types import MappingProxyType
 from typing import cast
 from uuid import UUID
 
+import yaml
+
 from aegis_agent_platform.agents import CanonicalScenario
 from aegis_agent_platform.agents.__main__ import run_canonical_demo
 from aegis_agent_platform.config import Environment
@@ -108,7 +110,6 @@ from aegis_agent_platform.identity.authorization import AuthorizationService
 from aegis_agent_platform.memory.demo import run_demo as run_memory_demo
 from aegis_agent_platform.memory.ports import RegexMemoryScanner, ScanDisposition
 from aegis_agent_platform.observability import (
-    METRICS,
     AttributeSanitizer,
     BoundedExportBuffer,
     BoundedMetrics,
@@ -1115,21 +1116,37 @@ async def _observability_probe(
         second_state = replay.fold(events, aggregate_id="run-eval")
         passed = first_state == second_state and replay.validate(events).valid
     elif variant == "safety-alert":
-        passed = "aegis_eval_safety_violations_total" in METRICS
+        rule = _prometheus_alert_rule("AegisSafetyInvariantViolation")
+        passed = (
+            rule is not None
+            and rule.get("expr")
+            == "increase(aegis_eval_safety_violations_total[5m]) > 0"
+            and dict(rule.get("labels", {}))
+            == {"severity": "page", "owner": "safety"}
+        )
     else:
         raise ValueError(f"unknown observability probe: {variant}")
     checks = _common_checks()
+    invariant = {
+        "causal-coverage": "trace_causal_coverage",
+        "retry-deduplication": "retries_not_inflated",
+        "secret-redaction": "secrets_absent",
+        "exporter-outage": "telemetry_outage_contained",
+        "replay-convergence": "replay_convergence",
+        "safety-alert": "safety_alert_bounded",
+    }[variant]
     checks.update(
         {
-            "trace_causal_coverage": passed,
-            "retries_not_inflated": passed,
-            "secrets_absent": passed,
-            "telemetry_outage_contained": passed,
-            "replay_convergence": passed,
-            "safety_alert_bounded": passed,
+            "trace_causal_coverage": False,
+            "retries_not_inflated": False,
+            "secrets_absent": False,
+            "telemetry_outage_contained": False,
+            "replay_convergence": False,
+            "safety_alert_bounded": False,
             "fail_closed": passed,
         }
     )
+    checks[invariant] = passed
     trace = (_trace("observability", 0, reason_code=variant.replace("-", "_")),)
     return ProbeResult(
         outcome,
@@ -1146,6 +1163,21 @@ async def _observability_probe(
         ),
         trace,
     )
+
+
+def _prometheus_alert_rule(name: str) -> Mapping[str, object] | None:
+    rules_path = (
+        Path(__file__).resolve().parents[3]
+        / "deploy/prometheus/rules/aegis-alerts.yml"
+    )
+    document = yaml.safe_load(rules_path.read_text(encoding="utf-8"))
+    groups = document.get("groups", []) if isinstance(document, Mapping) else []
+    for group in groups:
+        rules = group.get("rules", []) if isinstance(group, Mapping) else []
+        for rule in rules:
+            if isinstance(rule, Mapping) and rule.get("alert") == name:
+                return rule
+    return None
 
 
 async def _evidence_probe_continued(variant: str) -> ProbeResult:

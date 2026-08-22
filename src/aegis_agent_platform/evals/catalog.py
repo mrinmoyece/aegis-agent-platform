@@ -260,14 +260,7 @@ def _invariants_for(
             "tenant_isolation",
             "replay_convergence",
         ],
-        "observability": [
-            "trace_causal_coverage",
-            "retries_not_inflated",
-            "secrets_absent",
-            "telemetry_outage_contained",
-            "replay_convergence",
-            "safety_alert_bounded",
-        ],
+        "observability": [],
         "adversarial": [
             "quarantined",
             "no_unauthorized_effect",
@@ -286,6 +279,17 @@ def _invariants_for(
         ],
     }
     identifiers.extend(by_family[family])
+    if family == "observability":
+        identifiers.append(
+            {
+                "causal-coverage": "trace_causal_coverage",
+                "retry-deduplication": "retries_not_inflated",
+                "secret-redaction": "secrets_absent",
+                "exporter-outage": "telemetry_outage_contained",
+                "replay-convergence": "replay_convergence",
+                "safety-alert": "safety_alert_bounded",
+            }[variant]
+        )
     if family == "gateway" and variant == "stale-worker":
         identifiers.append("stale_worker_denied")
     return tuple(

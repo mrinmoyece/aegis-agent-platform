@@ -58,17 +58,19 @@ class _ClaimUnavailableError(Exception):
     pass
 
 
-def _descending_cursor(cursor: _KeysetCursor | datetime | None) -> _KeysetCursor:
-    if cursor is None:
-        return (datetime.max.replace(tzinfo=UTC), _MAX_UUID)
-    if isinstance(cursor, tuple):
-        requested_at, work_id = cursor
-        if requested_at.tzinfo is None:
-            raise ValueError("cursor timestamps must be timezone-aware")
-        return (requested_at, work_id)
-    if cursor.tzinfo is None:
-        raise ValueError("cursor timestamps must be timezone-aware")
-    return (cursor, _MAX_UUID)
+def _outbox_headers(request: WorkRequest) -> Mapping[str, JsonValue]:
+    headers: dict[str, JsonValue] = {
+        "tenant_id": request.tenant_id,
+        "schema_version": 1,
+    }
+    if request.trace_context is not None:
+        headers["traceparent"] = request.trace_context.traceparent
+        if request.trace_context.tracestate is not None:
+            headers["tracestate"] = request.trace_context.tracestate
+    # NOTE: only ingress-validated request trace context is made durable here. Any
+    # internal producer path that bypasses the boundary still needs explicit plumbing
+    # before API → ledger/outbox → queue continuity can be relied upon.
+    return headers
 
 
 class PostgresWorkRepository:
@@ -120,7 +122,7 @@ class PostgresWorkRepository:
             available_at=request.requested_at,
             max_attempts=request.max_attempts,
             payload=_request_payload(request),
-            headers={"tenant_id": request.tenant_id, "schema_version": 1},
+            headers=_outbox_headers(request),
         )
 
         async def insert_work(connection: psycopg.AsyncConnection[Any]) -> None:
