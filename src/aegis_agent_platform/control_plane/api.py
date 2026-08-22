@@ -26,7 +26,7 @@ from aegis_agent_platform.event_store import EventStore, TransientStorageError
 from aegis_agent_platform.identity import (
     PLATFORM_TENANT_ID,
     AuthenticationError,
-    AuthenticationService,
+    AuthenticationPort,
     AuthorizationDecision,
     AuthorizationService,
     Permission,
@@ -68,7 +68,7 @@ class ControlPlaneApp:
     def __init__(
         self,
         *,
-        authentication: AuthenticationService | None = None,
+        authentication: AuthenticationPort | None = None,
         authorization: AuthorizationService | None = None,
         tenants: TenantRepository | None = None,
         policies: PolicyRepository | None = None,

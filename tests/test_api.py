@@ -410,7 +410,7 @@ def test_storage_routes_translate_transient_store_failures() -> None:
         ) -> AsyncIterator[EventEnvelope]:
             del args, kwargs
             raise TransientStorageError("database unavailable")
-            yield  # pragma: no cover
+            yield  # type: ignore[unreachable]  # pragma: no cover
 
         async def read_all(self, *args: object, **kwargs: object) -> EventPage:
             del args, kwargs

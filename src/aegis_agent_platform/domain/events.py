@@ -29,13 +29,17 @@ class _StringConstant(str):
 
     @classmethod
     def _define(cls, value: str) -> Self:
-        member = cast(Self, str.__new__(cls, value))
+        member: Self = str.__new__(cls, value)
         cls._values[value] = member
         return member
 
 
 class ActorKind(_StringConstant):
     """Stable categories for the principal that caused an event."""
+
+    USER: ClassVar[ActorKind]
+    SERVICE: ClassVar[ActorKind]
+    SYSTEM: ClassVar[ActorKind]
 
 
 ActorKind.USER = ActorKind._define("user")
@@ -45,6 +49,21 @@ ActorKind.SYSTEM = ActorKind._define("system")
 
 class DomainEventType(_StringConstant):
     """Implemented additive event names; existing meanings are never repurposed."""
+
+    INVESTIGATION_REQUESTED: ClassVar[DomainEventType]
+    RUN_STARTED: ClassVar[DomainEventType]
+    RUN_STATUS_CHANGED: ClassVar[DomainEventType]
+    RUN_COMPLETED: ClassVar[DomainEventType]
+    RUN_FAILED: ClassVar[DomainEventType]
+    ARTIFACT_RECORDED: ClassVar[DomainEventType]
+    APPROVAL_REQUESTED: ClassVar[DomainEventType]
+    APPROVAL_DECIDED: ClassVar[DomainEventType]
+    USAGE_RECORDED: ClassVar[DomainEventType]
+    SIDE_EFFECT_INTENT_RECORDED: ClassVar[DomainEventType]
+    SIDE_EFFECT_COMPLETED: ClassVar[DomainEventType]
+    SIDE_EFFECT_FAILED: ClassVar[DomainEventType]
+    OUTBOX_DEAD_LETTERED: ClassVar[DomainEventType]
+    TENANT_REGISTERED: ClassVar[DomainEventType]
 
 
 DomainEventType.INVESTIGATION_REQUESTED = DomainEventType._define(
@@ -261,7 +280,7 @@ def thaw_json(value: JsonValue) -> JsonScalar | list[object] | dict[str, object]
         bytes | bytearray | memoryview | str,
     ):
         return [thaw_json(item) for item in value]
-    return value
+    return cast(JsonScalar, value)
 
 
 def _optional_uuid(value: object) -> UUID | None:
