@@ -8,6 +8,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 _MIGRATION_NAME = re.compile(r"^(?P<number>\d{4})_[a-z0-9]+(?:_[a-z0-9]+)*\.sql$")
 
+# Patterns that would weaken tenant isolation or the append-only guarantee.
+_DESTRUCTIVE = re.compile(
+    r"""
+    ^\s*(?:
+        drop\s+table\b                                    # drop table
+        | truncate\b                                      # truncate table
+        | drop\s+trigger\b                                # remove append-only guard
+        | drop\s+policy\b                                 # remove RLS policy
+        | alter\s+table\s+\S+\s+disable\s+row\s+level\s+security
+        | alter\s+table\s+\S+\s+no\s+force\s+row\s+level\s+security
+    )
+    """,
+    re.MULTILINE | re.VERBOSE | re.IGNORECASE,
+)
+
 
 def _validate_migration_names(migrations: list[Path]) -> None:
     for expected_number, path in enumerate(migrations, start=1):
@@ -49,8 +64,12 @@ def main() -> None:
     missing = [control for control in required if control not in schema]
     if missing:
         raise SystemExit("migration controls missing: " + ", ".join(missing))
-    if re.search(r"^\s*(?:drop\s+table|truncate)\b", schema, re.MULTILINE):
-        raise SystemExit("destructive migration statements are prohibited")
+    match = _DESTRUCTIVE.search(schema)
+    if match:
+        raise SystemExit(
+            "destructive migration statement prohibited: "
+            + schema.splitlines()[schema[: match.start()].count("\n")]
+        )
 
 
 if __name__ == "__main__":

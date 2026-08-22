@@ -487,9 +487,16 @@ class PostgresEventStore:
         message_id: UUID,
         *,
         lease_owner: str,
+        lease_expires_at: datetime,
         published_at: datetime,
     ) -> None:
-        """Mark only the current lease as delivered."""
+        """Mark only the exact current lease as delivered.
+
+        ``lease_expires_at`` acts as a fencing token: if the lease has expired
+        and been reclaimed by another attempt (even with the same owner name),
+        the expiry timestamp will differ and the stale completion will be a
+        no-op that raises ``ConcurrencyError`` instead of silently succeeding.
+        """
         await self._update_outbox_state(
             context,
             """
@@ -498,8 +505,15 @@ class PostgresEventStore:
                 lease_owner = NULL, lease_expires_at = NULL
             WHERE tenant_id = %s AND message_id = %s
               AND status = 'leased' AND lease_owner = %s
+              AND lease_expires_at = %s
             """,
-            (published_at, str(context.tenant_id), message_id, lease_owner),
+            (
+                published_at,
+                str(context.tenant_id),
+                message_id,
+                lease_owner,
+                lease_expires_at,
+            ),
         )
 
     async def mark_outbox_failed(
@@ -508,10 +522,14 @@ class PostgresEventStore:
         message_id: UUID,
         *,
         lease_owner: str,
+        lease_expires_at: datetime,
         retry_at: datetime,
         error_code: str,
     ) -> None:
-        """Release a failed lease or place exhausted work in the DLQ projection."""
+        """Release the exact current lease or dead-letter exhausted work.
+
+        ``lease_expires_at`` acts as a fencing token — see ``mark_outbox_published``.
+        """
         if not error_code or len(error_code) > 128:
             raise ValueError("bounded error_code is required")
         await self._update_outbox_state(
@@ -525,6 +543,7 @@ class PostgresEventStore:
                 lease_owner = NULL, lease_expires_at = NULL
             WHERE tenant_id = %s AND message_id = %s
               AND status = 'leased' AND lease_owner = %s
+              AND lease_expires_at = %s
             """,
             (
                 retry_at,
@@ -532,6 +551,7 @@ class PostgresEventStore:
                 str(context.tenant_id),
                 message_id,
                 lease_owner,
+                lease_expires_at,
             ),
         )
 

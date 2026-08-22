@@ -285,6 +285,7 @@ def test_inbox_deduplication_and_outbox_claim_race() -> None:
                 TENANT_A,
                 message.message_id,
                 lease_owner=winning_claim.lease_owner,
+                lease_expires_at=winning_claim.lease_expires_at,
                 retry_at=now,
                 error_code="temporary_delivery_failure",
             )
@@ -300,6 +301,7 @@ def test_inbox_deduplication_and_outbox_claim_race() -> None:
                 TENANT_A,
                 message.message_id,
                 lease_owner="publisher-retry",
+                lease_expires_at=retry[0].lease_expires_at,
                 retry_at=now,
                 error_code="poison_message",
             )
