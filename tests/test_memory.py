@@ -28,6 +28,7 @@ from aegis_agent_platform.domain import (
     MemoryLifecycleStatus,
     MemoryReplayError,
     RetrievalQuery,
+    SourceSnapshot,
     SummarizationRequest,
     SummarizationResponse,
     SummaryClaim,
@@ -46,6 +47,7 @@ from aegis_agent_platform.memory.context import ContextBuilder, ContextCompactor
 from aegis_agent_platform.memory.ingestion import (
     ChunkingPolicy,
     MemoryIngestionService,
+    MemoryProviderPolicy,
     deterministic_chunks,
 )
 from aegis_agent_platform.memory.lifecycle import MemoryLifecycleService
@@ -53,6 +55,7 @@ from aegis_agent_platform.memory.ports import (
     DeterministicEmbeddingProvider,
     DeterministicSummarizationProvider,
     MemoryProviderError,
+    MemoryProviderErrorClass,
     MemoryScanError,
     RegexMemoryScanner,
     ScanResult,
@@ -69,7 +72,7 @@ from aegis_agent_platform.memory.repository import (
     InMemoryMemoryBlobStore,
     InMemoryMemoryLedger,
 )
-from aegis_agent_platform.memory.retrieval import HybridRetriever
+from aegis_agent_platform.memory.retrieval import HybridRetriever, _normalize
 from aegis_agent_platform.tenancy import TenantContext
 from memory_helpers import NOW, MemoryHarness, identifier, lease, semantic_memory
 
@@ -97,6 +100,41 @@ def query(
         max_context_tokens=2_048,
         as_of=as_of,
     )
+
+
+class FlakyProposalBlobStore(InMemoryMemoryBlobStore):
+    def __init__(self, failing_reference: str) -> None:
+        super().__init__()
+        self._failing_reference = failing_reference
+        self._failed = False
+
+    async def put(
+        self,
+        context: TenantContext,
+        snapshot: SourceSnapshot,
+        text: str,
+    ) -> bool:
+        if (
+            snapshot.content_reference == self._failing_reference
+            and not self._failed
+        ):
+            self._failed = True
+            raise RuntimeError("contract_blob_write_failed")
+        return await super().put(context, snapshot, text)
+
+
+class RecordingAmbiguousEmbedder(DeterministicEmbeddingProvider):
+    def __init__(self) -> None:
+        self.requests: list[EmbeddingRequest] = []
+
+    async def embed(self, request: EmbeddingRequest) -> EmbeddingResponse:
+        self.requests.append(request)
+        raise MemoryProviderError(
+            MemoryProviderErrorClass.PROVIDER_UNAVAILABLE,
+            "ambiguous_embedding",
+            retryable=True,
+            result_ambiguous=True,
+        )
 
 
 @pytest.mark.parametrize(
@@ -227,6 +265,96 @@ async def test_acceptance_rejects_contract_rebinding() -> None:
             acceptance_kind="human",
             idempotency_key="accept-rebind",
         )
+
+
+@pytest.mark.asyncio
+async def test_proposal_retry_repairs_missing_contract_blob_without_reappending(
+) -> None:
+    ledger = InMemoryMemoryLedger()
+    memory = semantic_memory("proposal-repair", "Promote the healthy replica.")
+    context = TenantContext(TenantId("tenant-a"))
+    blobs = FlakyProposalBlobStore(memory.contract_reference)
+    service = MemoryIngestionService(
+        ledger,
+        blobs,
+        InMemoryHybridIndex(),
+        DeterministicEmbeddingProvider(),
+        RegexMemoryScanner(),
+        clock=lambda: NOW,
+    )
+
+    with pytest.raises(RuntimeError, match="contract_blob_write_failed"):
+        await service.propose(
+            context,
+            memory,
+            "Promote the healthy replica.",
+            proposed_by="admin-a",
+            idempotency_key="proposal-repair",
+        )
+
+    retry = await service.propose(
+        context,
+        memory,
+        "Promote the healthy replica.",
+        proposed_by="admin-a",
+        idempotency_key="proposal-repair-retry",
+    )
+
+    assert not retry.created
+    assert retry.memory_id == memory.memory_id
+    assert await blobs.get(context, memory.snapshot.content_reference) is not None
+    assert await blobs.get(context, memory.contract_reference) is not None
+    events = await ledger.load(context, memory.memory_id)
+    assert tuple(event.event_type for event in events) == (
+        DomainEventType.MEMORY_CANDIDATE_PROPOSED,
+    )
+
+
+@pytest.mark.asyncio
+async def test_embedding_provider_identity_is_stable_across_accept_retries() -> None:
+    ledger = InMemoryMemoryLedger()
+    blobs = InMemoryMemoryBlobStore()
+    index = InMemoryHybridIndex()
+    embedder = RecordingAmbiguousEmbedder()
+    service = MemoryIngestionService(
+        ledger,
+        blobs,
+        index,
+        embedder,
+        RegexMemoryScanner(),
+        provider_policy=MemoryProviderPolicy(max_attempts=1),
+        clock=lambda: NOW,
+    )
+    memory = semantic_memory("stable-embedding", "Index this replica promotion lesson.")
+    context = TenantContext(TenantId("tenant-a"))
+    await service.propose(
+        context,
+        memory,
+        "Index this replica promotion lesson.",
+        proposed_by="admin-a",
+        idempotency_key="stable-embedding-proposal",
+    )
+    active_lease = lease(memory.memory_id)
+    ledger.register_lease(active_lease)
+
+    for idempotency_key in ("accept-first", "accept-second"):
+        with pytest.raises(MemoryProviderError, match="ambiguous_embedding"):
+            await service.accept_and_process(
+                context,
+                memory,
+                active_lease,
+                accepted_by="admin-a",
+                acceptance_kind="human",
+                idempotency_key=idempotency_key,
+            )
+
+    assert len(embedder.requests) == 2
+    assert {request.idempotency_key for request in embedder.requests} == {
+        f"embedding:{memory.tenant_id}:{memory.memory_id}:{memory.version_key}"
+    }
+    assert {request.request_id for request in embedder.requests} == {
+        embedder.requests[0].request_id
+    }
 
 
 @pytest.mark.asyncio
@@ -625,7 +753,13 @@ def test_cache_keys_bind_tenant_principal_acl_and_purpose() -> None:
     )
     assert memory_cache_key(tenant_a, first) != memory_cache_key(tenant_b, other_tenant)
     assert memory_cache_key(tenant_a, first) != memory_cache_key(tenant_a, other_budget)
-    assert memory_cache_key(tenant_a, first) != memory_cache_key(tenant_a, other_time)
+    assert memory_cache_key(tenant_a, first) == memory_cache_key(tenant_a, other_time)
+
+
+def test_rank_normalization_preserves_constant_bounded_scores() -> None:
+    assert _normalize((0.25, 0.25)) == (0.25, 0.25)
+    assert _normalize((1.0,)) == (1.0,)
+    assert _normalize((0.0, 0.0)) == (0.0, 0.0)
 
 
 @pytest.mark.asyncio

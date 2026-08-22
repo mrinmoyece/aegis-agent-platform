@@ -96,12 +96,13 @@ Status meanings:
 | Tenant-safe memory and retrieval provenance | Implemented | `domain.memory`, `memory`, migration `0009`, deterministic and live pgvector/RLS tests |
 | Three-tier working/episodic/semantic memory | Implemented | `docs/memory-and-rag.md`, ADR 0017, replay and context tests |
 | PII-safe compaction, retention, and deletion | Implemented | scanner/redaction hooks, cited fallback, legal hold/tombstone/blob-erasure tests; production DLP/blob store unverified |
-| Data retention, export, and erasure workflows | Implemented | TTL/legal hold/deletion/derived purge; export and backup expiry remain planned |
+| Data retention and erasure workflows | Implemented | TTL/legal hold/deletion/derived purge are implemented; production backup expiry remains planned |
+| Data export workflows | Planned | export endpoints and evidence packages remain planned |
 | Deterministic hybrid pgvector RAG | Implemented | filtered lexical/vector ranking, MMR, exact citations, tenant-safe cache and live pgvector test |
 | Memory quotas and fenced lifecycle recovery | Implemented | atomic tenant-period reservations, durable intent/results, reconciliation and rebuild tests |
 | Deterministic specialist behavioral evaluations | Implemented | success, ambiguity, contradiction, budget, recovery; `make evals` |
 | Deterministic remediation behavioral evaluations | Implemented | approval success/denial/stale, ambiguity, verification/rollback, policy attack, crash recovery |
-| Versioned production evaluation datasets and baselines | Planned | Layer 10 |
+| Versioned production evaluation datasets and baselines | Planned | Layer 11 |
 | Online quality, safety, latency, and cost signals | Planned | Layer 7 |
 | Model span/metric content redaction | Implemented | bounded catalog labels; no prompt/tenant/request labels |
 | Specialist span/metric content redaction | Implemented | fixed operation/role labels; no evidence/prompt/tenant/run labels |

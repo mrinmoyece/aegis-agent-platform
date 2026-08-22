@@ -456,6 +456,14 @@ class PostgresMemoryIndex(MemoryIndex):
         )
         try:
             async with _tenant_transaction(self._connection, self._lock, context):
+                if query_vector is not None:
+                    await self._connection.execute(
+                        "SELECT set_config('hnsw.iterative_scan', 'strict_order', true)"
+                    )
+                    await self._connection.execute(
+                        "SELECT set_config('hnsw.max_scan_tuples', %s, true)",
+                        (str(max(query.candidate_limit * 50, 5_000)),),
+                    )
                 cursor = await self._connection.execute(
                     statement,
                     tuple(parameters),

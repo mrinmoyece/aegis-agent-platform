@@ -61,9 +61,14 @@ from aegis_agent_platform.agents.service import CancellationSignal
 from aegis_agent_platform.agents.telemetry import AgentMetrics
 from aegis_agent_platform.config import Environment
 from aegis_agent_platform.domain import (
+    ContextBudget,
+    ContextSnippet,
     DomainEventType,
     FinishReason,
     JsonValue,
+    MemoryCitation,
+    MemoryContext,
+    MemoryTier,
     ModelIdentity,
     ModelRequest,
     ModelResponse,
@@ -1042,10 +1047,49 @@ def test_prompt_injection_is_bounded_untrusted_data_and_bad_citations_fail() -> 
         assignment=plan.assignments[0],
         upstream_artifacts=(),
         evidence=(hostile,),
+        memory_context=MemoryContext(
+            context_id=uuid4(),
+            tenant_id=TENANT,
+            run_id=plan.run_id,
+            task_id=plan.assignments[0].assignment_id,
+            snippets=(
+                ContextSnippet(
+                    reference_id="memory:1",
+                    tier=MemoryTier.SEMANTIC,
+                    text="Conflicting guidance requires a critic decision.",
+                    citations=(
+                        MemoryCitation(
+                            source_id="memory-source-1",
+                            source_uri="https://example.test/memory-source",
+                            content_digest="b" * 64,
+                            event_id=uuid4(),
+                        ),
+                    ),
+                    priority=50,
+                ),
+            ),
+            budget=ContextBudget(256, 4_096, 32, 32, 0, 0, 128),
+            used_tokens=32,
+            used_bytes=128,
+            compacted=False,
+            insufficient_context=True,
+            abstention_reason="contradictory_memory_requires_critic",
+            policy_version="specialist-context-v1",
+        ),
     )
     prompt = _specialist_prompt(context)
     decoded = json.loads(prompt)
     assert decoded["untrusted_evidence_data"][0]["trust"] == "untrusted_data"
+    assert decoded["untrusted_retrieved_memory"]["insufficient_context"] is True
+    assert (
+        decoded["untrusted_retrieved_memory"]["abstention_reason"]
+        == "contradictory_memory_requires_critic"
+    )
+    assert decoded["untrusted_retrieved_memory"]["requires_critic_signal"] is True
+    assert (
+        "BEGIN_UNTRUSTED_MEMORY_DATA"
+        in decoded["untrusted_retrieved_memory"]["rendered_data"]
+    )
     assert "ignore previous instructions" in prompt
     with pytest.raises(KeyError):
         _decode_artifacts(

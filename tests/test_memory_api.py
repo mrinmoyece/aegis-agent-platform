@@ -487,3 +487,102 @@ def test_memory_api_authenticates_ingests_retrieves_and_redacts() -> None:
         authorization=encoded,
     )
     assert cross_tenant == 403
+
+
+def test_memory_api_redacts_provenance_locations_for_non_admin_metadata_reads() -> None:
+    harness = MemoryHarness.create()
+    operations = MemoryOperations(
+        harness.ledger,
+        harness.index,
+        harness.ingestion,
+        HybridRetriever(
+            harness.ledger,
+            harness.index,
+            DeterministicEmbeddingProvider(),
+            clock=lambda: NOW,
+        ),
+        ContextBuilder(harness.ledger, clock=lambda: NOW),
+        MemoryLifecycleService(
+            harness.ledger,
+            harness.blobs,
+            harness.index,
+            clock=lambda: NOW,
+        ),
+    )
+    signing = signing_fixture()
+    tenants = InMemoryTenantRepository((Tenant(TENANT_ID, "Tenant Alpha"),))
+    admin_app = ControlPlaneApp(
+        authentication=authentication_service(
+            signing,
+            records=(identity_record((binding(Role.TENANT_ADMIN),)),),
+        ),
+        tenants=tenants,
+        memory_operations=operations,
+    )
+    viewer_app = ControlPlaneApp(
+        authentication=authentication_service(
+            signing,
+            records=(identity_record((binding(Role.VIEWER),)),),
+        ),
+        tenants=tenants,
+        memory_operations=operations,
+    )
+    encoded_admin = token(signing)
+    encoded_viewer = token(signing)
+    text = "Restricted replica recovery details."
+    memory = semantic_memory(
+        "api-restricted",
+        text,
+        tenant_id=str(TENANT_ID),
+        accepted_by=str(USER_ID),
+        users=("different-user",),
+        roles=("tenant_admin",),
+    )
+    path = f"/v1/tenants/{TENANT_ID}/memories"
+
+    proposed, _ = _request(
+        admin_app,
+        f"{path}/ingest",
+        authorization=encoded_admin,
+        method="POST",
+        body={
+            "idempotency_key": "memory-api-restricted-proposal",
+            "memory": _memory_body(memory),
+            "source_text": text,
+        },
+    )
+    assert proposed == 202
+    memory_lease = lease(memory.memory_id, str(TENANT_ID))
+    harness.ledger.register_lease(memory_lease)
+    accepted, _ = _request(
+        admin_app,
+        f"{path}/{memory.memory_id}/accept",
+        authorization=encoded_admin,
+        method="POST",
+        body={
+            "acceptance_kind": "human",
+            "contradiction_ids": [],
+            "idempotency_key": "memory-api-restricted-accept",
+            "lease": _lease_body(memory_lease),
+            "memory": _memory_body(memory),
+        },
+    )
+    assert accepted == 200
+
+    provenance_status, provenance = _request(
+        viewer_app,
+        f"{path}/{memory.memory_id}/provenance",
+        authorization=encoded_viewer,
+    )
+    assert provenance_status == 200
+    assert provenance["citation_references"][0]["source_uri"] is None
+    assert provenance["source_reference"] is None
+
+    page_status, page = _request(
+        viewer_app,
+        path,
+        authorization=encoded_viewer,
+    )
+    assert page_status == 200
+    assert page["memories"][0]["citation_references"][0]["source_uri"] is None
+    assert page["memories"][0]["source_reference"] is None

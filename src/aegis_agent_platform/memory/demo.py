@@ -156,6 +156,9 @@ async def run_demo() -> dict[str, object]:
         actor_id="admin-a",
         request_reference="demo-retention-request",
     )
+    immutable_ledger_retained = bool(
+        await ledger.load(TenantContext(TenantId("tenant-a")), prior.memory_id)
+    )
     after_purge = await _retrieve(
         retriever,
         ledger,
@@ -185,7 +188,7 @@ async def run_demo() -> dict[str, object]:
             "excluded_after_purge": all(
                 hit.chunk.memory_id != prior.memory_id for hit in after_purge.hits
             ),
-            "immutable_ledger_retained": True,
+            "immutable_ledger_retained": immutable_ledger_retained,
         },
         "tenant_isolation": {
             "tenant_b_excluded": all(

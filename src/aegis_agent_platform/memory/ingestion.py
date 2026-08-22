@@ -210,9 +210,6 @@ class MemoryIngestionService:
         canonical = canonical_text(source_text)
         if sha256(canonical.encode()).hexdigest() != memory.snapshot.content_digest:
             raise ValueError("memory source digest does not match canonical content")
-        duplicate = await self._index.find_version(context, memory.version_key)
-        if duplicate is not None:
-            return MemoryProposalResult(False, duplicate)
         contract_document = json.dumps(
             memory_to_document(memory),
             ensure_ascii=True,
@@ -220,6 +217,29 @@ class MemoryIngestionService:
             sort_keys=True,
         )
         contract_document_digest = sha256(contract_document.encode()).hexdigest()
+        events = await self._ledger.load(context, memory.memory_id)
+        if events:
+            state = replay_memory(events)
+            self._validate_existing_proposal(
+                events,
+                memory,
+                contract_document_digest=contract_document_digest,
+            )
+            if state.candidate_status in {
+                MemoryCandidateStatus.PROPOSED,
+                MemoryCandidateStatus.ACCEPTED,
+            }:
+                await self._ensure_proposal_blobs(
+                    context,
+                    memory,
+                    canonical=canonical,
+                    contract_document=contract_document,
+                    contract_document_digest=contract_document_digest,
+                )
+            return MemoryProposalResult(False, memory.memory_id)
+        duplicate = await self._index.find_version(context, memory.version_key)
+        if duplicate is not None:
+            return MemoryProposalResult(False, duplicate)
         payload = dict(memory_event_payload(memory))
         payload.update(
             {
@@ -264,15 +284,12 @@ class MemoryIngestionService:
                 expected_version=1,
             )
             raise
-        await self._blobs.put(context, memory.snapshot, canonical)
-        await self._blobs.put(
+        await self._ensure_proposal_blobs(
             context,
-            replace(
-                memory.snapshot,
-                content_digest=contract_document_digest,
-                content_reference=memory.contract_reference,
-            ),
-            contract_document,
+            memory,
+            canonical=canonical,
+            contract_document=contract_document,
+            contract_document_digest=contract_document_digest,
         )
         return MemoryProposalResult(True, memory.memory_id)
 
@@ -574,11 +591,13 @@ class MemoryIngestionService:
             expected_version=version,
         )
         total_tokens = sum(chunk.token_count for chunk in chunks)
-        provider_idempotency_key = f"{idempotency_key}:embedding"
+        provider_idempotency_key = (
+            f"embedding:{memory.tenant_id}:{memory.memory_id}:{memory.version_key}"
+        )
         embedding_request = EmbeddingRequest(
             request_id=uuid5(
                 NAMESPACE_URL,
-                f"{memory.tenant_id}:{memory.memory_id}:{provider_idempotency_key}",
+                provider_idempotency_key,
             ),
             tenant_id=memory.tenant_id,
             texts=tuple(chunk.text for chunk in chunks),
@@ -1014,6 +1033,48 @@ class MemoryIngestionService:
             actor=ActorReference(actor_id, ActorKind.USER),
             idempotency_key=idempotency_key,
         )
+
+    async def _ensure_proposal_blobs(
+        self,
+        context: TenantContext,
+        memory: SemanticMemory,
+        *,
+        canonical: str,
+        contract_document: str,
+        contract_document_digest: str,
+    ) -> None:
+        await self._blobs.put(context, memory.snapshot, canonical)
+        await self._blobs.put(
+            context,
+            replace(
+                memory.snapshot,
+                content_digest=contract_document_digest,
+                content_reference=memory.contract_reference,
+            ),
+            contract_document,
+        )
+
+    def _validate_existing_proposal(
+        self,
+        events: Sequence[EventEnvelope],
+        memory: SemanticMemory,
+        *,
+        contract_document_digest: str,
+    ) -> None:
+        proposal = events[0]
+        if proposal.event_type is not DomainEventType.MEMORY_CANDIDATE_PROPOSED:
+            raise ValueError("existing memory stream cannot be retried as a proposal")
+        expected = {
+            "contract_digest": memory.contract_digest,
+            "contract_document_digest": contract_document_digest,
+            "contract_reference": memory.contract_reference,
+            "memory_id": str(memory.memory_id),
+            "source_digest": memory.snapshot.content_digest,
+            "source_snapshot_id": str(memory.snapshot.snapshot_id),
+            "version_key": memory.version_key,
+        }
+        if any(proposal.payload.get(key) != value for key, value in expected.items()):
+            raise ValueError("existing memory proposal does not match the retry")
 
     @staticmethod
     def _tenant(context: TenantContext, memory: SemanticMemory) -> None:

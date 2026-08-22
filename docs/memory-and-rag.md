@@ -122,7 +122,7 @@ cryptographic erasure.
 
 ## APIs and deterministic demo
 
-Authenticated `/v1/tenants/{tenant_id}/memory/*` routes expose ingest, acceptance,
+Authenticated `/v1/tenants/{tenant_id}/memories/*` routes expose ingest, acceptance,
 rejection, status, retrieve, context, provenance, feedback, tombstone, retention,
 legal-hold, and deletion operations. `MemoryOperations` separately authorizes
 principal, tenant, action, role, and purpose. Responses are bounded and redacted.

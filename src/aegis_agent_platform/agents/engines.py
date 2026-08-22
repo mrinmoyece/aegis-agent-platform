@@ -762,6 +762,19 @@ def _specialist_prompt(context: SpecialistContext) -> str:
     # Specialists only receive bounded artifact summaries plus evidence identifiers,
     # URIs, and digests. They do not get full evidence bodies or retrieval tools, so
     # every assessment remains an untrusted hypothesis that must pass later gates.
+    memory_context = (
+        {
+            "rendered_data": context.memory_context.render_untrusted_data(),
+            "insufficient_context": context.memory_context.insufficient_context,
+            "abstention_reason": context.memory_context.abstention_reason,
+            "requires_critic_signal": (
+                context.memory_context.abstention_reason
+                == "contradictory_memory_requires_critic"
+            ),
+        }
+        if context.memory_context is not None
+        else None
+    )
     value = json.dumps(
         {
             "role": context.assignment.role.value,
@@ -770,11 +783,7 @@ def _specialist_prompt(context: SpecialistContext) -> str:
             ),
             "upstream_artifacts": upstream,
             "untrusted_evidence_data": evidence,
-            "untrusted_retrieved_memory": (
-                context.memory_context.render_untrusted_data()
-                if context.memory_context is not None
-                else None
-            ),
+            "untrusted_retrieved_memory": memory_context,
         },
         sort_keys=True,
         separators=(",", ":"),
