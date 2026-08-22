@@ -10,6 +10,7 @@ from uuid import UUID
 
 import pytest
 
+from aegis_agent_platform.config import Settings
 from aegis_agent_platform.domain import (
     DomainEventType,
     FailureClass,
@@ -348,6 +349,7 @@ class FakeOutbox:
         self.claims = tuple(claims)
         self.published: list[UUID] = []
         self.failed: list[tuple[UUID, str]] = []
+        self.publish_conflicts: set[UUID] = set()
 
     async def claim_outbox(self, *args: object, **kwargs: object) -> Sequence[object]:
         del args, kwargs
@@ -363,6 +365,8 @@ class FakeOutbox:
         published_at: datetime,
     ) -> None:
         del context, lease_owner, lease_expires_at, published_at
+        if message_id in self.publish_conflicts:
+            raise ConcurrencyError(1, 2)
         self.published.append(message_id)
 
     async def mark_outbox_failed(
@@ -437,6 +441,61 @@ def test_outbox_publisher_uses_deterministic_identity_then_acknowledges_db() -> 
     assert result.published == 1
     assert queue.published[0].message_id == uid(10)
     assert repository.published == [uid(10)]
+
+
+def test_outbox_publisher_skips_reclaimed_rows_and_continues_batch() -> None:
+    first = outbox_claim()
+    second = replace(
+        outbox_claim(),
+        message=replace(outbox_claim().message, message_id=uid(11)),
+    )
+    repository = FakeOutbox((first, second))
+    repository.publish_conflicts.add(uid(10))
+    queue = FakeQueue()
+
+    result = asyncio.run(
+        OutboxPublisher(repository, queue, publisher_id="publisher-a").publish_batch(
+            TENANT_A,
+            now=NOW,
+        )
+    )
+
+    assert result.published == 1
+    assert result.failed == 0
+    assert [item.message_id for item in queue.published] == [uid(10), uid(11)]
+    assert repository.published == [uid(11)]
+
+
+def test_outbox_publisher_marks_invalid_causation_uuid_as_invalid_envelope() -> None:
+    repository = FakeOutbox(
+        (
+            replace(
+                outbox_claim(),
+                message=replace(
+                    outbox_claim().message,
+                    payload={
+                        "work_id": str(uid(1)),
+                        "correlation_id": str(uid(2)),
+                        "causation_id": "not-a-uuid",
+                    },
+                ),
+            ),
+        )
+    )
+    queue = FakeQueue()
+
+    result = asyncio.run(
+        OutboxPublisher(
+            repository,
+            queue,
+            publisher_id="publisher-a",
+            retry_delay=lambda _: timedelta(seconds=1),
+        ).publish_batch(TENANT_A, now=NOW)
+    )
+
+    assert result.failed == 1
+    assert repository.failed == [(uid(10), "invalid_envelope")]
+    assert queue.published == []
 
 
 def test_publisher_telemetry_records_runtime_metrics() -> None:
@@ -636,6 +695,26 @@ def supervisor(
     )
 
 
+def test_supervisor_from_settings_uses_worker_environment_values() -> None:
+    runtime = WorkerSupervisor.from_settings(
+        Settings(
+            worker_max_concurrency=7,
+            worker_lease_seconds=45,
+            worker_heartbeat_seconds=9,
+        ),
+        FakeQueue(),
+        FakeState(),
+        lambda _: asyncio.sleep(0, result=WorkResult("artifact:settings")),
+        lambda _: 2,
+        worker_id="worker-settings",
+        clock=lambda: NOW,
+    )
+
+    assert runtime._max_concurrency == 7
+    assert runtime._lease_duration == timedelta(seconds=45)
+    assert runtime._heartbeat_interval == timedelta(seconds=9)
+
+
 def test_supervisor_commits_success_before_ack() -> None:
     queue = FakeQueue()
     state = FakeState()
@@ -739,6 +818,36 @@ def test_supervisor_preserves_pending_delivery_when_start_is_fenced() -> None:
     asyncio.run(supervisor(queue, state, handler).run_batch((delivery(),)))
 
     assert state.transitions == ["published", "claimed", "started"]
+    assert queue.acknowledged == []
+
+
+def test_supervisor_preserves_pending_delivery_when_failure_record_is_fenced() -> None:
+    queue = FakeQueue()
+
+    class FencedFailureState(FakeState):
+        async def fail(
+            self,
+            context: TenantContext,
+            item: QueueDelivery,
+            active_lease: WorkLease,
+            *,
+            at: datetime,
+            failure_class: FailureClass,
+            error_code: str,
+            retry_at: datetime | None,
+        ) -> bool:
+            del context, item, active_lease, at, failure_class, error_code, retry_at
+            self.transitions.append("failed")
+            raise FencingError(1, 0)
+
+    state = FencedFailureState()
+
+    async def handler(_: WorkExecution) -> WorkResult:
+        raise WorkerExecutionError(FailureClass.PERMANENT, "dependency_rejected")
+
+    asyncio.run(supervisor(queue, state, handler).run_batch((delivery(),)))
+
+    assert state.transitions == ["published", "claimed", "started", "failed"]
     assert queue.acknowledged == []
 
 

@@ -5,11 +5,13 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from collections.abc import Awaitable, Callable, Mapping
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Protocol, TypeVar, cast
 from uuid import UUID
 
+from aegis_agent_platform.config import Settings
 from aegis_agent_platform.domain import FailureClass, JsonValue, WorkLease
 from aegis_agent_platform.event_store import ConcurrencyError, FencingError
 from aegis_agent_platform.identity import TenantId
@@ -252,6 +254,37 @@ class WorkerSupervisor:
         self._active: set[asyncio.Task[None]] = set()
         self._draining = False
 
+    @classmethod
+    def from_settings(
+        cls,
+        settings: Settings,
+        queue: WorkQueue,
+        state: WorkerStateStore,
+        handler: Callable[[WorkExecution], Awaitable[WorkResult]],
+        quota: Callable[[TenantContext], int],
+        *,
+        worker_id: str,
+        clock: Callable[[], datetime],
+        backoff: ExponentialBackoff | None = None,
+        telemetry: RuntimeTelemetry | None = None,
+        tracer: RuntimeTracer | None = None,
+    ) -> WorkerSupervisor:
+        """Build a supervisor that honors AEGIS_WORKER_* process settings."""
+        return cls(
+            queue,
+            state,
+            handler,
+            quota,
+            worker_id=worker_id,
+            clock=clock,
+            max_concurrency=settings.worker_max_concurrency,
+            lease_duration=timedelta(seconds=settings.worker_lease_seconds),
+            heartbeat_interval=timedelta(seconds=settings.worker_heartbeat_seconds),
+            backoff=backoff,
+            telemetry=telemetry,
+            tracer=tracer,
+        )
+
     async def run_batch(
         self,
         deliveries: tuple[QueueDelivery, ...],
@@ -414,13 +447,14 @@ class WorkerSupervisor:
                     max(0.0, (self._clock() - started_at).total_seconds())
                 )
         except TimeoutError:
-            await self._record_failure(
+            if not await self._record_failure(
                 tenant,
                 delivery,
                 lease,
                 FailureClass.TIMEOUT,
                 "task_timeout",
-            )
+            ):
+                return
         except WorkerExecutionError as error:
             if error.failure_class is FailureClass.CANCELLED:
                 if not await self._state.cancellation_requested(tenant, lease.work_id):
@@ -433,13 +467,14 @@ class WorkerSupervisor:
                 )
                 self._telemetry.cancelled()
             else:
-                await self._record_failure(
+                if not await self._record_failure(
                     tenant,
                     delivery,
                     lease,
                     error.failure_class,
                     error.error_code,
-                )
+                ):
+                    return
         except FencingError:
             if not await self._state.cancellation_requested(tenant, lease.work_id):
                 return
@@ -459,13 +494,14 @@ class WorkerSupervisor:
             # Preserve the pending entry and live lease for expiry-based recovery.
             raise
         except Exception:
-            await self._record_failure(
+            if not await self._record_failure(
                 tenant,
                 delivery,
                 lease,
                 FailureClass.WORKER_BUG,
                 "unhandled_worker_exception",
-            )
+            ):
+                return
         await self._queue.acknowledge(delivery)
 
     async def _execute_handler(
@@ -539,11 +575,15 @@ class WorkerSupervisor:
             for task in (handler_task, heartbeat_task):
                 if not task.done():
                     task.cancel()
-            await asyncio.gather(
-                handler_task,
-                heartbeat_task,
-                return_exceptions=True,
-            )
+            with suppress(TimeoutError):
+                await asyncio.wait_for(
+                    asyncio.gather(
+                        handler_task,
+                        heartbeat_task,
+                        return_exceptions=True,
+                    ),
+                    timeout=5.0,
+                )
         return result
 
     async def _record_failure(
@@ -553,7 +593,7 @@ class WorkerSupervisor:
         lease: WorkLease,
         failure_class: FailureClass,
         error_code: str,
-    ) -> None:
+    ) -> bool:
         retryable = failure_class in {
             FailureClass.RETRYABLE,
             FailureClass.TIMEOUT,
@@ -561,19 +601,23 @@ class WorkerSupervisor:
         retry_at = (
             self._clock() + self._backoff.delay(lease.attempt) if retryable else None
         )
-        terminal = await self._state.fail(
-            tenant,
-            delivery,
-            lease,
-            at=self._clock(),
-            failure_class=failure_class,
-            error_code=error_code,
-            retry_at=retry_at,
-        )
+        try:
+            terminal = await self._state.fail(
+                tenant,
+                delivery,
+                lease,
+                at=self._clock(),
+                failure_class=failure_class,
+                error_code=error_code,
+                retry_at=retry_at,
+            )
+        except FencingError:
+            return False
         if terminal:
             self._telemetry.dead_letter()
         else:
             self._telemetry.retry()
+        return True
 
 
 def _timeout_seconds(delivery: QueueDelivery) -> float:

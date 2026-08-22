@@ -32,7 +32,8 @@ from aegis_agent_platform.event_store.postgres import (
     classify_storage_error,
     postgres_connection_lock,
 )
-from aegis_agent_platform.queueing import QueueDelivery
+from aegis_agent_platform.queueing import MessageEnvelope, QueueDelivery
+from aegis_agent_platform.queueing.redis_streams import validate_transport_size
 from aegis_agent_platform.runtime.operations import RequeueApproval
 from aegis_agent_platform.tenancy import TenantContext
 
@@ -95,6 +96,20 @@ class PostgresWorkRepository:
     ) -> int:
         """Persist request intent and publication outbox before any execution."""
         _validate_request_context(context, request)
+        validate_transport_size(
+            MessageEnvelope(
+                message_id=outbox_message_id,
+                tenant_id=request.tenant_id,
+                work_id=request.work_id,
+                event_id=requested_event_id,
+                destination="aegis.work",
+                correlation_id=request.correlation_id,
+                causation_id=request.causation_id,
+                occurred_at=request.requested_at,
+                payload=_request_payload(request),
+                headers={"tenant_id": request.tenant_id, "schema_version": 1},
+            )
+        )
         event = WorkTransition(
             DomainEventType.WORK_REQUESTED,
             request.requested_at,
@@ -1209,8 +1224,13 @@ class PostgresWorkRepository:
                         approved_at, expires_at
                     )
                     SELECT %s, %s, %s, %s, %s, %s
-                    FROM work_dead_letters
-                    WHERE tenant_id = %s AND work_id = %s
+                    FROM work_dead_letters dead_letters
+                    JOIN work_items items
+                      ON items.tenant_id = dead_letters.tenant_id
+                     AND items.work_id = dead_letters.work_id
+                    WHERE dead_letters.tenant_id = %s
+                      AND dead_letters.work_id = %s
+                      AND items.status = %s
                     ON CONFLICT (tenant_id, approval_id) DO NOTHING
                     """,
                     (
@@ -1222,6 +1242,7 @@ class PostgresWorkRepository:
                         expires_at,
                         str(context.tenant_id),
                         work_id,
+                        WorkStatus.DEAD_LETTER.value,
                     ),
                 )
                 if cursor.rowcount != 1:

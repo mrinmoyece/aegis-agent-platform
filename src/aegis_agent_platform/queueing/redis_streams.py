@@ -10,7 +10,7 @@ from uuid import UUID
 
 import redis.asyncio as redis
 from redis.exceptions import ConnectionError as RedisConnectionError
-from redis.exceptions import RedisError
+from redis.exceptions import RedisError, ResponseError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from aegis_agent_platform.config import Settings
@@ -50,6 +50,7 @@ class RedisStreamQueue:
         self._group = group
         self._poison_stream = f"{stream}:poison"
         self._group_ready = False
+        self._reclaim_cursor_by_consumer: dict[str, str] = {}
 
     async def ensure_group(self) -> None:
         """Idempotently create the consumer group at the beginning of the stream."""
@@ -77,6 +78,7 @@ class RedisStreamQueue:
                 {_ENVELOPE_FIELD: encoded},
             )
         except RedisError as error:
+            self._handle_nogroup(error)
             raise _classify_redis_error(error) from error
         return _text(result)
 
@@ -106,6 +108,7 @@ class RedisStreamQueue:
                     count=count,
                 )
         except RedisError as error:
+            self._handle_nogroup(error)
             raise _classify_redis_error(error) from error
         entries = _stream_entries(rows)
         return await self._decode_entries(
@@ -126,6 +129,7 @@ class RedisStreamQueue:
                 pipeline.xdel(self._stream, delivery.stream_entry_id)
                 result = await pipeline.execute()
         except RedisError as error:
+            self._handle_nogroup(error)
             raise _classify_redis_error(error) from error
         acknowledged = result[0]
         if int(acknowledged) not in {0, 1}:
@@ -163,6 +167,7 @@ class RedisStreamQueue:
                 idle=minimum_idle_milliseconds or None,
             )
         except RedisError as error:
+            self._handle_nogroup(error)
             raise _classify_redis_error(error) from error
         return tuple(
             PendingEntry(
@@ -185,16 +190,22 @@ class RedisStreamQueue:
         if not consumer or minimum_idle_milliseconds < 1 or not 1 <= count <= 100:
             raise ValueError("invalid bounded reclaim request")
         try:
+            start_id = self._reclaim_cursor_by_consumer.get(consumer, "0-0")
             result = await self._client.xautoclaim(
                 self._stream,
                 self._group,
                 consumer,
                 min_idle_time=minimum_idle_milliseconds,
-                start_id="0-0",
+                start_id=start_id,
                 count=count,
             )
         except RedisError as error:
+            self._handle_nogroup(error)
             raise _classify_redis_error(error) from error
+        next_cursor = _text(result[0])
+        self._reclaim_cursor_by_consumer[consumer] = (
+            "0-0" if next_cursor == "0-0" else next_cursor
+        )
         entries = cast(list[tuple[object, Mapping[object, object]]], result[1])
         deliveries: list[QueueDelivery] = []
         metadata = {
@@ -263,6 +274,7 @@ class RedisStreamQueue:
                 pipeline.xdel(self._stream, stream_entry_id)
                 await pipeline.execute()
         except RedisError as error:
+            self._handle_nogroup(error)
             raise _classify_redis_error(error) from error
 
     async def health(self) -> bool:
@@ -271,8 +283,34 @@ class RedisStreamQueue:
         except RedisError:
             return False
 
+    def _handle_nogroup(self, error: RedisError) -> None:
+        if isinstance(error, ResponseError) and "NOGROUP" in str(error):
+            self._group_ready = False
+            self._reclaim_cursor_by_consumer.clear()
+
 
 def _encode_envelope(envelope: MessageEnvelope) -> bytes:
+    _validate_transport_size(envelope)
+    body = _envelope_body(envelope)
+    return json.dumps(body, separators=(",", ":"), sort_keys=True).encode()
+
+
+def validate_transport_size(envelope: MessageEnvelope) -> None:
+    """Reject envelopes that Redis cannot accept before durable registration."""
+    _validate_transport_size(envelope)
+
+
+def _validate_transport_size(envelope: MessageEnvelope) -> None:
+    encoded = json.dumps(
+        _envelope_body(envelope),
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode()
+    if len(encoded) > _MAX_ENVELOPE_BYTES:
+        raise PermanentQueueError("message envelope exceeds 256 KiB")
+
+
+def _envelope_body(envelope: MessageEnvelope) -> dict[str, object]:
     body = {
         "schema_version": envelope.schema_version,
         "message_id": str(envelope.message_id),
@@ -286,10 +324,7 @@ def _encode_envelope(envelope: MessageEnvelope) -> bytes:
         "payload": thaw_json(envelope.payload),
         "headers": thaw_json(envelope.headers),
     }
-    encoded = json.dumps(body, separators=(",", ":"), sort_keys=True).encode()
-    if len(encoded) > _MAX_ENVELOPE_BYTES:
-        raise PermanentQueueError("message envelope exceeds 256 KiB")
-    return encoded
+    return body
 
 
 def _stream_entries(
@@ -373,6 +408,8 @@ def _classify_redis_error(
 ) -> RetryableQueueError | PermanentQueueError:
     if isinstance(error, (RedisConnectionError, RedisTimeoutError)):
         return RetryableQueueError("redis transport unavailable")
+    if isinstance(error, ResponseError) and "NOGROUP" in str(error):
+        return RetryableQueueError("redis consumer group missing")
     return PermanentQueueError("redis operation rejected")
 
 
@@ -393,4 +430,4 @@ def create_redis_client(settings: Settings) -> redis.Redis:
     )
 
 
-__all__ = ["RedisStreamQueue", "create_redis_client"]
+__all__ = ["RedisStreamQueue", "create_redis_client", "validate_transport_size"]

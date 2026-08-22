@@ -63,7 +63,7 @@ automated negative-test suite: `tests/test_identity_security.py`,
 
 | Layer | Lab | Failure injection and evidence |
 | --- | --- | --- |
-| 2 | Live-database and live-Keycloak drill | Run the row-level-security policies and the append-only trigger against a running Postgres instance, and exercise `RemoteJwksProvider` against a real Keycloak realm with rotated keys — both are currently only asserted statically or against mocked transports |
+| 2 | Live-Keycloak drill | Forced RLS policies and the append-only trigger already run against live PostgreSQL in integration tests; the remaining gap is exercising `RemoteJwksProvider` against a real Keycloak realm with rotated keys |
 | 3 | Incident-specific durable investigation | Crash after each coordinator transition; replay identical incident state |
 | 3 | Schema evolution | Replay old checkout fixtures through additive upcasters |
 | 4 | Connector ambiguity | Rate-limit and truncate Dynatrace/GitHub responses; preserve provenance and partial status |

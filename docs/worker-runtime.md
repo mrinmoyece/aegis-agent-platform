@@ -7,9 +7,11 @@ remediation.
 ## Delivery semantics
 
 A request appends `work.requested.v1` and an outbox row before execution is
-possible. `OutboxPublisher` claims at most 100 PostgreSQL rows with a renewable
-database lease, serializes a tenant-bound `MessageEnvelope`, and `XADD`s it to
-Redis. Only then does it mark the outbox row published.
+possible. `OutboxPublisher` claims at most 100 PostgreSQL rows with a fixed
+database lease for the whole batch, serializes a tenant-bound
+`MessageEnvelope`, and `XADD`s it to Redis. Only then does it mark the outbox
+row published. The publisher does not renew outbox leases mid-batch, so rows at
+the tail of a slow batch can expire and be reclaimed concurrently.
 
 The message UUID is deterministic across publication retries. A crash after
 `XADD` and before database acknowledgement produces a duplicate stream entry

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from aegis_agent_platform.event_store import ClaimedOutboxMessage
+from aegis_agent_platform.event_store import ClaimedOutboxMessage, ConcurrencyError
 from aegis_agent_platform.observability.runtime import (
     RuntimeMetrics,
     RuntimeTracer,
@@ -118,14 +118,17 @@ class OutboxPublisher:
             try:
                 envelope = _envelope(context, claim, now)
                 with self._tracer.span("outbox.publish"):
-                    await self._queue.publish(envelope)
-                    await self._repository.mark_outbox_published(
-                        context,
-                        claim.message.message_id,
-                        lease_owner=claim.lease_owner,
-                        lease_expires_at=claim.lease_expires_at,
-                        published_at=now,
-                    )
+                    try:
+                        await self._queue.publish(envelope)
+                        await self._repository.mark_outbox_published(
+                            context,
+                            claim.message.message_id,
+                            lease_owner=claim.lease_owner,
+                            lease_expires_at=claim.lease_expires_at,
+                            published_at=now,
+                        )
+                    except ConcurrencyError:
+                        continue
             except RetryableQueueError:
                 failed += 1
                 self._telemetry.failed(retryable=True)
@@ -174,6 +177,11 @@ def _envelope(
     try:
         work_id = UUID(str(payload["work_id"]))
         correlation_id = UUID(str(payload["correlation_id"]))
+        causation_id = (
+            UUID(str(payload["causation_id"]))
+            if payload.get("causation_id") is not None
+            else None
+        )
     except (KeyError, ValueError) as error:
         raise PermanentQueueError(
             "outbox payload lacks work routing metadata"
@@ -181,7 +189,6 @@ def _envelope(
     tenant_header = claim.message.headers.get("tenant_id")
     if tenant_header is not None and str(tenant_header) != str(context.tenant_id):
         raise PermanentQueueError("outbox tenant header mismatch")
-    causation_value = payload.get("causation_id")
     return MessageEnvelope(
         message_id=claim.message.message_id,
         tenant_id=str(context.tenant_id),
@@ -189,9 +196,7 @@ def _envelope(
         event_id=claim.message.event_id,
         destination=claim.message.destination,
         correlation_id=correlation_id,
-        causation_id=(
-            UUID(str(causation_value)) if causation_value is not None else None
-        ),
+        causation_id=causation_id,
         occurred_at=now,
         payload=payload,
         headers=claim.message.headers,
