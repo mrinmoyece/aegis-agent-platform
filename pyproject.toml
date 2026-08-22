@@ -21,11 +21,14 @@ dependencies = [
   "anthropic>=0.64,<1",
   "cryptography>=45,<49",
   "jsonschema>=4.25,<5",
+  "kubernetes>=33,<35",
   "openai>=1.99,<3",
   "opentelemetry-api>=1.36,<2",
   "psycopg[binary]>=3.2.9,<4",
+  "pyyaml>=6.0.2,<7",
   "pyjwt>=2.10,<3",
   "redis>=6.4,<7",
+  "urllib3>=1.26,<2.4",
   "uvicorn>=0.35,<1",
 ]
 
@@ -34,7 +37,6 @@ dev = [
   "mypy>=1.17,<2",
   "pytest>=8.4,<9",
   "pytest-cov>=6.2,<7",
-  "pyyaml>=6.0.2,<7",
   "ruff>=0.12,<1",
   "types-pyyaml>=6.0.12,<7",
   "types-jsonschema>=4.25,<5",
@@ -73,6 +75,10 @@ warn_unreachable = true
 show_error_codes = true
 pretty = true
 
+[[tool.mypy.overrides]]
+module = ["kubernetes", "kubernetes.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 addopts = "--strict-config --strict-markers -q"
 testpaths = ["tests"]
@@ -89,6 +95,10 @@ omit = [
   "src/aegis_agent_platform/persistence/postgres.py",
   "src/aegis_agent_platform/runtime/postgres.py",
   "src/aegis_agent_platform/gateway/postgres.py",
+  "src/aegis_agent_platform/evidence/postgres.py",
+  "src/aegis_agent_platform/evidence/transport.py",
+  "src/aegis_agent_platform/integrations/kubernetes/official.py",
+  "src/aegis_agent_platform/control_plane/__main__.py",
   "src/aegis_agent_platform/queueing/redis_streams.py",
 ]
 

@@ -97,6 +97,8 @@ class Permission(StrEnum):
     WORK_RECONCILE = "work:reconcile"
     MODEL_READ = "model:read"
     MODEL_DIAGNOSTIC = "model:diagnostic"
+    EVIDENCE_READ = "evidence:read"
+    EVIDENCE_QUERY = "evidence:query"
 
 
 @dataclass(frozen=True, slots=True)

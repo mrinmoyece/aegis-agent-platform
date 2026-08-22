@@ -21,6 +21,27 @@ role, or permission produces a denial, never an implicit allow.
 **Event ledger** — Append-only authoritative record from which incident state is
 reconstructed.
 
+**Evidence record** — Immutable tenant-scoped normalized observation or
+retrieved knowledge item with source identity, UTC timestamps, digest,
+provenance, classification, retention, and redaction metadata.
+
+**Evidence bundle** — Deterministically ordered evidence, typed links, timeline
+entries, ambiguity, and source conflicts prepared for later specialists. It is
+not a diagnosis.
+
+**Partial result** — Explicit connector outcome stating that some bounded data
+was returned while pages, records, or bytes were omitted; it is never represented
+as complete success.
+
+**Provenance** — Immutable source URI, source record ID, retrieval timestamp, and
+trust status used to verify and cite an evidence record.
+
+**Quarantine** — Tenant-scoped holding metadata for invalid, oversized, or
+untrusted evidence that cannot enter the immutable evidence store.
+
+**Source cursor** — Bounded opaque pagination/resumption value advanced only by
+the currently fenced worker after durable result persistence.
+
 **Fence** — Monotonically increasing token used to reject work from a stale
 lease holder.
 

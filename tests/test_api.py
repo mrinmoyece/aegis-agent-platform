@@ -22,12 +22,24 @@ from aegis_agent_platform.domain import (
     JsonValue,
     ModelCapabilities,
     ModelIdentity,
+    PartialResult,
     PricingVersion,
 )
 from aegis_agent_platform.event_store import (
     EventPage,
     EventStore,
     TransientStorageError,
+)
+from aegis_agent_platform.evidence import (
+    ConnectorPage,
+    EvidenceIngestor,
+    EvidenceQueryService,
+    InMemoryEvidenceRepository,
+    InMemoryEvidenceStore,
+)
+from aegis_agent_platform.evidence.operations import (
+    EvidenceOperations,
+    InMemoryEvidenceBundleStore,
 )
 from aegis_agent_platform.gateway import (
     GatewayOperations,
@@ -63,11 +75,23 @@ def request(
     headers: list[tuple[bytes, bytes]] | None = None,
     method: str = "GET",
     query_string: str = "",
+    body: bytes = b"",
+    body_chunks: tuple[bytes, ...] | None = None,
 ) -> tuple[int, dict[str, Any], list[tuple[bytes, bytes]]]:
     messages: list[dict[str, Any]] = []
 
+    request_bodies = body_chunks or (body,)
+    request_index = 0
+
     async def receive() -> dict[str, Any]:
-        return {"type": "http.request", "body": b"", "more_body": False}
+        nonlocal request_index
+        request_body = request_bodies[request_index]
+        request_index += 1
+        return {
+            "type": "http.request",
+            "body": request_body,
+            "more_body": request_index < len(request_bodies),
+        }
 
     async def send(message: dict[str, Any]) -> None:
         messages.append(message)
@@ -94,8 +118,8 @@ def request(
 
     status = messages[0]["status"]
     response_headers = messages[0]["headers"]
-    body = json.loads(messages[1]["body"])
-    return status, body, response_headers
+    response_body = json.loads(messages[1]["body"])
+    return status, response_body, response_headers
 
 
 def bearer(encoded: str) -> str:
@@ -148,6 +172,7 @@ def secured_app(
     *,
     event_store: EventStore | None = None,
     gateway_operations: GatewayOperations | None = None,
+    evidence_operations: EvidenceOperations | None = None,
 ) -> tuple[ControlPlaneApp, str, InMemoryAuditStore]:
     signing = signing_fixture()
     audit = InMemoryAuditStore()
@@ -158,8 +183,34 @@ def secured_app(
         audit=audit,
         event_store=event_store,
         gateway_operations=gateway_operations,
+        evidence_operations=evidence_operations,
     )
     return app, token(signing), audit
+
+
+class EmptyEvidenceConnector:
+    source = "dynatrace"
+
+    async def query(self, *args: object, **kwargs: object) -> ConnectorPage:
+        del args, kwargs
+        return ConnectorPage((), None, PartialResult(False, False))
+
+    async def capability(self) -> object:
+        raise NotImplementedError
+
+
+def evidence_operations() -> EvidenceOperations:
+    records = InMemoryEvidenceStore()
+    service = EvidenceQueryService(
+        connectors={"dynatrace": EmptyEvidenceConnector()},  # type: ignore[dict-item]
+        repository=InMemoryEvidenceRepository(),
+        ingestor=EvidenceIngestor(records),
+    )
+    return EvidenceOperations(
+        service,
+        records,
+        InMemoryEvidenceBundleStore(),
+    )
 
 
 class StaticUsageReader:
@@ -594,3 +645,282 @@ def test_readiness_includes_configured_storage_dependency() -> None:
     assert ready["checks"] == ["configuration", "storage"]
     assert failed_status == 503
     assert failed["reason"] == "storage_unavailable"
+
+
+def test_evidence_api_accepts_durable_work_and_exposes_bounded_views() -> None:
+    from aegis_agent_platform.identity import Role
+    from security_helpers import binding, identity_record
+
+    signing = signing_fixture()
+    app = ControlPlaneApp(
+        authentication=authentication_service(
+            signing,
+            records=(identity_record((binding(Role.INVESTIGATOR),)),),
+        ),
+        tenants=InMemoryTenantRepository((Tenant(TENANT_ID, "Tenant Alpha"),)),
+        policies=InMemoryPolicyRepository((tenant_policy(),)),
+        audit=InMemoryAuditStore(),
+        evidence_operations=evidence_operations(),
+    )
+    authorization = bearer(token(signing))
+    payload = json.dumps(
+        {
+            "source": "dynatrace",
+            "environment": "production",
+            "start": "2026-08-13T08:00:00+00:00",
+            "end": "2026-08-13T09:00:00+00:00",
+            "kinds": ["log"],
+            "selectors": {"service": "checkout"},
+            "limit": 50,
+            "cursor": "2",
+            "idempotency_key": "api-evidence-1",
+        }
+    ).encode()
+
+    created_status, created, _ = request(
+        "/v1/tenants/tenant-alpha/evidence/queries",
+        app=app,
+        authorization=authorization,
+        method="POST",
+        body=payload,
+    )
+    duplicate_status, duplicate, _ = request(
+        "/v1/tenants/tenant-alpha/evidence/queries",
+        app=app,
+        authorization=authorization,
+        method="POST",
+        body=payload,
+    )
+    capabilities_status, capabilities, _ = request(
+        "/v1/tenants/tenant-alpha/evidence/capabilities",
+        app=app,
+        authorization=authorization,
+    )
+    query_status, status, _ = request(
+        f"/v1/tenants/tenant-alpha/evidence/queries/{created['query_id']}",
+        app=app,
+        authorization=authorization,
+    )
+
+    assert created_status == 202
+    assert created["status"] == "requested"
+    assert duplicate_status == 200
+    assert duplicate == {
+        "query_id": created["query_id"],
+        "accepted": False,
+        "status": "duplicate",
+    }
+    assert capabilities_status == query_status == 200
+    assert capabilities["capabilities"][0]["source"] == "dynatrace"
+    assert status["event_type"] == "evidence.query_requested.v1"
+
+
+def test_evidence_api_fails_closed_and_validates_identifiers_and_payloads() -> None:
+    from aegis_agent_platform.identity import Role
+    from security_helpers import binding, identity_record
+
+    signing = signing_fixture()
+    authorization = bearer(token(signing))
+    authentication = authentication_service(
+        signing,
+        records=(identity_record((binding(Role.INVESTIGATOR),)),),
+    )
+    tenants = InMemoryTenantRepository((Tenant(TENANT_ID, "Tenant Alpha"),))
+    policies = InMemoryPolicyRepository((tenant_policy(),))
+    unavailable = ControlPlaneApp(
+        authentication=authentication,
+        tenants=tenants,
+        policies=policies,
+        audit=InMemoryAuditStore(),
+    )
+    configured = ControlPlaneApp(
+        authentication=authentication,
+        tenants=tenants,
+        policies=policies,
+        audit=InMemoryAuditStore(),
+        evidence_operations=evidence_operations(),
+    )
+
+    missing_status, missing, _ = request(
+        "/v1/tenants/tenant-alpha/evidence/records",
+        app=unavailable,
+        authorization=authorization,
+    )
+    invalid_body_status, invalid_body, _ = request(
+        "/v1/tenants/tenant-alpha/evidence/queries",
+        app=configured,
+        authorization=authorization,
+        method="POST",
+        body=b"not-json",
+    )
+    invalid_id_status, invalid_id, _ = request(
+        "/v1/tenants/tenant-alpha/evidence/queries/not-a-uuid",
+        app=configured,
+        authorization=authorization,
+    )
+    missing_query_status, missing_query, _ = request(
+        f"/v1/tenants/tenant-alpha/evidence/queries/{uuid4()}",
+        app=configured,
+        authorization=authorization,
+    )
+    missing_bundle_status, missing_bundle, _ = request(
+        "/v1/tenants/tenant-alpha/evidence/bundles/missing",
+        app=configured,
+        authorization=authorization,
+    )
+    records_status, records, _ = request(
+        "/v1/tenants/tenant-alpha/evidence/records",
+        app=configured,
+        authorization=authorization,
+    )
+    citations_status, citations, _ = request(
+        "/v1/tenants/tenant-alpha/evidence/citations",
+        app=configured,
+        authorization=authorization,
+    )
+
+    assert missing_status == 503
+    assert missing["error"]["code"] == "evidence_not_configured"
+    assert invalid_body_status == 400
+    assert invalid_body["error"]["code"] == "invalid_evidence_query"
+    assert invalid_id_status == 400
+    assert invalid_id["error"]["code"] == "invalid_query_id"
+    assert missing_query_status == missing_bundle_status == 404
+    assert missing_query["error"]["code"] == "query_not_found"
+    assert missing_bundle["error"]["code"] == "bundle_not_found"
+    assert records_status == citations_status == 200
+    assert records["records"] == citations["citations"] == []
+
+
+def test_evidence_api_enforces_query_rbac_policy_and_cursor_bounds() -> None:
+    signing = signing_fixture()
+    authorization = bearer(token(signing))
+    operations = evidence_operations()
+    viewer_app = ControlPlaneApp(
+        authentication=authentication_service(signing),
+        tenants=InMemoryTenantRepository((Tenant(TENANT_ID, "Tenant Alpha"),)),
+        policies=InMemoryPolicyRepository((tenant_policy(),)),
+        audit=InMemoryAuditStore(),
+        evidence_operations=operations,
+    )
+    payload = json.dumps(
+        {
+            "source": "dynatrace",
+            "environment": "production",
+            "start": "2026-08-13T08:00:00+00:00",
+            "end": "2026-08-13T09:00:00+00:00",
+            "kinds": ["log"],
+            "selectors": {"service": "checkout"},
+            "idempotency_key": "viewer-denied",
+        }
+    ).encode()
+    denied_status, denied, _ = request(
+        "/v1/tenants/tenant-alpha/evidence/queries",
+        app=viewer_app,
+        authorization=authorization,
+        method="POST",
+        body=payload,
+    )
+    cursor_status, cursor, _ = request(
+        "/v1/tenants/tenant-alpha/evidence/records",
+        app=viewer_app,
+        authorization=authorization,
+        query_string="cursor=-1",
+    )
+    no_policy_app = ControlPlaneApp(
+        authentication=authentication_service(signing),
+        tenants=InMemoryTenantRepository((Tenant(TENANT_ID, "Tenant Alpha"),)),
+        policies=InMemoryPolicyRepository(()),
+        audit=InMemoryAuditStore(),
+        evidence_operations=operations,
+    )
+    policy_status, policy_body, _ = request(
+        "/v1/tenants/tenant-alpha/evidence/capabilities",
+        app=no_policy_app,
+        authorization=authorization,
+    )
+
+    assert denied_status == 403
+    assert denied["error"]["code"] == "authorization_denied"
+    assert cursor_status == 400
+    assert cursor["error"]["code"] == "invalid_cursor"
+    assert policy_status == 503
+    assert policy_body["error"]["code"] == "policy_not_configured"
+
+
+def test_evidence_api_accepts_chunked_json_and_rejects_idempotency_reuse() -> None:
+    from aegis_agent_platform.identity import Role
+    from security_helpers import binding, identity_record
+
+    signing = signing_fixture()
+    authorization = bearer(token(signing))
+    app = ControlPlaneApp(
+        authentication=authentication_service(
+            signing,
+            records=(identity_record((binding(Role.INVESTIGATOR),)),),
+        ),
+        tenants=InMemoryTenantRepository((Tenant(TENANT_ID, "Tenant Alpha"),)),
+        policies=InMemoryPolicyRepository((tenant_policy(),)),
+        audit=InMemoryAuditStore(),
+        evidence_operations=evidence_operations(),
+    )
+    payload = {
+        "source": "dynatrace",
+        "environment": "production",
+        "start": "2026-08-13T08:00:00+00:00",
+        "end": "2026-08-13T09:00:00+00:00",
+        "kinds": ["log"],
+        "selectors": {"service": "checkout"},
+        "idempotency_key": "chunked-request",
+        "limit": 10,
+    }
+    encoded = json.dumps(payload).encode()
+
+    accepted_status, _, _ = request(
+        "/v1/tenants/tenant-alpha/evidence/queries",
+        app=app,
+        authorization=authorization,
+        method="POST",
+        body_chunks=(encoded[:20], encoded[20:]),
+    )
+    payload["limit"] = 11
+    conflict_status, conflict, _ = request(
+        "/v1/tenants/tenant-alpha/evidence/queries",
+        app=app,
+        authorization=authorization,
+        method="POST",
+        body=json.dumps(payload).encode(),
+    )
+    payload["idempotency_key"] = None
+    invalid_status, invalid, _ = request(
+        "/v1/tenants/tenant-alpha/evidence/queries",
+        app=app,
+        authorization=authorization,
+        method="POST",
+        body=json.dumps(payload).encode(),
+    )
+
+    assert accepted_status == 202
+    assert conflict_status == 409
+    assert conflict["error"]["code"] == "evidence_idempotency_key_reused"
+    assert invalid_status == 400
+    assert invalid["error"]["code"] == "invalid_evidence_query"
+
+
+def test_evidence_page_cursor_round_trips_highwater_and_position() -> None:
+    from aegis_agent_platform.control_plane.api import (
+        _encode_evidence_cursor,
+        _evidence_cursor_parameter,
+    )
+
+    encoded = _encode_evidence_cursor((250, 100))
+
+    decoded = _evidence_cursor_parameter({"query_string": f"cursor={encoded}".encode()})
+
+    assert decoded == (250, 100)
+    with pytest.raises(ValueError, match="query string must be bytes"):
+        _evidence_cursor_parameter({"query_string": "cursor=invalid"})
+    with pytest.raises(ValueError, match="cursor must occur once"):
+        _evidence_cursor_parameter({"query_string": b"cursor=a&cursor=b"})
+    with pytest.raises(ValueError, match="cursor is invalid"):
+        _evidence_cursor_parameter({"query_string": b"cursor=not-base64"})

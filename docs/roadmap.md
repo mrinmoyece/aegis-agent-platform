@@ -117,7 +117,26 @@ do not retry; fallback is bounded; usage retains its price version; prompts and
 keys never enter model events or telemetry; ambiguous provider billing is
 reported rather than treated as exactly once.
 
-## Layer 6 — Tools, policy, and sandbox
+## Layer 6 — Evidence connectors and deterministic correlation
+
+Add provider-neutral evidence contracts, durable query intent, bounded
+Dynatrace/GitHub/Kubernetes/runbook adapters, immutable tenant-scoped ingestion,
+provenance/redaction/quarantine, cursor fencing, asynchronous operator APIs, and
+non-LLM timeline correlation.
+
+**Status:** implemented in `domain.evidence`, `evidence`, `integrations`,
+migration `0005_evidence_connectors.sql`, and deterministic mocked transport,
+ingestion, fencing, API, and correlation tests. Live external environments are
+not configured or verified.
+
+**Acceptance gate:** intent precedes network; stale workers cannot query,
+append, or advance cursors; source and environment allowlists fail closed;
+records are bounded, redacted, content-addressed, and cited; partial results are
+explicit; ambiguity/conflict survives deterministic correlation; no vendor type,
+credential, unrestricted source content, or unbounded payload enters core
+contracts/events.
+
+## Layer 7 — Tools, policy, and sandbox
 
 Add typed tool contracts, policy decisions, approvals, capability-scoped
 credentials, an incident proposal/approval workflow, and isolated execution with
@@ -129,7 +148,7 @@ authorization; sandbox escape and egress tests fail closed; every effect is
 attributable to an approved intent; the checkout rollback cannot execute before
 valid approval.
 
-## Layer 7 — Memory and retrieval
+## Layer 8 — Memory and retrieval
 
 Add tenant-scoped short- and long-term memory, pgvector retrieval, provenance,
 classification, retention, export, and deletion workflows. Index runbooks and
@@ -143,7 +162,7 @@ retrieved item has provenance; deletion and retention behavior is auditable.
 Compaction tests preserve material evidence, uncertainty, conflict, approval
 state, and budgets, and semantic retrieval cannot cross tenants.
 
-## Layer 8 — Evaluation and observability
+## Layer 9 — Evaluation and observability
 
 Add versioned datasets, offline and online evaluation, release gates, traces,
 metrics, logs, cost accounting, and safe content handling. Score hypothesis
@@ -154,7 +173,7 @@ and recovery verification on checkout-failure variants.
 event-to-trace correlation works; telemetry contains no disallowed content or
 unbounded tenant labels.
 
-## Layer 9 — Enterprise operations
+## Layer 10 — Enterprise operations
 
 Add deployment automation, SLOs, alerting, runbooks, backup and restore, HA,
 capacity tests, software provenance, signing, governance evidence, and incident
