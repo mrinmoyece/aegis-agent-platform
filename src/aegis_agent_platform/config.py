@@ -33,8 +33,12 @@ class Settings:
     redis_url: str = ""
     oidc_issuer: str = ""
     oidc_jwks_url: str = ""
-    oidc_audience: str = "aegis-control-plane"
+    oidc_audience: str = ""
     oidc_clock_skew_seconds: int = 30
+
+    def __post_init__(self) -> None:
+        """Enforce invariants for every construction path."""
+        self.validate()
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> Settings:
@@ -62,7 +66,7 @@ class Settings:
                 "AEGIS_OIDC_CLOCK_SKEW_SECONDS must be an integer"
             ) from error
 
-        settings = cls(
+        return cls(
             environment=environment,
             service_name=values.get(
                 "AEGIS_SERVICE_NAME",
@@ -80,12 +84,10 @@ class Settings:
             oidc_jwks_url=values.get("AEGIS_OIDC_JWKS_URL", ""),
             oidc_audience=values.get(
                 "AEGIS_OIDC_AUDIENCE",
-                "aegis-control-plane",
+                "",
             ),
             oidc_clock_skew_seconds=clock_skew_seconds,
         )
-        settings.validate()
-        return settings
 
     def validate(self) -> None:
         """Reject settings that would make process behavior ambiguous or unsafe."""
@@ -107,7 +109,7 @@ class Settings:
                 "AEGIS_OIDC_JWKS_URL": self.oidc_jwks_url,
                 "AEGIS_OIDC_AUDIENCE": self.oidc_audience,
             }
-            missing = [name for name, value in required.items() if not value]
+            missing = [name for name, value in required.items() if not value.strip()]
             if missing:
                 raise ConfigurationError(
                     "production requires: " + ", ".join(sorted(missing))

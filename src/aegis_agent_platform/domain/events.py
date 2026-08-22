@@ -5,41 +5,68 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import StrEnum
 from math import isfinite
 from types import MappingProxyType
-from typing import Self, cast
+from typing import ClassVar, Self, cast
 from uuid import UUID
 
 type JsonScalar = str | int | float | bool | None
 type JsonValue = JsonScalar | Sequence[JsonValue] | Mapping[str, JsonValue]
 
 
-class ActorKind(StrEnum):
+class _StringConstant(str):
+    _values: ClassVar[dict[str, Self]]
+
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
+        cls._values = {}
+
+    def __new__(cls, value: str) -> Self:
+        try:
+            return cls._values[value]
+        except KeyError as error:
+            raise ValueError(f"{value!r} is not a valid {cls.__name__}") from error
+
+    @classmethod
+    def _define(cls, value: str) -> Self:
+        member = cast(Self, str.__new__(cls, value))
+        cls._values[value] = member
+        return member
+
+
+class ActorKind(_StringConstant):
     """Stable categories for the principal that caused an event."""
 
-    USER = "user"
-    SERVICE = "service"
-    SYSTEM = "system"
+
+ActorKind.USER = ActorKind._define("user")
+ActorKind.SERVICE = ActorKind._define("service")
+ActorKind.SYSTEM = ActorKind._define("system")
 
 
-class DomainEventType(StrEnum):
+class DomainEventType(_StringConstant):
     """Implemented additive event names; existing meanings are never repurposed."""
 
-    INVESTIGATION_REQUESTED = "investigation.requested.v1"
-    RUN_STARTED = "run.started.v1"
-    RUN_STATUS_CHANGED = "run.status_changed.v1"
-    RUN_COMPLETED = "run.completed.v1"
-    RUN_FAILED = "run.failed.v1"
-    ARTIFACT_RECORDED = "artifact.recorded.v1"
-    APPROVAL_REQUESTED = "approval.requested.v1"
-    APPROVAL_DECIDED = "approval.decided.v1"
-    USAGE_RECORDED = "usage.recorded.v1"
-    SIDE_EFFECT_INTENT_RECORDED = "effect.intent_recorded.v1"
-    SIDE_EFFECT_COMPLETED = "effect.completed.v1"
-    SIDE_EFFECT_FAILED = "effect.failed.v1"
-    OUTBOX_DEAD_LETTERED = "delivery.outbox_dead_lettered.v1"
-    TENANT_REGISTERED = "tenant.registered.v1"
+
+DomainEventType.INVESTIGATION_REQUESTED = DomainEventType._define(
+    "investigation.requested.v1"
+)
+DomainEventType.RUN_STARTED = DomainEventType._define("run.started.v1")
+DomainEventType.RUN_STATUS_CHANGED = DomainEventType._define("run.status_changed.v1")
+DomainEventType.RUN_COMPLETED = DomainEventType._define("run.completed.v1")
+DomainEventType.RUN_FAILED = DomainEventType._define("run.failed.v1")
+DomainEventType.ARTIFACT_RECORDED = DomainEventType._define("artifact.recorded.v1")
+DomainEventType.APPROVAL_REQUESTED = DomainEventType._define("approval.requested.v1")
+DomainEventType.APPROVAL_DECIDED = DomainEventType._define("approval.decided.v1")
+DomainEventType.USAGE_RECORDED = DomainEventType._define("usage.recorded.v1")
+DomainEventType.SIDE_EFFECT_INTENT_RECORDED = DomainEventType._define(
+    "effect.intent_recorded.v1"
+)
+DomainEventType.SIDE_EFFECT_COMPLETED = DomainEventType._define("effect.completed.v1")
+DomainEventType.SIDE_EFFECT_FAILED = DomainEventType._define("effect.failed.v1")
+DomainEventType.OUTBOX_DEAD_LETTERED = DomainEventType._define(
+    "delivery.outbox_dead_lettered.v1"
+)
+DomainEventType.TENANT_REGISTERED = DomainEventType._define("tenant.registered.v1")
 
 
 @dataclass(frozen=True, slots=True)

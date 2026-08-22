@@ -142,7 +142,11 @@ class RemoteJwksProvider:
                 request,
                 timeout=self._timeout_seconds,
             ) as response:
-                final_url: str = response.geturl()
+                final_url = (
+                    response.geturl()
+                    if hasattr(response, "geturl")
+                    else self._jwks_url
+                )
                 if not final_url.startswith("https://") and not (
                     self._allow_http and final_url.startswith("http://")
                 ):
