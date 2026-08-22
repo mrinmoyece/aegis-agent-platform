@@ -88,7 +88,7 @@ class ImagePart:
             "image/webp",
         }:
             raise ValueError("unsupported image media type")
-        if not self.uri.startswith(("https://", "aegis-object://")):
+        if not self.uri.startswith("https://"):
             raise ValueError("image uri must use an approved scheme")
 
 

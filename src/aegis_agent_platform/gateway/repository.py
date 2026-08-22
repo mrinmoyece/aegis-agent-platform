@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -24,6 +25,7 @@ from aegis_agent_platform.domain import (
     TokenUsage,
     WorkLease,
 )
+from aegis_agent_platform.domain.events import thaw_json
 from aegis_agent_platform.event_store import FencingError
 from aegis_agent_platform.gateway.catalog import RouteDecision
 from aegis_agent_platform.policy import QuotaLimits
@@ -40,8 +42,11 @@ class BudgetReservation:
     cost_limit_usd: Decimal
     price_version: str
     active: bool = True
+    status: str = "active"
     charged_tokens: int = 0
     charged_cost_usd: Decimal = Decimal("0")
+    created_at: datetime | None = None
+    reconciled_at: datetime | None = None
 
 
 class BudgetDeniedError(PermissionError):
@@ -58,7 +63,7 @@ class GatewayRepository(Protocol):
     async def completed(
         self,
         context: TenantContext,
-        idempotency_key: str,
+        request: ModelRequest,
     ) -> ModelResponse | None: ...
 
     async def reserve(
@@ -101,6 +106,34 @@ class GatewayRepository(Protocol):
         at: datetime,
     ) -> None: ...
 
+    async def record_usage_failure(
+        self,
+        context: TenantContext,
+        request: ModelRequest,
+        lease: WorkLease,
+        reservation: BudgetReservation,
+        response: ModelResponse,
+        pricing: PricingVersion,
+        error: ModelGatewayError,
+        *,
+        at: datetime,
+    ) -> None: ...
+
+    async def record_attempt_failure(
+        self,
+        context: TenantContext,
+        request: ModelRequest,
+        lease: WorkLease,
+        reservation: BudgetReservation,
+        error: ModelGatewayError,
+        *,
+        provider: str,
+        model: str,
+        attempt: int,
+        fallback_index: int,
+        at: datetime,
+    ) -> None: ...
+
     async def fail(
         self,
         context: TenantContext,
@@ -129,8 +162,8 @@ class InMemoryGatewayRepository(GatewayRepository):
         self._lock = asyncio.Lock()
         self._events: list[EventEnvelope] = []
         self._reservations: dict[UUID, BudgetReservation] = {}
-        self._inflight: dict[tuple[str, str], UUID] = {}
-        self._completed: dict[tuple[str, str], ModelResponse] = {}
+        self._inflight: dict[tuple[str, str], tuple[UUID, str]] = {}
+        self._completed: dict[tuple[str, str], tuple[str, ModelResponse]] = {}
 
     @property
     def events(self) -> tuple[EventEnvelope, ...]:
@@ -146,9 +179,13 @@ class InMemoryGatewayRepository(GatewayRepository):
     async def completed(
         self,
         context: TenantContext,
-        idempotency_key: str,
+        request: ModelRequest,
     ) -> ModelResponse | None:
-        return self._completed.get((str(context.tenant_id), idempotency_key))
+        stored = self._completed.get((str(context.tenant_id), request.idempotency_key))
+        if stored is None:
+            return None
+        digest, response = stored
+        return response if digest == request_content_digest(request) else None
 
     async def reserve(
         self,
@@ -169,29 +206,60 @@ class InMemoryGatewayRepository(GatewayRepository):
         async with self._lock:
             self._require_fence(lease, at)
             duplicate_key = (request.tenant_id, request.idempotency_key)
-            if duplicate_key in self._completed:
+            request_digest = request_content_digest(request)
+            completed = self._completed.get(duplicate_key)
+            if completed is not None:
+                if completed[0] != request_digest:
+                    raise ValueError(
+                        "idempotency key already belongs to another request"
+                    )
                 raise ValueError("completed duplicate must be read before reservation")
-            if duplicate_key in self._inflight:
+            inflight = self._inflight.get(duplicate_key)
+            if inflight is not None:
                 raise DuplicateCallInProgressError("model call is already in progress")
             active = tuple(
                 item
                 for item in self._reservations.values()
                 if item.tenant_id == request.tenant_id and item.active
             )
-            tenant_tokens = sum(item.token_limit for item in active)
+            period_start = _billing_period_start(at)
+            charged = tuple(
+                item
+                for item in self._reservations.values()
+                if (
+                    item.tenant_id == request.tenant_id
+                    and item.status == "charged"
+                    and item.reconciled_at is not None
+                    and item.reconciled_at >= period_start
+                )
+            )
+            tenant_tokens = sum(item.token_limit for item in active) + sum(
+                item.charged_tokens for item in charged
+            )
             tenant_cost = sum(
                 (item.cost_limit_usd for item in active),
                 start=Decimal("0"),
+            ) + sum(
+                (item.charged_cost_usd for item in charged),
+                start=Decimal("0"),
+            )
+            run_charged = tuple(
+                item
+                for item in self._reservations.values()
+                if item.run_id == request.run_id and item.status == "charged"
             )
             run_tokens = sum(
                 item.token_limit for item in active if item.run_id == request.run_id
-            )
+            ) + sum(item.charged_tokens for item in run_charged)
             run_cost = sum(
                 (
                     item.cost_limit_usd
                     for item in active
                     if item.run_id == request.run_id
                 ),
+                start=Decimal("0"),
+            ) + sum(
+                (item.charged_cost_usd for item in run_charged),
                 start=Decimal("0"),
             )
             if run_tokens + token_limit > quotas.max_run_tokens:
@@ -210,9 +278,10 @@ class InMemoryGatewayRepository(GatewayRepository):
                 token_limit=token_limit,
                 cost_limit_usd=cost_limit_usd,
                 price_version=price_version,
+                created_at=at,
             )
             self._reservations[reservation.reservation_id] = reservation
-            self._inflight[duplicate_key] = reservation.reservation_id
+            self._inflight[duplicate_key] = (reservation.reservation_id, request_digest)
             rationale = route.rationale
             base: dict[str, JsonValue] = {
                 "work_id": str(lease.work_id),
@@ -328,22 +397,7 @@ class InMemoryGatewayRepository(GatewayRepository):
         at: datetime,
     ) -> None:
         _validate_request_context(context, request, lease)
-        actual_cost = pricing.cost(response.usage)
-        actual_tokens = response.usage.billable_tokens
-        if actual_tokens > reservation.token_limit:
-            raise ModelGatewayError(
-                ModelErrorClass.PROVIDER_BUG,
-                "usage_exceeded_token_reservation",
-                retryable=False,
-                billing_ambiguous=True,
-            )
-        if actual_cost > reservation.cost_limit_usd:
-            raise ModelGatewayError(
-                ModelErrorClass.PROVIDER_BUG,
-                "usage_exceeded_cost_reservation",
-                retryable=False,
-                billing_ambiguous=True,
-            )
+        actual_tokens, actual_cost = _actual_usage(pricing, response, reservation)
         async with self._lock:
             self._require_active(reservation)
             self._require_fence(lease, at)
@@ -356,11 +410,17 @@ class InMemoryGatewayRepository(GatewayRepository):
                 cost_limit_usd=reservation.cost_limit_usd,
                 price_version=reservation.price_version,
                 active=False,
+                status="charged",
                 charged_tokens=actual_tokens,
                 charged_cost_usd=actual_cost,
+                created_at=reservation.created_at,
+                reconciled_at=at,
             )
             self._reservations[reservation.reservation_id] = charged
-            self._completed[(request.tenant_id, request.idempotency_key)] = response
+            self._completed[(request.tenant_id, request.idempotency_key)] = (
+                request_content_digest(request),
+                response,
+            )
             self._inflight.pop((request.tenant_id, request.idempotency_key), None)
             usage = response.usage
             details = {
@@ -414,6 +474,133 @@ class InMemoryGatewayRepository(GatewayRepository):
                 ),
             )
 
+    async def record_usage_failure(
+        self,
+        context: TenantContext,
+        request: ModelRequest,
+        lease: WorkLease,
+        reservation: BudgetReservation,
+        response: ModelResponse,
+        pricing: PricingVersion,
+        error: ModelGatewayError,
+        *,
+        at: datetime,
+    ) -> None:
+        _validate_request_context(context, request, lease)
+        actual_tokens, actual_cost = _actual_usage(pricing, response, reservation)
+        async with self._lock:
+            self._require_active(reservation)
+            self._require_fence(lease, at)
+            charged = BudgetReservation(
+                reservation_id=reservation.reservation_id,
+                tenant_id=reservation.tenant_id,
+                run_id=reservation.run_id,
+                request_id=reservation.request_id,
+                token_limit=reservation.token_limit,
+                cost_limit_usd=reservation.cost_limit_usd,
+                price_version=reservation.price_version,
+                active=False,
+                status="charged",
+                charged_tokens=actual_tokens,
+                charged_cost_usd=actual_cost,
+                created_at=reservation.created_at,
+                reconciled_at=at,
+            )
+            self._reservations[reservation.reservation_id] = charged
+            self._inflight.pop((request.tenant_id, request.idempotency_key), None)
+            details = {
+                "reservation_id": str(reservation.reservation_id),
+                "request_id": str(request.request_id),
+                "provider": response.model.provider,
+                "model": response.model.model,
+                "price_version": pricing.version,
+            }
+            self._append(
+                request,
+                lease,
+                at,
+                (
+                    (
+                        _failure_event_type(error),
+                        {
+                            **details,
+                            "error_class": error.error_class.value,
+                            "error_code": error.code,
+                            "retryable": error.retryable,
+                            "billing_ambiguous": error.billing_ambiguous,
+                        },
+                    ),
+                    (
+                        DomainEventType.MODEL_USAGE_RECORDED,
+                        {
+                            **details,
+                            **_usage_payload(response.usage),
+                            "cost_usd": str(actual_cost),
+                        },
+                    ),
+                    (
+                        DomainEventType.MODEL_BUDGET_CHARGED,
+                        {
+                            **details,
+                            "tokens": actual_tokens,
+                            "cost_usd": str(actual_cost),
+                        },
+                    ),
+                    (
+                        DomainEventType.MODEL_BUDGET_RELEASED,
+                        {
+                            **details,
+                            "tokens_released": reservation.token_limit - actual_tokens,
+                            "cost_released_usd": str(
+                                reservation.cost_limit_usd - actual_cost
+                            ),
+                            "reason": "validation_failed_after_provider_response",
+                        },
+                    ),
+                ),
+            )
+
+    async def record_attempt_failure(
+        self,
+        context: TenantContext,
+        request: ModelRequest,
+        lease: WorkLease,
+        reservation: BudgetReservation,
+        error: ModelGatewayError,
+        *,
+        provider: str,
+        model: str,
+        attempt: int,
+        fallback_index: int,
+        at: datetime,
+    ) -> None:
+        _validate_request_context(context, request, lease)
+        async with self._lock:
+            self._require_active(reservation)
+            self._require_fence(lease, at)
+            self._append(
+                request,
+                lease,
+                at,
+                (
+                    (
+                        _failure_event_type(error),
+                        {
+                            "reservation_id": str(reservation.reservation_id),
+                            "request_id": str(request.request_id),
+                            "provider": provider,
+                            "model": model,
+                            "attempt": attempt,
+                            "fallback_index": fallback_index,
+                            "error_class": error.error_class.value,
+                            "error_code": error.code,
+                            "retryable": error.retryable,
+                            "billing_ambiguous": error.billing_ambiguous,
+                        },
+                    ),
+                ),
+            )
+
     async def fail(
         self,
         context: TenantContext,
@@ -437,14 +624,12 @@ class InMemoryGatewayRepository(GatewayRepository):
                 cost_limit_usd=reservation.cost_limit_usd,
                 price_version=reservation.price_version,
                 active=False,
+                status="released",
+                created_at=reservation.created_at,
+                reconciled_at=at,
             )
             self._reservations[reservation.reservation_id] = released
             self._inflight.pop((request.tenant_id, request.idempotency_key), None)
-            event_type = {
-                ModelErrorClass.TIMEOUT: DomainEventType.MODEL_CALL_TIMED_OUT,
-                ModelErrorClass.RATE_LIMIT: DomainEventType.MODEL_CALL_RATE_LIMITED,
-                ModelErrorClass.CANCELLED: DomainEventType.MODEL_CALL_CANCELLED,
-            }.get(error.error_class, DomainEventType.MODEL_CALL_FAILED)
             details = {
                 "reservation_id": str(reservation.reservation_id),
                 "request_id": str(request.request_id),
@@ -458,7 +643,7 @@ class InMemoryGatewayRepository(GatewayRepository):
                 lease,
                 at,
                 (
-                    (event_type, details),
+                    (_failure_event_type(error), details),
                     (
                         DomainEventType.MODEL_BUDGET_RELEASED,
                         {
@@ -471,11 +656,12 @@ class InMemoryGatewayRepository(GatewayRepository):
                 ),
             )
 
-    def usage_summary(self, tenant_id: str) -> Mapping[str, JsonValue]:
+    def usage_summary(self, context: TenantContext) -> Mapping[str, JsonValue]:
+        tenant_id = str(context.tenant_id)
         charged = tuple(
             item
             for item in self._reservations.values()
-            if item.tenant_id == tenant_id and not item.active
+            if item.tenant_id == tenant_id and item.status == "charged"
         )
         return {
             "tokens": sum(item.charged_tokens for item in charged),
@@ -485,7 +671,7 @@ class InMemoryGatewayRepository(GatewayRepository):
                     start=Decimal("0"),
                 )
             ),
-            "calls": sum(1 for item in charged if item.charged_tokens > 0),
+            "calls": sum(1 for item in charged),
         }
 
     def _require_fence(self, lease: WorkLease, at: datetime) -> None:
@@ -552,11 +738,15 @@ def estimate_cost(
     prompt_tokens: int,
     max_output_tokens: int,
 ) -> Decimal:
-    return pricing.cost(
-        TokenUsage(
-            input_tokens=prompt_tokens,
-            output_tokens=max_output_tokens,
-        )
+    highest_rate = max(
+        pricing.input_per_million_usd,
+        pricing.output_per_million_usd,
+        pricing.cache_read_per_million_usd,
+        pricing.cache_write_per_million_usd,
+        pricing.reasoning_per_million_usd,
+    )
+    return (Decimal(prompt_tokens + max_output_tokens) * highest_rate) / Decimal(
+        1_000_000
     )
 
 
@@ -573,12 +763,77 @@ def _validate_request_context(
 
 
 def request_content_digest(request: ModelRequest) -> str:
-    digest = sha256()
-    for message in request.messages:
-        digest.update(message.role.value.encode())
-        for part in message.content:
-            digest.update(repr(part).encode())
-    return digest.hexdigest()
+    payload = {
+        "messages": [repr(message) for message in request.messages],
+        "requested_model": (
+            None
+            if request.requested_model is None
+            else {
+                "provider": request.requested_model.provider,
+                "model": request.requested_model.model,
+            }
+        ),
+        "max_output_tokens": request.max_output_tokens,
+        "prompt_token_estimate": request.prompt_token_estimate,
+        "temperature": str(request.temperature),
+        "tools": [
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "strict": tool.input_schema.strict,
+                "schema": thaw_json(tool.input_schema.schema),
+            }
+            for tool in request.tools
+        ],
+        "response_schema": (
+            None
+            if request.response_schema is None
+            else {
+                "name": request.response_schema.name,
+                "strict": request.response_schema.strict,
+                "schema": thaw_json(request.response_schema.schema),
+            }
+        ),
+    }
+    return sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def _billing_period_start(at: datetime) -> datetime:
+    return at.astimezone(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+def _failure_event_type(error: ModelGatewayError) -> DomainEventType:
+    return {
+        ModelErrorClass.TIMEOUT: DomainEventType.MODEL_CALL_TIMED_OUT,
+        ModelErrorClass.RATE_LIMIT: DomainEventType.MODEL_CALL_RATE_LIMITED,
+        ModelErrorClass.CANCELLED: DomainEventType.MODEL_CALL_CANCELLED,
+    }.get(error.error_class, DomainEventType.MODEL_CALL_FAILED)
+
+
+def _actual_usage(
+    pricing: PricingVersion,
+    response: ModelResponse,
+    reservation: BudgetReservation,
+) -> tuple[int, Decimal]:
+    actual_cost = pricing.cost(response.usage)
+    actual_tokens = response.usage.billable_tokens
+    if actual_tokens > reservation.token_limit:
+        raise ModelGatewayError(
+            ModelErrorClass.PROVIDER_BUG,
+            "usage_exceeded_token_reservation",
+            retryable=False,
+            billing_ambiguous=True,
+        )
+    if actual_cost > reservation.cost_limit_usd:
+        raise ModelGatewayError(
+            ModelErrorClass.PROVIDER_BUG,
+            "usage_exceeded_cost_reservation",
+            retryable=False,
+            billing_ambiguous=True,
+        )
+    return actual_tokens, actual_cost
 
 
 def _usage_payload(usage: TokenUsage) -> dict[str, JsonValue]:

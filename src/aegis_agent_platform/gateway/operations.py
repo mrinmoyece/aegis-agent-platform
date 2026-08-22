@@ -19,7 +19,7 @@ from aegis_agent_platform.tenancy import TenantContext
 
 
 class ModelUsageReader(Protocol):
-    def usage_summary(self, tenant_id: str) -> Mapping[str, JsonValue]:
+    def usage_summary(self, context: TenantContext) -> Mapping[str, JsonValue]:
         """Return a bounded tenant-scoped usage projection."""
         ...
 
@@ -56,10 +56,7 @@ class GatewayOperations:
                 and identity.model not in policy.allowed_models
             ):
                 continue
-            if (
-                policy.allowed_providers
-                and identity.provider not in policy.allowed_providers
-            ):
+            if identity.provider not in policy.allowed_providers:
                 continue
             result.append(
                 {
@@ -87,7 +84,7 @@ class GatewayOperations:
         at: datetime,
     ) -> Mapping[str, JsonValue]:
         self._require(principal, context, at)
-        return self._usage.usage_summary(str(context.tenant_id))
+        return self._usage.usage_summary(context)
 
     def health(
         self,

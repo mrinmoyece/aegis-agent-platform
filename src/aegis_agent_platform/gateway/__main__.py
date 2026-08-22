@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
@@ -40,7 +41,6 @@ _TENANT = TenantId("diagnostic-local")
 _RUN_ID = UUID("00000000-0000-4000-8000-000000000001")
 _REQUEST_ID = UUID("00000000-0000-4000-8000-000000000002")
 _LEASE_TOKEN = UUID("00000000-0000-4000-8000-000000000003")
-_RESERVATION_EVENT = UUID("00000000-0000-4000-8000-000000000004")
 _NOW = datetime(2026, 1, 1, tzinfo=UTC)
 _MODEL = ModelIdentity("mock", "aegis-diagnostic-v1")
 
@@ -104,7 +104,7 @@ async def run_mock_diagnostic(prompt: str) -> dict[str, object]:
     )
     repository = InMemoryGatewayRepository(
         (lease,),
-        uuid_factory=lambda: _RESERVATION_EVENT,
+        uuid_factory=_diagnostic_uuid_factory(),
     )
     catalog = ModelCatalog((entry,))
     controls = ProviderControls(
@@ -173,6 +173,13 @@ def main() -> None:
     )
     arguments = parser.parse_args()
     print(json.dumps(asyncio.run(run_mock_diagnostic(arguments.prompt)), indent=2))
+
+
+def _diagnostic_uuid_factory() -> Callable[[], UUID]:
+    values = iter(
+        UUID(f"00000000-0000-4000-8000-{index:012d}") for index in range(4, 64)
+    )
+    return lambda: next(values)
 
 
 if __name__ == "__main__":

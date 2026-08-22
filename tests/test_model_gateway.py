@@ -57,6 +57,7 @@ from aegis_agent_platform.gateway import (
     RetryPolicy,
     RouteDeniedError,
     TokenBucket,
+    estimate_cost,
     validate_object,
 )
 from aegis_agent_platform.identity import Role, TenantId
@@ -295,6 +296,7 @@ def test_domain_rejects_invalid_contracts(factory: Callable[[], object]) -> None
     [
         lambda: TextPart(""),
         lambda: ImagePart("image/png", "file:///tmp/image.png"),
+        lambda: ImagePart("image/png", "aegis-object://artifact-1"),
         lambda: ToolCallProposal("", "tool", {}),
         lambda: ToolResultPart("", {}),
         lambda: ModelMessage(MessageRole.USER, (TextPart("x"),), name=""),
@@ -521,7 +523,13 @@ def test_gateway_records_intent_before_attempt_and_reconciles_usage() -> None:
     requested = repository.events[1]
     assert "hello" not in repr(requested.payload)
     assert requested.payload["persistence_policy"] == "metadata_and_digest_only"
-    assert repository.usage_summary(str(TENANT))["tokens"] == 36
+    assert repository.usage_summary(TenantContext(TENANT))["tokens"] == 36
+
+
+def test_estimate_cost_reserves_highest_priced_token_class() -> None:
+    reserved = estimate_cost(pricing("price-v2", "1"), 20, 100)
+
+    assert reserved == Decimal("0.000360")
 
 
 def test_local_token_limit_releases_reservation_without_provider_call() -> None:
@@ -590,6 +598,46 @@ def test_gateway_retries_then_falls_back_in_order() -> None:
     assert DomainEventType.MODEL_FALLBACK_SELECTED in {
         event.event_type for event in repository.events
     }
+
+
+def test_retry_failures_are_durably_recorded_before_success() -> None:
+    model_request = request()
+    work_lease = lease()
+    repository = InMemoryGatewayRepository((work_lease,))
+    retryable = ModelGatewayError(
+        ModelErrorClass.TIMEOUT,
+        "provider_timeout",
+        retryable=True,
+        billing_ambiguous=True,
+    )
+    provider = ScriptedModelProvider("mock-a", (retryable, response(model_request)))
+    service = gateway(
+        {"mock-a": provider},
+        repository,
+        (catalog_entry(),),
+        max_attempts=2,
+        max_failovers=0,
+    )
+
+    result = asyncio.run(
+        service.complete(
+            TenantContext(TENANT),
+            model_request,
+            work_lease,
+            policy(models=frozenset({MODEL_A.catalog_key})),
+            environment=Environment.TEST,
+        )
+    )
+
+    assert result.model == MODEL_A
+    failures = [
+        event
+        for event in repository.events
+        if event.event_type == DomainEventType.MODEL_CALL_TIMED_OUT
+    ]
+    assert len(failures) == 1
+    assert failures[0].payload["billing_ambiguous"] is True
+    assert failures[0].payload["attempt"] == 1
 
 
 @pytest.mark.parametrize(
@@ -757,7 +805,93 @@ def test_duplicate_request_returns_same_response_without_second_charge() -> None
     first, second = asyncio.run(twice())
     assert first is second
     assert len(provider.calls) == 1
-    assert repository.usage_summary(str(TENANT))["calls"] == 1
+    assert repository.usage_summary(TenantContext(TENANT))["calls"] == 1
+
+
+def test_zero_token_success_counts_as_completed_call() -> None:
+    model_request = request(idempotency_key="zero-token")
+    work_lease = lease()
+    repository = InMemoryGatewayRepository((work_lease,))
+    zero_usage = ModelResponse(
+        request_id=model_request.request_id,
+        model=MODEL_A,
+        content=(TextPart("done"),),
+        finish_reason=FinishReason.STOP,
+        safety=SafetyResult(SafetyOutcome.ALLOWED),
+        usage=TokenUsage(0, 0),
+        latency_ms=1,
+    )
+    service = gateway(
+        {"mock-a": ScriptedModelProvider("mock-a", (zero_usage,))},
+        repository,
+        (catalog_entry(),),
+        max_attempts=1,
+        max_failovers=0,
+    )
+
+    asyncio.run(
+        service.complete(
+            TenantContext(TENANT),
+            model_request,
+            work_lease,
+            policy(models=frozenset({MODEL_A.catalog_key})),
+            environment=Environment.TEST,
+        )
+    )
+
+    assert repository.usage_summary(TenantContext(TENANT))["calls"] == 1
+
+
+def test_sequential_calls_include_charged_usage_in_budget_checks() -> None:
+    work_lease = lease()
+    repository = InMemoryGatewayRepository((work_lease,))
+    first_request = request(
+        idempotency_key="budget-first",
+        request_id=UUID("10000000-0000-4000-8000-000000000010"),
+    )
+    second_request = request(
+        idempotency_key="budget-second",
+        request_id=UUID("10000000-0000-4000-8000-000000000011"),
+    )
+    provider = ScriptedModelProvider(
+        "mock-a",
+        (
+            response(first_request),
+            response(second_request),
+        ),
+    )
+    service = gateway(
+        {"mock-a": provider},
+        repository,
+        (catalog_entry(),),
+        max_attempts=1,
+        max_failovers=0,
+    )
+    constrained = policy(
+        models=frozenset({MODEL_A.catalog_key}),
+        max_run_tokens=150,
+    )
+
+    asyncio.run(
+        service.complete(
+            TenantContext(TENANT),
+            first_request,
+            work_lease,
+            constrained,
+            environment=Environment.TEST,
+        )
+    )
+
+    with pytest.raises(BudgetDeniedError, match="run_token_budget_exceeded"):
+        asyncio.run(
+            service.complete(
+                TenantContext(TENANT),
+                second_request,
+                work_lease,
+                constrained,
+                environment=Environment.TEST,
+            )
+        )
 
 
 def test_tool_arguments_and_structured_output_are_strictly_validated() -> None:
@@ -804,6 +938,7 @@ def test_tool_arguments_and_structured_output_are_strictly_validated() -> None:
         )
     assert failure.value.error_class is ModelErrorClass.SCHEMA
     assert not next(iter(repository.reservations.values())).active
+    assert repository.usage_summary(TenantContext(TENANT))["tokens"] == 36
 
 
 def test_service_constructor_and_budget_guards_fail_closed() -> None:
@@ -838,8 +973,47 @@ def test_service_constructor_and_budget_guards_fail_closed() -> None:
     assert provider.calls == []
 
 
+def test_invalid_request_schema_fails_before_provider_or_reservation() -> None:
+    invalid_schema = JsonSchema(
+        "answer",
+        {
+            "type": "object",
+            "properties": {"answer": {"type": "string"}},
+            "$defs": {"broken": {"type": "not-a-real-type"}},
+        },
+    )
+    model_request = request(
+        tools=(ToolDefinition("answer", "Answer", invalid_schema),),
+        response_schema=invalid_schema,
+    )
+    work_lease = lease()
+    repository = InMemoryGatewayRepository((work_lease,))
+    provider = ScriptedModelProvider("mock-a", (response(model_request),))
+    service = gateway(
+        {"mock-a": provider},
+        repository,
+        (catalog_entry(),),
+        max_attempts=1,
+        max_failovers=0,
+    )
+
+    with pytest.raises(ModelGatewayError, match="invalid_json_schema"):
+        asyncio.run(
+            service.complete(
+                TenantContext(TENANT),
+                model_request,
+                work_lease,
+                policy(models=frozenset({MODEL_A.catalog_key})),
+                environment=Environment.TEST,
+            )
+        )
+
+    assert provider.calls == []
+    assert repository.events == ()
+
+
 @pytest.mark.parametrize("wrong_request_id", [True, False])
-def test_malformed_or_missing_structured_response_is_refunded(
+def test_malformed_or_missing_structured_response_is_billed_before_failure(
     wrong_request_id: bool,
 ) -> None:
     schema = JsonSchema(
@@ -878,6 +1052,7 @@ def test_malformed_or_missing_structured_response_is_refunded(
             )
         )
     assert not next(iter(repository.reservations.values())).active
+    assert repository.usage_summary(TenantContext(TENANT))["calls"] == 1
 
 
 def test_unknown_tool_call_is_rejected() -> None:

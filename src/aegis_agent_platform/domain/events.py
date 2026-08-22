@@ -27,6 +27,10 @@ class _StringConstant(str):
         except KeyError as error:
             raise ValueError(f"{value!r} is not a valid {cls.__name__}") from error
 
+    @property
+    def value(self) -> str:
+        return str(self)
+
     @classmethod
     def _define(cls, value: str) -> Self:
         member: Self = str.__new__(cls, value)

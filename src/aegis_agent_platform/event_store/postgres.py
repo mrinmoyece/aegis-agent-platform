@@ -753,6 +753,7 @@ class PostgresProjectionRepository:
     _TABLES: ClassVar[Mapping[str, str]] = {
         "run-status": "run_status_projection",
         "artifact-index": "artifact_index_projection",
+        "model-usage": "model_usage_projection",
         "pending-approvals": "pending_approvals_projection",
         "tenant-listing": "tenant_listing_projection",
         "usage-quota": "usage_quota_projection",
@@ -878,6 +879,8 @@ class PostgresProjectionRepository:
             await self._apply_artifact(event)
         elif projection_name == "pending-approvals":
             await self._apply_approval(event)
+        elif projection_name == "model-usage":
+            await self._apply_model_usage(event)
         elif projection_name == "usage-quota":
             await self._apply_usage(event)
         elif projection_name == "tenant-listing":
@@ -968,6 +971,7 @@ class PostgresProjectionRepository:
                     event.global_position,
                 ),
             )
+
         elif event_type is DomainEventType.APPROVAL_DECIDED:
             await self._connection.execute(
                 """
@@ -979,6 +983,66 @@ class PostgresProjectionRepository:
                     _required_uuid(event.payload, "approval_id"),
                 ),
             )
+
+    async def _apply_model_usage(self, event: EventEnvelope) -> None:
+        if (
+            _domain_event_type(event.event_type)
+            is not DomainEventType.MODEL_USAGE_RECORDED
+        ):
+            return
+        recorded_at = event.recorded_at or event.occurred_at
+        input_tokens = _required_int(event.payload, "input_tokens")
+        output_tokens = _required_int(event.payload, "output_tokens")
+        cache_read_tokens = _required_int(event.payload, "cache_read_tokens")
+        cache_write_tokens = _required_int(event.payload, "cache_write_tokens")
+        reasoning_tokens = _required_int(event.payload, "reasoning_tokens")
+        await self._connection.execute(
+            """
+            INSERT INTO model_usage_projection (
+                tenant_id, request_id, run_id, provider, model, price_version,
+                input_tokens, output_tokens, cache_read_tokens,
+                cache_write_tokens, reasoning_tokens, total_tokens, cost_usd,
+                recorded_at
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            ON CONFLICT (tenant_id, request_id) DO UPDATE
+            SET run_id = EXCLUDED.run_id,
+                provider = EXCLUDED.provider,
+                model = EXCLUDED.model,
+                price_version = EXCLUDED.price_version,
+                input_tokens = EXCLUDED.input_tokens,
+                output_tokens = EXCLUDED.output_tokens,
+                cache_read_tokens = EXCLUDED.cache_read_tokens,
+                cache_write_tokens = EXCLUDED.cache_write_tokens,
+                reasoning_tokens = EXCLUDED.reasoning_tokens,
+                total_tokens = EXCLUDED.total_tokens,
+                cost_usd = EXCLUDED.cost_usd,
+                recorded_at = EXCLUDED.recorded_at
+            """,
+            (
+                event.tenant_id,
+                UUID(_required_string(event.payload, "request_id")),
+                UUID(event.aggregate_id),
+                _required_string(event.payload, "provider"),
+                _required_string(event.payload, "model"),
+                _required_string(event.payload, "price_version"),
+                input_tokens,
+                output_tokens,
+                cache_read_tokens,
+                cache_write_tokens,
+                reasoning_tokens,
+                (
+                    input_tokens
+                    + output_tokens
+                    + cache_read_tokens
+                    + cache_write_tokens
+                    + reasoning_tokens
+                ),
+                Decimal(_required_string(event.payload, "cost_usd")),
+                recorded_at,
+            ),
+        )
 
     async def _apply_usage(self, event: EventEnvelope) -> None:
         if _domain_event_type(event.event_type) is not DomainEventType.USAGE_RECORDED:
