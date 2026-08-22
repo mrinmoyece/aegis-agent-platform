@@ -93,24 +93,24 @@ class AnthropicAdapter:
                 cancellation=cancellation,
             )
             return self._response(raw, request, model, started)
-        except TimeoutError as error:
+        except TimeoutError:
             raise ModelGatewayError(
                 ModelErrorClass.TIMEOUT,
                 "provider_timeout",
                 retryable=True,
                 billing_ambiguous=True,
-            ) from error
-        except asyncio.CancelledError as error:
+            ) from None
+        except asyncio.CancelledError:
             raise ModelGatewayError(
                 ModelErrorClass.CANCELLED,
                 "provider_call_cancelled",
                 retryable=False,
                 billing_ambiguous=True,
-            ) from error
+            ) from None
         except ModelGatewayError:
             raise
         except Exception as error:
-            raise classify_sdk_error(error) from error
+            raise classify_sdk_error(error) from None
 
     async def _get_client(self) -> Any:
         if self._client is None:

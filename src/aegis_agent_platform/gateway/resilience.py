@@ -63,8 +63,11 @@ class CircuitBreaker:
         if self._failures >= self.failure_threshold:
             self._opened_at = self.clock()
 
-    def release_probe(self) -> None:
+    def abandon(self) -> None:
         self._half_open_inflight = False
+
+    def release_probe(self) -> None:
+        self.abandon()
 
 
 @dataclass(slots=True)

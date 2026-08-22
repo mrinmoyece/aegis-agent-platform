@@ -1264,7 +1264,7 @@ def test_operations_are_tenant_authorized_bounded_and_approval_scoped() -> None:
         )
     with pytest.raises(
         OperationDeniedError,
-        match="tenant administrator or platform administrator permission required",
+        match="tenant admin or platform admin required",
     ):
         asyncio.run(
             operations.reconcile(

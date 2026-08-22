@@ -52,6 +52,7 @@ class BudgetReservation:
     charged_tokens: int = 0
     charged_cost_usd: Decimal = Decimal("0")
     created_at: datetime | None = None
+    expires_at: datetime | None = None
     reconciled_at: datetime | None = None
 
 
@@ -261,7 +262,11 @@ class InMemoryGatewayRepository(GatewayRepository):
             run_charged = tuple(
                 item
                 for item in self._reservations.values()
-                if item.run_id == request.run_id and item.status == "charged"
+                if (
+                    item.tenant_id == request.tenant_id
+                    and item.run_id == request.run_id
+                    and item.status == "charged"
+                )
             )
             run_tokens = sum(
                 item.token_limit for item in active if item.run_id == request.run_id
@@ -294,6 +299,7 @@ class InMemoryGatewayRepository(GatewayRepository):
                 cost_limit_usd=cost_limit_usd,
                 price_version=price_version,
                 created_at=at,
+                expires_at=lease.expires_at,
             )
             self._reservations[reservation.reservation_id] = reservation
             self._inflight[duplicate_key] = (reservation.reservation_id, request_digest)
@@ -429,6 +435,7 @@ class InMemoryGatewayRepository(GatewayRepository):
                 charged_tokens=actual_tokens,
                 charged_cost_usd=actual_cost,
                 created_at=reservation.created_at,
+                expires_at=reservation.expires_at,
                 reconciled_at=at,
             )
             self._reservations[reservation.reservation_id] = charged
@@ -519,6 +526,7 @@ class InMemoryGatewayRepository(GatewayRepository):
                 charged_tokens=actual_tokens,
                 charged_cost_usd=actual_cost,
                 created_at=reservation.created_at,
+                expires_at=reservation.expires_at,
                 reconciled_at=at,
             )
             self._reservations[reservation.reservation_id] = charged
@@ -647,6 +655,7 @@ class InMemoryGatewayRepository(GatewayRepository):
                 active=False,
                 status="released",
                 created_at=reservation.created_at,
+                expires_at=reservation.expires_at,
                 reconciled_at=at,
             )
             self._reservations[reservation.reservation_id] = released
@@ -677,7 +686,7 @@ class InMemoryGatewayRepository(GatewayRepository):
                 ),
             )
 
-    def usage_summary(self, context: TenantContext) -> Mapping[str, JsonValue]:
+    async def usage_summary(self, context: TenantContext) -> Mapping[str, JsonValue]:
         tenant_id = str(context.tenant_id)
         charged = tuple(
             item
@@ -730,6 +739,7 @@ class InMemoryGatewayRepository(GatewayRepository):
             payload.update(
                 {
                     "work_id": str(lease.work_id),
+                    "run_id": str(request.run_id),
                     "lease_token": str(lease.token),
                     "lease_generation": lease.generation,
                 }

@@ -245,72 +245,69 @@ class ModelGateway:
                     )
                     self._metrics.add("rate_limits", model)
                     break
+                attempt_started = False
+                semaphore = self._controls.semaphore(model)
+                acquired = False
                 try:
-                    semaphore = self._controls.semaphore(model)
-                    acquired = False
-                    try:
-                        await self._acquire_semaphore(
-                            semaphore,
-                            deadline=deadline,
-                            cancellation=cancellation,
-                        )
-                        acquired = True
-                        await self._repository.record_attempt(
-                            context,
-                            request,
-                            lease,
-                            reservation,
-                            provider=model.provider,
-                            model=model.model,
-                            attempt=attempt,
-                            fallback_index=fallback_index,
-                            at=self._clock(),
-                        )
-                        self._metrics.add("attempts", model)
-                        remaining_seconds = (
-                            deadline - asyncio.get_running_loop().time()
-                        )
-                        if remaining_seconds <= 0:
-                            raise ModelGatewayError(
-                                ModelErrorClass.TIMEOUT,
-                                "provider_attempt_timeout",
-                                retryable=True,
-                            )
-                        with self._tracer.attempt(model):
-                            response = await provider.complete(
-                                replace(
-                                    request,
-                                    timeout_seconds=min(
-                                        request.timeout_seconds,
-                                        remaining_seconds,
-                                    ),
-                                ),
-                                model,
-                                cancellation=cancellation,
-                            )
-                    finally:
-                        if acquired:
-                            semaphore.release()
-                except ModelGatewayError as error:
-                    last_error = error
-                    if error.error_class is ModelErrorClass.MALFORMED_RESPONSE:
-                        self._metrics.add("malformed_responses", model)
-                    if error.error_class is ModelErrorClass.RATE_LIMIT:
-                        self._metrics.add("rate_limits", model)
-                    if not self._retry_policy.may_retry(error, attempt):
-                        break
-                    await self._repository.record_attempt_failure(
+                    await self._acquire_semaphore(
+                        semaphore,
+                        deadline=deadline,
+                        cancellation=cancellation,
+                    )
+                    acquired = True
+                    await self._repository.record_attempt(
                         context,
                         request,
                         lease,
                         reservation,
-                        error,
                         provider=model.provider,
                         model=model.model,
                         attempt=attempt,
                         fallback_index=fallback_index,
                         at=self._clock(),
                     )
+                    attempt_started = True
+                    self._metrics.add("attempts", model)
+                    remaining_seconds = deadline - asyncio.get_running_loop().time()
+                    if remaining_seconds <= 0:
+                        raise ModelGatewayError(
+                            ModelErrorClass.TIMEOUT,
+                            "provider_attempt_timeout",
+                            retryable=True,
+                        )
+                    with self._tracer.attempt(model):
+                        response = await provider.complete(
+                            replace(
+                                request,
+                                timeout_seconds=min(
+                                    request.timeout_seconds,
+                                    remaining_seconds,
+                                ),
+                            ),
+                            model,
+                            cancellation=cancellation,
+                        )
+                except ModelGatewayError as error:
+                    last_error = error
+                    if error.error_class is ModelErrorClass.MALFORMED_RESPONSE:
+                        self._metrics.add("malformed_responses", model)
+                    if error.error_class is ModelErrorClass.RATE_LIMIT:
+                        self._metrics.add("rate_limits", model)
+                    if attempt_started:
+                        await self._repository.record_attempt_failure(
+                            context,
+                            request,
+                            lease,
+                            reservation,
+                            error,
+                            provider=model.provider,
+                            model=model.model,
+                            attempt=attempt,
+                            fallback_index=fallback_index,
+                            at=self._clock(),
+                        )
+                    if not self._retry_policy.may_retry(error, attempt):
+                        break
                     self._metrics.add("retries", model)
                     delay = (
                         error.retry_after_seconds
@@ -321,20 +318,65 @@ class ModelGateway:
                     if remaining_seconds <= 0:
                         break
                     delay = min(delay, remaining_seconds)
-                    await self._sleep(delay)
+                    if not await self._wait_for_retry(
+                        delay,
+                        cancellation=cancellation,
+                    ):
+                        last_error = ModelGatewayError(
+                            ModelErrorClass.CANCELLED,
+                            "gateway_retry_cancelled",
+                            retryable=False,
+                        )
+                        break
                     continue
+                finally:
+                    if acquired:
+                        semaphore.release()
                 circuit.succeed()
                 return response, None
-        except BaseException as error:
-            if not isinstance(error, asyncio.CancelledError):
-                circuit.fail()
-            raise
         finally:
             if probe_acquired:
                 circuit.release_probe()
-        if last_error is not None and _provider_health_failure(last_error):
-            circuit.fail()
+        if last_error is not None:
+            if _provider_health_failure(last_error):
+                circuit.fail()
+            else:
+                circuit.abandon()
         return None, last_error
+
+    async def _wait_for_retry(
+        self,
+        delay: float,
+        *,
+        cancellation: CancellationToken | None,
+    ) -> bool:
+        if cancellation is None:
+            await self._sleep(delay)
+            return True
+        cancel_task: asyncio.Task[bool] = asyncio.create_task(cancellation.wait())
+        sleep_task: asyncio.Task[None] = asyncio.create_task(
+            self._sleep_for_retry(delay)
+        )
+        try:
+            done, pending = await asyncio.wait(
+                (cancel_task, sleep_task),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+            if cancel_task in done and cancellation.is_set():
+                return False
+            await sleep_task
+            return True
+        finally:
+            if not cancel_task.done():
+                cancel_task.cancel()
+            if not sleep_task.done():
+                sleep_task.cancel()
+
+    async def _sleep_for_retry(self, delay: float) -> None:
+        await self._sleep(delay)
 
     async def _acquire_semaphore(
         self,

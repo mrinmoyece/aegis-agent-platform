@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -528,7 +529,7 @@ def test_gateway_records_intent_before_attempt_and_reconciles_usage() -> None:
     requested = repository.events[1]
     assert "hello" not in repr(requested.payload)
     assert requested.payload["persistence_policy"] == "metadata_and_digest_only"
-    assert repository.usage_summary(TenantContext(TENANT))["tokens"] == 36
+    assert asyncio.run(repository.usage_summary(TenantContext(TENANT)))["tokens"] == 36
 
 
 def test_estimate_cost_reserves_highest_priced_token_class() -> None:
@@ -603,6 +604,53 @@ def test_gateway_retries_then_falls_back_in_order() -> None:
     assert DomainEventType.MODEL_FALLBACK_SELECTED in {
         event.event_type for event in repository.events
     }
+
+
+def test_last_retry_failure_is_recorded_before_fallback() -> None:
+    model_request = request()
+    work_lease = lease()
+    repository = InMemoryGatewayRepository((work_lease,))
+    outage = ModelGatewayError(
+        ModelErrorClass.PROVIDER_UNAVAILABLE,
+        "outage",
+        retryable=True,
+    )
+    service = gateway(
+        {
+            "mock-a": ScriptedModelProvider("mock-a", (outage,)),
+            "mock-b": ScriptedModelProvider(
+                "mock-b",
+                (response(model_request, MODEL_B),),
+            ),
+        },
+        repository,
+        (
+            catalog_entry(MODEL_A, cost_rank=0),
+            catalog_entry(MODEL_B, cost_rank=1),
+        ),
+        max_attempts=1,
+        max_failovers=1,
+    )
+
+    result = asyncio.run(
+        service.complete(
+            TenantContext(TENANT),
+            model_request,
+            work_lease,
+            policy(),
+            environment=Environment.TEST,
+        )
+    )
+
+    failures = [
+        event
+        for event in repository.events
+        if event.event_type == DomainEventType.MODEL_CALL_FAILED
+    ]
+    assert result.model == MODEL_B
+    assert len(failures) == 1
+    assert failures[0].payload["provider"] == "mock-a"
+    assert failures[0].payload["attempt"] == 1
 
 
 def test_retry_failures_are_durably_recorded_before_success() -> None:
@@ -962,7 +1010,7 @@ def test_duplicate_request_returns_same_response_without_second_charge() -> None
     first, second = asyncio.run(twice())
     assert first is second
     assert len(provider.calls) == 1
-    assert repository.usage_summary(TenantContext(TENANT))["calls"] == 1
+    assert asyncio.run(repository.usage_summary(TenantContext(TENANT)))["calls"] == 1
 
 
 def test_gateway_records_usage_failure_when_provider_exceeds_reservation() -> None:
@@ -1000,7 +1048,7 @@ def test_gateway_records_usage_failure_when_provider_exceeds_reservation() -> No
         )
 
     assert failure.value.code == "usage_exceeded_token_reservation"
-    assert repository.usage_summary(TenantContext(TENANT))["calls"] == 1
+    assert asyncio.run(repository.usage_summary(TenantContext(TENANT)))["calls"] == 1
     assert [event.event_type for event in repository.events[-4:]] == [
         DomainEventType.MODEL_CALL_FAILED,
         DomainEventType.MODEL_USAGE_RECORDED,
@@ -1040,7 +1088,7 @@ def test_zero_token_success_counts_as_completed_call() -> None:
         )
     )
 
-    assert repository.usage_summary(TenantContext(TENANT))["calls"] == 1
+    assert asyncio.run(repository.usage_summary(TenantContext(TENANT)))["calls"] == 1
 
 
 def test_sequential_calls_include_charged_usage_in_budget_checks() -> None:
@@ -1139,7 +1187,7 @@ def test_tool_arguments_and_structured_output_are_strictly_validated() -> None:
         )
     assert failure.value.error_class is ModelErrorClass.SCHEMA
     assert not next(iter(repository.reservations.values())).active
-    assert repository.usage_summary(TenantContext(TENANT))["tokens"] == 36
+    assert asyncio.run(repository.usage_summary(TenantContext(TENANT)))["tokens"] == 36
 
 
 def test_service_constructor_and_budget_guards_fail_closed() -> None:
@@ -1253,7 +1301,7 @@ def test_malformed_or_missing_structured_response_is_billed_before_failure(
             )
         )
     assert not next(iter(repository.reservations.values())).active
-    assert repository.usage_summary(TenantContext(TENANT))["calls"] == 1
+    assert asyncio.run(repository.usage_summary(TenantContext(TENANT)))["calls"] == 1
 
 
 def test_unknown_tool_call_is_rejected() -> None:
@@ -1309,7 +1357,7 @@ def test_response_model_mismatch_is_billed_before_failure() -> None:
             )
         )
     assert not next(iter(repository.reservations.values())).active
-    assert repository.usage_summary(TenantContext(TENANT))["calls"] == 1
+    assert asyncio.run(repository.usage_summary(TenantContext(TENANT)))["calls"] == 1
 
 
 def test_duplicate_tool_names_are_rejected() -> None:
@@ -1384,6 +1432,90 @@ def test_repository_rejects_cross_tenant_and_usage_overage() -> None:
         )
 
 
+def test_run_budget_ignores_other_tenant_charged_usage_with_same_run_id() -> None:
+    other_tenant = TenantId("tenant-other")
+    shared_run_id = RUN_ID
+    current_lease = lease(shared_run_id)
+    other_lease = replace(
+        current_lease,
+        tenant_id=str(other_tenant),
+        token=uuid4(),
+    )
+    repository = InMemoryGatewayRepository((current_lease, other_lease))
+    catalog = ModelCatalog((catalog_entry(),))
+    other_request = replace(
+        request(
+            request_id=UUID("10000000-0000-4000-8000-000000000020"),
+            run_id=shared_run_id,
+            idempotency_key="other-tenant",
+        ),
+        tenant_id=str(other_tenant),
+    )
+    other_policy = replace(
+        policy(models=frozenset({MODEL_A.catalog_key})),
+        tenant_id=other_tenant,
+    )
+    route = ModelRouter().route(
+        other_request,
+        catalog=catalog,
+        policy=other_policy,
+        environment=Environment.TEST,
+    )
+    other_reservation = asyncio.run(
+        repository.reserve(
+            TenantContext(other_tenant),
+            other_request,
+            other_lease,
+            route,
+            quotas=other_policy.quotas,
+            token_limit=120,
+            cost_limit_usd=Decimal("1"),
+            price_version="v1",
+            at=NOW,
+        )
+    )
+    asyncio.run(
+        repository.succeed(
+            TenantContext(other_tenant),
+            other_request,
+            other_lease,
+            other_reservation,
+            response(other_request),
+            pricing(),
+            at=NOW,
+        )
+    )
+
+    current_request = request(
+        request_id=UUID("10000000-0000-4000-8000-000000000021"),
+        run_id=shared_run_id,
+        idempotency_key="current-tenant",
+    )
+    current_route = ModelRouter().route(
+        current_request,
+        catalog=catalog,
+        policy=policy(models=frozenset({MODEL_A.catalog_key})),
+        environment=Environment.TEST,
+    )
+    constrained_quotas = replace(policy().quotas, max_run_tokens=130)
+
+    reservation = asyncio.run(
+        repository.reserve(
+            TenantContext(TENANT),
+            current_request,
+            current_lease,
+            current_route,
+            quotas=constrained_quotas,
+            token_limit=120,
+            cost_limit_usd=Decimal("1"),
+            price_version="v1",
+            at=NOW,
+        )
+    )
+
+    assert reservation.tenant_id == str(TENANT)
+
+
 def test_metrics_and_gateway_operations_are_bounded_and_authorized() -> None:
     from security_helpers import binding, principal
 
@@ -1424,10 +1556,12 @@ def test_metrics_and_gateway_operations_are_bounded_and_authorized() -> None:
     )
     assert catalog_view[0]["pricing_version"] == "mock-a-price-v1"
     assert (
-        operations.usage(
-            tenant_principal,
-            TenantContext(TENANT),
-            at=NOW,
+        asyncio.run(
+            operations.usage(
+                tenant_principal,
+                TenantContext(TENANT),
+                at=NOW,
+            )
         )["tokens"]
         == 0
     )

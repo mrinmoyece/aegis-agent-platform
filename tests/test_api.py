@@ -174,7 +174,7 @@ def secured_app(
 
 
 class StaticUsageReader:
-    def usage_summary(self, context: TenantContext) -> dict[str, JsonValue]:
+    async def usage_summary(self, context: TenantContext) -> dict[str, JsonValue]:
         assert context.tenant_id == TENANT_ID
         return {"tokens": 12, "cost_usd": "0.001", "calls": 1}
 
@@ -317,6 +317,9 @@ def test_tenant_resource_and_policy_are_tenant_scoped() -> None:
     assert tenant_status == policy_status == 200
     assert tenant_body["display_name"] == "Tenant Alpha"
     assert policy_body["allow"]["models"] == ["model-safe"]
+    assert policy_body["allow"]["providers"] == ["mock"]
+    assert policy_body["allow"]["data_residencies"] == ["eu"]
+    assert policy_body["data"]["allow_provider_retention"] is False
     events = audit.query(TenantContext(TENANT_ID))
     assert [event.event_type for event in events] == [
         AuditEventType.AUTHENTICATION_OUTCOME,

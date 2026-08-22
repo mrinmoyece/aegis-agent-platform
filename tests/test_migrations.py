@@ -148,4 +148,5 @@ def test_model_budget_schema_is_tenant_scoped_fenced_and_versioned() -> None:
     assert "where status in ('active', 'charged')" in schema
     assert "price_version text not null" in schema
     assert "lease_generation bigint not null" in schema
+    assert "expires_at timestamptz" in schema
     assert "where status = 'active'" in schema

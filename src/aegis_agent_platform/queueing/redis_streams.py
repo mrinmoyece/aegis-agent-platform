@@ -153,16 +153,23 @@ class RedisStreamQueue:
         *,
         count: int,
         minimum_idle_milliseconds: int = 0,
+        start_id: str = "-",
+        end_id: str = "+",
     ) -> tuple[PendingEntry, ...]:
         await self.ensure_group()
-        if not 1 <= count <= 1_000 or minimum_idle_milliseconds < 0:
+        if (
+            not 1 <= count <= 1_000
+            or minimum_idle_milliseconds < 0
+            or not start_id
+            or not end_id
+        ):
             raise ValueError("invalid bounded pending query")
         try:
             rows = await self._client.xpending_range(
                 self._stream,
                 self._group,
-                min="-",
-                max="+",
+                min=start_id,
+                max=end_id,
                 count=count,
                 idle=minimum_idle_milliseconds or None,
             )
@@ -207,9 +214,16 @@ class RedisStreamQueue:
             "0-0" if next_cursor == "0-0" else next_cursor
         )
         entries = cast(list[tuple[object, Mapping[object, object]]], result[1])
+        if not entries:
+            return ()
         deliveries: list[QueueDelivery] = []
         metadata = {
-            entry.stream_entry_id: entry for entry in await self.pending(count=count)
+            entry.stream_entry_id: entry
+            for entry in await self.pending(
+                count=count,
+                start_id=start_id,
+                end_id="+" if next_cursor == "0-0" else next_cursor,
+            )
         }
         for entry_id, fields in entries:
             text_id = _text(entry_id)

@@ -21,12 +21,16 @@ CREATE TABLE model_budget_reservations (
     lease_token uuid NOT NULL,
     lease_generation bigint NOT NULL CHECK (lease_generation > 0),
     created_at timestamptz NOT NULL,
+    expires_at timestamptz,
     reconciled_at timestamptz,
     PRIMARY KEY (tenant_id, reservation_id),
     FOREIGN KEY (tenant_id, work_id)
         REFERENCES work_items (tenant_id, work_id),
     CHECK ((status = 'active') = (reconciled_at IS NULL))
 );
+
+-- Active reservations inherit the worker lease expiry so crashed workers can be
+-- reconciled against the same deadline instead of remaining unbounded forever.
 
 CREATE UNIQUE INDEX model_budget_reservations_request_active_idx
     ON model_budget_reservations (tenant_id, request_id)

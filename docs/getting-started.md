@@ -1,4 +1,4 @@
-# Getting started with Layers 1–4
+# Getting started with Layers 1–5
 
 This repository teaches the less visible part of agent engineering: deciding
 where durability, security, and vendor boundaries live before writing
@@ -6,7 +6,7 @@ orchestration logic. Layer 1 built the package contracts and local
 infrastructure. Layer 2 adds identity, tenancy, and governance. Layer 3 adds a
 durable PostgreSQL ledger, inbox/outbox, projections, and production repositories.
 Layer 4 adds Redis Streams delivery and fenced worker execution. Layer 5 adds
-the model gateway and cost governance, but not agent
+the model gateway, provider adapters, and cost governance, but not agent
 reasoning.
 
 ## What you will inspect

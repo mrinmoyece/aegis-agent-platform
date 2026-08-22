@@ -40,6 +40,7 @@ class FakeRedisClient:
         self.xgroup_create_calls = 0
         self.read_error: ResponseError | None = None
         self.xautoclaim_calls: list[str] = []
+        self.xpending_calls: list[dict[str, object]] = []
         self.xautoclaim_results: list[
             tuple[bytes, list[tuple[bytes, dict[bytes, bytes]]]]
         ] = []
@@ -91,7 +92,18 @@ class FakeRedisClient:
         idle: int | None = None,
         **kwargs: object,
     ) -> list[dict[str, object]]:
-        del stream, group, count, idle, kwargs
+        min_id = cast(str, kwargs["min"])
+        max_id = cast(str, kwargs["max"])
+        self.xpending_calls.append(
+            {
+                "stream": stream,
+                "group": group,
+                "min": min_id,
+                "max": max_id,
+                "count": count,
+                "idle": idle,
+            }
+        )
         return self.pending_rows
 
 
@@ -178,6 +190,60 @@ def test_reclaim_advances_cursor_and_wraps_after_full_scan() -> None:
     assert second == ()
     assert third == ()
     assert client.xautoclaim_calls == ["0-0", "7-0", "0-0"]
+
+
+def test_reclaim_queries_pending_metadata_from_claimed_cursor_window() -> None:
+    client = FakeRedisClient()
+    client.xautoclaim_results = [
+        (
+            b"9-0",
+            [
+                (
+                    b"8-0",
+                    {
+                        b"envelope": _envelope_bytes(
+                            "00000000-0000-0000-0000-000000000008"
+                        )
+                    },
+                )
+            ],
+        )
+    ]
+    client.pending_rows = [
+        {
+            "message_id": b"8-0",
+            "consumer": b"worker-a",
+            "time_since_delivered": 2_000,
+            "times_delivered": 4,
+        }
+    ]
+    queue = RedisStreamQueue(
+        cast(redis.Redis, client),
+        stream="aegis:test",
+        group="workers",
+    )
+    queue._reclaim_cursor_by_consumer["worker-a"] = "7-0"
+
+    deliveries = asyncio.run(
+        queue.reclaim(
+            consumer="worker-a",
+            minimum_idle_milliseconds=1_000,
+            count=1,
+        )
+    )
+
+    assert len(deliveries) == 1
+    assert deliveries[0].delivery_count == 4
+    assert client.xpending_calls == [
+        {
+            "stream": "aegis:test",
+            "group": "workers",
+            "min": "7-0",
+            "max": "9-0",
+            "count": 1,
+            "idle": None,
+        }
+    ]
 
 
 def test_read_invalidates_cached_group_when_redis_reports_nogroup() -> None:

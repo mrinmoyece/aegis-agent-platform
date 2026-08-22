@@ -205,9 +205,9 @@ class PostgresGatewayRepository(GatewayRepository):
                 INSERT INTO model_budget_reservations (
                     tenant_id, reservation_id, run_id, work_id, request_id,
                     idempotency_key, token_limit, cost_limit_usd, price_version,
-                    status, lease_token, lease_generation, created_at
+                    status, lease_token, lease_generation, created_at, expires_at
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, 'active', %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, 'active', %s, %s, %s, %s
                 )
                 """,
                 (
@@ -223,6 +223,7 @@ class PostgresGatewayRepository(GatewayRepository):
                     lease.token,
                     lease.generation,
                     at,
+                    lease.expires_at,
                 ),
             )
 
@@ -718,6 +719,7 @@ def _common(
 ) -> dict[str, JsonValue]:
     return {
         "work_id": str(lease.work_id),
+        "run_id": str(request.run_id),
         "lease_token": str(lease.token),
         "lease_generation": lease.generation,
         "request_id": str(request.request_id),

@@ -1023,7 +1023,7 @@ class PostgresProjectionRepository:
             (
                 event.tenant_id,
                 UUID(_required_string(event.payload, "request_id")),
-                UUID(event.aggregate_id),
+                UUID(_required_string(event.payload, "run_id")),
                 _required_string(event.payload, "provider"),
                 _required_string(event.payload, "model"),
                 _required_string(event.payload, "price_version"),

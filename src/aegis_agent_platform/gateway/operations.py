@@ -20,7 +20,7 @@ from aegis_agent_platform.tenancy import TenantContext
 
 
 class ModelUsageReader(Protocol):
-    def usage_summary(self, context: TenantContext) -> Mapping[str, JsonValue]:
+    async def usage_summary(self, context: TenantContext) -> Mapping[str, JsonValue]:
         """Return a bounded tenant-scoped usage projection."""
         ...
 
@@ -74,7 +74,7 @@ class GatewayOperations:
             )
         return tuple(result)
 
-    def usage(
+    async def usage(
         self,
         principal: Principal,
         context: TenantContext,
@@ -82,7 +82,7 @@ class GatewayOperations:
         at: datetime,
     ) -> Mapping[str, JsonValue]:
         self._require(principal, context, at)
-        return self._usage.usage_summary(context)
+        return await self._usage.usage_summary(context)
 
     def health(
         self,

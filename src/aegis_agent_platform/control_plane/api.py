@@ -387,7 +387,13 @@ class ControlPlaneApp:
                     )
                 }
             elif view == "model-usage":
-                body = dict(self._gateway_operations.usage(principal, context, at=at))
+                body = dict(
+                    await self._gateway_operations.usage(
+                        principal,
+                        context,
+                        at=at,
+                    )
+                )
             else:
                 body = {
                     "providers": self._gateway_operations.health(
@@ -673,9 +679,14 @@ def _policy_body(policy: TenantPolicy) -> dict[str, Any]:
         "version": policy.version,
         "allow": {
             "models": sorted(policy.allowed_models),
+            "providers": sorted(policy.allowed_providers),
             "tools": sorted(policy.allowed_tools),
             "connectors": sorted(policy.allowed_connectors),
             "environments": sorted(policy.allowed_environments),
+            "data_residencies": sorted(policy.allowed_data_residencies),
+        },
+        "data": {
+            "allow_provider_retention": policy.allow_provider_retention,
         },
         "risk": {
             "maximum": policy.max_risk.name.lower(),
