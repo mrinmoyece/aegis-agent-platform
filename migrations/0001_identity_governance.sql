@@ -108,6 +108,18 @@ CREATE TRIGGER security_audit_events_no_update
 BEFORE UPDATE OR DELETE ON security_audit_events
 FOR EACH ROW EXECUTE FUNCTION reject_security_audit_mutation();
 
+CREATE TRIGGER security_audit_events_no_truncate
+BEFORE TRUNCATE ON security_audit_events
+FOR EACH STATEMENT EXECUTE FUNCTION reject_security_audit_mutation();
+
+REVOKE UPDATE, DELETE, TRUNCATE ON security_audit_events FROM PUBLIC;
+
+ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenants FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenants_tenant_isolation ON tenants
+    USING (tenant_id = current_setting('aegis.tenant_id', true))
+    WITH CHECK (tenant_id = current_setting('aegis.tenant_id', true));
+
 ALTER TABLE identities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE identities FORCE ROW LEVEL SECURITY;
 CREATE POLICY identities_tenant_isolation ON identities
