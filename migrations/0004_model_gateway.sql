@@ -92,6 +92,8 @@ CREATE POLICY model_usage_projection_tenant_isolation
 GRANT SELECT, INSERT, UPDATE ON tenant_model_budget_locks,
     model_budget_reservations TO aegis_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON model_usage_projection TO aegis_app;
+-- Allow the app user to read quota limits for budget admission decisions.
+GRANT SELECT ON tenant_quotas TO aegis_app;
 REVOKE DELETE, TRUNCATE ON tenant_model_budget_locks,
     model_budget_reservations FROM PUBLIC, aegis_app;
 REVOKE DELETE, TRUNCATE ON model_usage_projection FROM PUBLIC;
