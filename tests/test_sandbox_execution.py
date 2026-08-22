@@ -93,6 +93,57 @@ class _ReadinessLossBackend(FakeSandboxBackend):
         )
 
 
+class _AllowEgressBroker:
+    @property
+    def enforcement_ready(self) -> bool:
+        return True
+
+    async def authorize(
+        self,
+        context: TenantContext,
+        request: SandboxRequest,
+        rule: EgressRule,
+        *,
+        policy_digest: str,
+        at: datetime,
+    ) -> EgressDecision:
+        assert request.linkage.tenant_id == str(context.tenant_id)
+        return EgressDecision(True, "reviewed_test_egress", rule, policy_digest, at)
+
+
+class _MismatchedEgressBroker:
+    def __init__(
+        self,
+        *,
+        rule: EgressRule | None = None,
+        policy_digest: str | None = None,
+    ) -> None:
+        self._rule = rule
+        self._policy_digest = policy_digest
+
+    @property
+    def enforcement_ready(self) -> bool:
+        return True
+
+    async def authorize(
+        self,
+        context: TenantContext,
+        request: SandboxRequest,
+        rule: EgressRule,
+        *,
+        policy_digest: str,
+        at: datetime,
+    ) -> EgressDecision:
+        assert request.linkage.tenant_id == str(context.tenant_id)
+        return EgressDecision(
+            True,
+            "reviewed_test_egress",
+            self._rule or rule,
+            self._policy_digest or policy_digest,
+            at,
+        )
+
+
 def test_backend_and_egress_boundary_records_validate_strictly() -> None:
     naive = NOW.replace(tzinfo=None)
     rule = EgressRule("https", "packages.example.com", 443)
@@ -319,6 +370,153 @@ async def test_brokered_egress_decision_is_durable_and_denied_before_dispatch() 
         DomainEventType.SANDBOX_POLICY_VIOLATION.value,
     ]
     assert events[-2].payload["allowed"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("returned_rule", "returned_policy_digest"),
+    [
+        (EgressRule("https", "mirror.example.com", 443), None),
+        (None, "f" * 64),
+    ],
+)
+async def test_brokered_egress_decision_must_match_requested_rule_and_policy(
+    returned_rule: EgressRule | None,
+    returned_policy_digest: str | None,
+) -> None:
+    uuids = UUIDs("brokered-egress-mismatch")
+    repository = InMemorySandboxRepository(uuid_factory=uuids)
+    authority = StaticSandboxApprovalAuthority(
+        frozenset({"approver-one", "approver-two"})
+    )
+    rule = EgressRule("https", "packages.example.com", 443)
+    sandbox_request = request(
+        uuids,
+        sandbox_spec=spec(
+            network_mode=NetworkMode.BROKERED,
+            egress_rules=(rule,),
+        ),
+    )
+    sandbox_policy = policy(sandbox_request)
+    approval = binding(sandbox_request, sandbox_policy)
+    decision = await SandboxRequestService(
+        repository,
+        authority,
+        clock=Clock(),
+        uuid_factory=uuids,
+    ).request(
+        principal(),
+        CONTEXT,
+        sandbox_request,
+        sandbox_policy,
+        approval,
+    )
+    assert decision.state.status is SandboxStatus.APPROVED
+    work_lease = lease(sandbox_request, uuids)
+    repository.register_lease(work_lease)
+    backend = FakeSandboxBackend(
+        result=result(uuids, outcome=SandboxExecutionOutcome.SUCCEEDED),
+        clock=Clock(),
+    )
+
+    with pytest.raises(PermissionError, match="sandbox_egress_decision_mismatch"):
+        await SandboxOrchestrator(
+            repository,
+            backend,
+            authority,
+            StaticInputSnapshotVerifier(),
+            egress_broker=_MismatchedEgressBroker(
+                rule=returned_rule,
+                policy_digest=returned_policy_digest,
+            ),
+            clock=Clock(),
+            uuid_factory=uuids,
+        ).execute(
+            principal(),
+            CONTEXT,
+            sandbox_request.sandbox_id,
+            work_lease,
+            sandbox_policy,
+            approval,
+        )
+    assert backend.calls == []
+
+
+@pytest.mark.asyncio
+async def test_allowed_brokered_egress_crash_after_commit_resumes() -> None:
+    uuids = UUIDs("brokered-egress-commit-crash")
+    repository = _CrashAfterCommitRepository(
+        DomainEventType.SANDBOX_EGRESS_DECIDED,
+        uuid_factory=uuids,
+    )
+    authority = StaticSandboxApprovalAuthority(
+        frozenset({"approver-one", "approver-two"})
+    )
+    rule = EgressRule("https", "packages.example.com", 443)
+    sandbox_request = request(
+        uuids,
+        sandbox_spec=spec(
+            network_mode=NetworkMode.BROKERED,
+            egress_rules=(rule,),
+        ),
+    )
+    sandbox_policy = policy(sandbox_request)
+    approval = binding(sandbox_request, sandbox_policy)
+    decision = await SandboxRequestService(
+        repository,
+        authority,
+        clock=Clock(),
+        uuid_factory=uuids,
+    ).request(
+        principal(),
+        CONTEXT,
+        sandbox_request,
+        sandbox_policy,
+        approval,
+    )
+    assert decision.state.status is SandboxStatus.APPROVED
+    work_lease = lease(sandbox_request, uuids)
+    repository.register_lease(work_lease)
+    backend = FakeSandboxBackend(
+        result=result(uuids, outcome=SandboxExecutionOutcome.SUCCEEDED),
+        clock=Clock(),
+    )
+    orchestrator = SandboxOrchestrator(
+        repository,
+        backend,
+        authority,
+        StaticInputSnapshotVerifier(),
+        egress_broker=_AllowEgressBroker(),
+        clock=Clock(),
+        uuid_factory=uuids,
+    )
+
+    with pytest.raises(
+        _DurableCommitCrash, match="simulated crash after durable commit"
+    ):
+        await orchestrator.execute(
+            principal(),
+            CONTEXT,
+            sandbox_request.sandbox_id,
+            work_lease,
+            sandbox_policy,
+            approval,
+        )
+
+    crashed = replay_sandbox(await repository.load(CONTEXT, sandbox_request.sandbox_id))
+    assert crashed.status is SandboxStatus.PROVISIONING
+
+    recovered = await orchestrator.execute(
+        principal(),
+        CONTEXT,
+        sandbox_request.sandbox_id,
+        work_lease,
+        sandbox_policy,
+        approval,
+    )
+
+    assert recovered.status is SandboxStatus.CLEANED
+    assert backend.calls.count("provision") == 1
 
 
 @pytest.mark.asyncio

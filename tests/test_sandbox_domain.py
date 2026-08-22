@@ -687,6 +687,17 @@ def test_replay_rejects_illegal_transition_stale_scope_and_result_sequence() -> 
         2,
         {"outcome": "allow", "policy_digest": "d" * 64},
     )
+    approval_bound = _event(
+        uuids,
+        sandbox_request.sandbox_id,
+        DomainEventType.SANDBOX_APPROVAL_BOUND,
+        3,
+        {
+            "spec_digest": sandbox_request.spec.digest,
+            "policy_digest": "d" * 64,
+            "approval_scope_digest": "e" * 64,
+        },
+    )
     with pytest.raises(SandboxReplayError, match="invalid from requested"):
         replay_sandbox(
             (
@@ -731,6 +742,154 @@ def test_replay_rejects_illegal_transition_stale_scope_and_result_sequence() -> 
                         "attestation_id": str(uuids()),
                         "backend": "fake",
                         "backend_reference": "fake/ref",
+                        "image_digest": sandbox_request.spec.image_digest,
+                        "input_digest": sandbox_request.spec.input_snapshot.digest,
+                        "spec_digest": sandbox_request.spec.digest,
+                        "policy_digest": "d" * 64,
+                        "approval_scope_digest": "e" * 64,
+                        "result_digest": "f" * 64,
+                        "started_at": NOW.isoformat(),
+                        "completed_at": (NOW + timedelta(seconds=1)).isoformat(),
+                    },
+                ),
+            )
+        )
+    completed = (
+        _event(
+            uuids,
+            sandbox_request.sandbox_id,
+            DomainEventType.SANDBOX_DISPATCH_CLAIMED,
+            4,
+            {},
+        ),
+        _event(
+            uuids,
+            sandbox_request.sandbox_id,
+            DomainEventType.SANDBOX_PROVISIONING_REQUESTED,
+            5,
+            {},
+        ),
+        _event(
+            uuids,
+            sandbox_request.sandbox_id,
+            DomainEventType.SANDBOX_PROVISIONED,
+            6,
+            {"backend_reference": "fake/ref"},
+        ),
+        _event(
+            uuids,
+            sandbox_request.sandbox_id,
+            DomainEventType.SANDBOX_START_REQUESTED,
+            7,
+            {},
+        ),
+        _event(
+            uuids,
+            sandbox_request.sandbox_id,
+            DomainEventType.SANDBOX_STARTED,
+            8,
+            {},
+        ),
+        _event(
+            uuids,
+            sandbox_request.sandbox_id,
+            DomainEventType.SANDBOX_COMPLETED,
+            9,
+            {
+                "result": {
+                    "artifacts": [],
+                    "completed_at": (NOW + timedelta(seconds=1)).isoformat(),
+                    "error_code": None,
+                    "exit_code": 0,
+                    "outcome": SandboxExecutionOutcome.SUCCEEDED.value,
+                    "started_at": NOW.isoformat(),
+                    "stderr": {
+                        "captured_bytes": 0,
+                        "digest": "e" * 64,
+                        "redacted": True,
+                        "stream": "stderr",
+                        "truncated": False,
+                    },
+                    "stdout": {
+                        "captured_bytes": 0,
+                        "digest": "d" * 64,
+                        "redacted": True,
+                        "stream": "stdout",
+                        "truncated": False,
+                    },
+                }
+            },
+        ),
+    )
+    with pytest.raises(SandboxReplayError, match="scope is stale"):
+        replay_sandbox(
+            (
+                requested,
+                policy_allowed,
+                approval_bound,
+                *completed,
+                _event(
+                    uuids,
+                    sandbox_request.sandbox_id,
+                    DomainEventType.SANDBOX_ATTESTED,
+                    10,
+                    {
+                        "attestation_id": str(uuids()),
+                        "backend_identity": "fake",
+                        "image_digest": "f" * 64,
+                        "input_digest": sandbox_request.spec.input_snapshot.digest,
+                        "spec_digest": sandbox_request.spec.digest,
+                        "policy_digest": "d" * 64,
+                        "approval_scope_digest": "e" * 64,
+                        "result_digest": "0" * 64,
+                        "started_at": NOW.isoformat(),
+                        "completed_at": (NOW + timedelta(seconds=1)).isoformat(),
+                    },
+                ),
+            )
+        )
+    with pytest.raises(SandboxReplayError, match="scope is stale"):
+        replay_sandbox(
+            (
+                requested,
+                policy_allowed,
+                approval_bound,
+                *completed,
+                _event(
+                    uuids,
+                    sandbox_request.sandbox_id,
+                    DomainEventType.SANDBOX_ATTESTED,
+                    10,
+                    {
+                        "attestation_id": str(uuids()),
+                        "backend_identity": "fake",
+                        "image_digest": sandbox_request.spec.image_digest,
+                        "input_digest": "f" * 64,
+                        "spec_digest": sandbox_request.spec.digest,
+                        "policy_digest": "d" * 64,
+                        "approval_scope_digest": "e" * 64,
+                        "result_digest": "0" * 64,
+                        "started_at": NOW.isoformat(),
+                        "completed_at": (NOW + timedelta(seconds=1)).isoformat(),
+                    },
+                ),
+            )
+        )
+    with pytest.raises(SandboxReplayError, match="scope is stale"):
+        replay_sandbox(
+            (
+                requested,
+                policy_allowed,
+                approval_bound,
+                *completed,
+                _event(
+                    uuids,
+                    sandbox_request.sandbox_id,
+                    DomainEventType.SANDBOX_ATTESTED,
+                    10,
+                    {
+                        "attestation_id": str(uuids()),
+                        "backend_identity": "fake",
                         "image_digest": sandbox_request.spec.image_digest,
                         "input_digest": sandbox_request.spec.input_snapshot.digest,
                         "spec_digest": sandbox_request.spec.digest,

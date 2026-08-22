@@ -280,6 +280,7 @@ def test_workload_is_suspended_pinned_and_locked_down() -> None:
         Mapping[str, object],
         cast(list[object], pod["containers"])[0],
     )
+    volume_mounts = cast(list[Mapping[str, object]], container["volumeMounts"])
     security = cast(Mapping[str, object], container["securityContext"])
     image = cast(str, container["image"])
     assert job_spec["suspend"] is True
@@ -304,6 +305,12 @@ def test_workload_is_suspended_pinned_and_locked_down() -> None:
     assert pod["hostIPC"] is False
     assert pod["shareProcessNamespace"] is False
     assert pod["runtimeClassName"] == "gvisor"
+    assert container["workingDir"] == "/workspace/source"
+    assert {
+        cast(str, mount["mountPath"])
+        for mount in volume_mounts
+        if cast(str, mount["name"]) == "input-snapshot"
+    } == {"/workspace/source", "/inputs/snapshot"}
     assert metadata["namespace"] == "aegis-sandboxes"
     labels = cast(Mapping[str, object], metadata["labels"])
     assert str(TENANT_ID) not in labels.values()

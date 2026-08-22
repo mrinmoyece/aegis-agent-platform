@@ -32,6 +32,7 @@ from aegis_agent_platform.domain import (
     WorkRequest,
     replay_sandbox,
     sandbox_request_to_payload,
+    sandbox_result_digest,
     sandbox_result_to_payload,
 )
 from aegis_agent_platform.identity import (
@@ -607,6 +608,10 @@ class SandboxOrchestrator:
             policy,
             binding,
         )
+        egress_events: tuple[
+            tuple[DomainEventType, Mapping[str, JsonValue], str],
+            ...,
+        ] = ()
         if state.status in {
             SandboxStatus.POLICY_DENIED,
             SandboxStatus.CLEANED,
@@ -636,25 +641,36 @@ class SandboxOrchestrator:
                 )
             except Exception as error:
                 raise PermissionError("sandbox_egress_decision_failed") from error
-            state = await self._append(
-                context,
-                state,
-                lease,
-                tuple(
-                    (
-                        DomainEventType.SANDBOX_EGRESS_DECIDED,
-                        {
-                            "allowed": decision.allowed,
-                            "policy_digest": decision.policy_digest,
-                            "reason": decision.reason,
-                            "rule_digest": _egress_rule_digest(decision.rule),
-                        },
-                        f"egress-{index}",
-                    )
-                    for index, decision in enumerate(decisions)
-                ),
+            for requested_rule, decision in zip(
+                state.request.spec.egress_rules,
+                decisions,
+                strict=True,
+            ):
+                if (
+                    decision.rule != requested_rule
+                    or decision.policy_digest != policy.digest
+                ):
+                    raise PermissionError("sandbox_egress_decision_mismatch")
+            egress_events = tuple(
+                (
+                    DomainEventType.SANDBOX_EGRESS_DECIDED,
+                    {
+                        "allowed": decision.allowed,
+                        "policy_digest": decision.policy_digest,
+                        "reason": decision.reason,
+                        "rule_digest": _egress_rule_digest(decision.rule),
+                    },
+                    f"egress-{index}",
+                )
+                for index, decision in enumerate(decisions)
             )
             if any(not decision.allowed for decision in decisions):
+                state = await self._append(
+                    context,
+                    state,
+                    lease,
+                    egress_events,
+                )
                 return await self._append(
                     context,
                     state,
@@ -703,41 +719,53 @@ class SandboxOrchestrator:
             raise PermissionError(f"sandbox_backend_not_ready:{readiness.reason}")
         if state.status is SandboxStatus.APPROVED:
             await self._assert_fence(context, state, lease)
-            state = await self._append(
-                context,
-                state,
-                lease,
+            dispatch_events: tuple[
+                tuple[DomainEventType, Mapping[str, JsonValue], str],
+                ...,
+            ] = (
                 (
-                    (
-                        DomainEventType.SANDBOX_DISPATCH_CLAIMED,
-                        {
-                            "attempt": lease.attempt,
-                            "estimated_artifact_bytes": sum(
-                                output.max_bytes
-                                for output in state.request.spec.expected_outputs
-                            ),
-                            "estimated_cpu_millis_seconds": (
-                                state.request.spec.resources.cpu_millis
-                                * state.request.spec.resources.timeout_seconds
-                            ),
-                            "max_artifact_bytes_per_period": (
-                                policy.max_artifact_bytes_per_period
-                            ),
-                            "max_concurrent_runs": policy.max_concurrent_runs,
-                            "max_cpu_millis_seconds_per_period": (
-                                policy.max_cpu_millis_seconds_per_period
-                            ),
-                            "max_runs_per_period": policy.max_runs_per_period,
-                        },
-                        "dispatch",
-                    ),
-                    (
-                        DomainEventType.SANDBOX_PROVISIONING_REQUESTED,
-                        {"attempt": lease.attempt},
-                        "provision-intent",
-                    ),
+                    DomainEventType.SANDBOX_DISPATCH_CLAIMED,
+                    {
+                        "attempt": lease.attempt,
+                        "estimated_artifact_bytes": sum(
+                            output.max_bytes
+                            for output in state.request.spec.expected_outputs
+                        ),
+                        "estimated_cpu_millis_seconds": (
+                            state.request.spec.resources.cpu_millis
+                            * state.request.spec.resources.timeout_seconds
+                        ),
+                        "max_artifact_bytes_per_period": (
+                            policy.max_artifact_bytes_per_period
+                        ),
+                        "max_concurrent_runs": policy.max_concurrent_runs,
+                        "max_cpu_millis_seconds_per_period": (
+                            policy.max_cpu_millis_seconds_per_period
+                        ),
+                        "max_runs_per_period": policy.max_runs_per_period,
+                    },
+                    "dispatch",
+                ),
+                (
+                    DomainEventType.SANDBOX_PROVISIONING_REQUESTED,
+                    {"attempt": lease.attempt},
+                    "provision-intent",
                 ),
             )
+            if state.request.spec.egress_rules:
+                state = await self._append(
+                    context,
+                    state,
+                    lease,
+                    (*egress_events, *dispatch_events),
+                )
+            else:
+                state = await self._append(
+                    context,
+                    state,
+                    lease,
+                    dispatch_events,
+                )
             self._metrics.add("queue_claims", purpose=state.request.purpose)
         reference = state.backend_reference
         if state.status is SandboxStatus.PROVISIONING:
@@ -1510,7 +1538,7 @@ class SandboxOrchestrator:
                             "image_digest": request.spec.image_digest,
                             "input_digest": request.spec.input_snapshot.digest,
                             "policy_digest": state.policy_digest,
-                            "result_digest": _result_digest(result),
+                            "result_digest": sandbox_result_digest(result),
                             "spec_digest": request.spec.digest,
                         },
                         "attestation",
@@ -1962,43 +1990,6 @@ def _fenced_event(
         causation_id=request.linkage.remediation_action_id,
         idempotency_key=f"{request.idempotency_key}:{suffix}:{lease.generation}",
     )
-
-
-def _result_digest(result: SandboxResult) -> str:
-    return sha256(
-        json.dumps(
-            {
-                "artifacts": [
-                    {
-                        "digest": artifact.digest,
-                        "media_type": artifact.media_type,
-                        "quarantined": artifact.quarantined,
-                        "size_bytes": artifact.size_bytes,
-                    }
-                    for artifact in result.artifacts
-                ],
-                "completed_at": result.completed_at.isoformat(),
-                "error_code": result.error_code,
-                "exit_code": result.exit_code,
-                "outcome": result.outcome.value,
-                "started_at": result.started_at.isoformat(),
-                "stderr": {
-                    "captured_bytes": result.stderr.captured_bytes,
-                    "digest": result.stderr.digest,
-                    "truncated": result.stderr.truncated,
-                },
-                "stdout": {
-                    "captured_bytes": result.stdout.captured_bytes,
-                    "digest": result.stdout.digest,
-                    "truncated": result.stdout.truncated,
-                },
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode()
-    ).hexdigest()
-
-
 def _artifact_contract_violation(
     request: SandboxRequest,
     result: SandboxResult,

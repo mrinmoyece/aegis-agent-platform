@@ -1258,6 +1258,13 @@ def kubernetes_sandbox_workload(
     ]
     mounts.append(
         {
+            "mountPath": f"/{spec.working_directory}",
+            "name": "input-snapshot",
+            "readOnly": True,
+        }
+    )
+    mounts.append(
+        {
             "mountPath": "/inputs/snapshot",
             "name": "input-snapshot",
             "readOnly": True,

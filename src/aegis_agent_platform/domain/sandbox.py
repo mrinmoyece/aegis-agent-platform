@@ -748,6 +748,42 @@ def sandbox_result_to_payload(result: SandboxResult) -> Mapping[str, JsonValue]:
     )
 
 
+def sandbox_result_digest(result: SandboxResult) -> str:
+    payload = sandbox_result_to_payload(result)
+    return _canonical_digest(
+        {
+            "artifacts": [
+                {
+                    "digest": _string(_mapping(item)["digest"]),
+                    "media_type": _string(_mapping(item)["media_type"]),
+                    "quarantined": _boolean(_mapping(item)["quarantined"]),
+                    "size_bytes": _integer(_mapping(item)["size_bytes"]),
+                }
+                for item in _sequence(payload["artifacts"])
+            ],
+            "completed_at": _string(payload["completed_at"]),
+            "error_code": payload["error_code"],
+            "exit_code": payload["exit_code"],
+            "outcome": _string(payload["outcome"]),
+            "started_at": _string(payload["started_at"]),
+            "stderr": {
+                "captured_bytes": _integer(
+                    _mapping(payload["stderr"])["captured_bytes"]
+                ),
+                "digest": _string(_mapping(payload["stderr"])["digest"]),
+                "truncated": _boolean(_mapping(payload["stderr"])["truncated"]),
+            },
+            "stdout": {
+                "captured_bytes": _integer(
+                    _mapping(payload["stdout"])["captured_bytes"]
+                ),
+                "digest": _string(_mapping(payload["stdout"])["digest"]),
+                "truncated": _boolean(_mapping(payload["stdout"])["truncated"]),
+            },
+        }
+    )
+
+
 def sandbox_result_from_payload(value: Mapping[str, JsonValue]) -> SandboxResult:
     stdout = _mapping(value["stdout"])
     stderr = _mapping(value["stderr"])
@@ -1046,9 +1082,14 @@ def _fold_sandbox_event(
     if event_type is DomainEventType.SANDBOX_ATTESTED:
         if DomainEventType.SANDBOX_COMPLETED not in seen_types:
             raise SandboxReplayError("sandbox attestation lacks a completed execution")
+        if state.result is None:
+            raise SandboxReplayError("sandbox attestation lacks a completed result")
         attestation = _attestation_from_event(event)
         if (
             attestation.spec_digest != state.request.spec.digest
+            or attestation.image_digest != state.request.spec.image_digest
+            or attestation.input_digest != state.request.spec.input_snapshot.digest
+            or attestation.result_digest != sandbox_result_digest(state.result)
             or attestation.policy_digest != state.policy_digest
             or attestation.approval_scope_digest != state.approval_scope_digest
         ):
@@ -1538,4 +1579,7 @@ __all__ = [
     "replay_sandbox",
     "sandbox_request_from_payload",
     "sandbox_request_to_payload",
+    "sandbox_result_digest",
+    "sandbox_result_from_payload",
+    "sandbox_result_to_payload",
 ]

@@ -134,6 +134,7 @@ from aegis_agent_platform.domain.sandbox import (
     replay_sandbox,
     sandbox_request_from_payload,
     sandbox_request_to_payload,
+    sandbox_result_digest,
     sandbox_result_from_payload,
     sandbox_result_to_payload,
 )
@@ -276,6 +277,7 @@ __all__ = [
     "require_aware_datetime",
     "sandbox_request_from_payload",
     "sandbox_request_to_payload",
+    "sandbox_result_digest",
     "sandbox_result_from_payload",
     "sandbox_result_to_payload",
     "thaw_json",
