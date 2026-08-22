@@ -10,7 +10,9 @@ Layer 4 adds Redis Streams delivery, PostgreSQL-authoritative leases/fencing,
 bounded fair workers, cancellation, retry/DLQ, and reconciliation protocols.
 Layer 5 adds the provider-neutral model gateway and cost governance. Layer 6
 adds durable read-only evidence acquisition, immutable ingestion, and
-deterministic correlation. Specialist execution, tools, and remediation arrive
+deterministic correlation. Layer 7 adds governed specialist execution,
+ledger-only typed reasoning artifacts, deterministic fan-out/fan-in, and critic
+gates. Approval, tools, remediation execution, sandboxing, and memory arrive
 later.
 
 ```mermaid
@@ -20,6 +22,8 @@ flowchart LR
   CP --> ES[(Event store)]
   CP --> Q[Durable queue]
   Q --> W[Worker runtime]
+  W --> A[Specialist coordinator DAG]
+  A --> ES
   W --> ES
   W --> P[Model providers]
   W --> DT[Dynatrace adapter]
@@ -36,7 +40,8 @@ flowchart LR
 Dashed paths are diagnostic, never authoritative. PostgreSQL is truth; Redis is
 only at-least-once transport. Queue/lease and model gateway execution are
 implemented. Connector acquisition and deterministic correlation are also
-implemented; specialist, tool, and remediation execution remain planned.
+implemented. Governed specialist reasoning is implemented with deterministic
+fake acceptance scenarios; tool and remediation execution remain planned.
 
 ## Model gateway data flow
 
@@ -78,6 +83,46 @@ runbooks do not. Retained raw payloads require encrypted external
 `aegis-object://` references. Correlation uses typed IDs and bounded
 clock-skew/resource heuristics; ambiguity and source conflicts remain visible
 and temporal proximity is never labeled causality.
+
+## Governed specialist orchestration data flow
+
+Layer 7 uses one Layer 4 work aggregate and active lease for an investigation.
+The coordinator records an immutable plan with fixed roles and code-defined
+capabilities. Every dispatch intent commits before the specialist engine runs;
+the model gateway separately commits its call intent and budget reservation
+before provider I/O. Artifacts and terminal task outcomes append under the same
+lease token/generation fence.
+
+```mermaid
+sequenceDiagram
+  participant C as Incident Coordinator
+  participant E as PostgreSQL event ledger
+  participant S as Fixed-role specialist
+  participant G as Model gateway
+  C->>E: investigation.plan_recorded.v1
+  C->>E: specialist.task_dispatch_requested.v1 + started
+  C->>S: bounded redacted committed context
+  S->>G: fenced structured request
+  G->>E: model intent + budget reservation
+  G-->>S: strictly validated neutral output
+  S->>E: reasoning.artifact_recorded.v1 + task outcome
+  C->>E: coordinator decision + final assessment
+```
+
+The pure fold validates gapless aggregate order, duplicate event/idempotency
+keys, declared dependencies, cycles, role/output transitions, artifact linkage,
+provenance reachability, citations, token accounting, and critic/finalization
+gates. Ready nodes sort by plan ordinal and ID; parallel completion order cannot
+change ledger append order or the conclusion. Cancellation, bounded retries,
+timeouts, budget exhaustion, stale fencing, and malformed/provider-bug outcomes
+remain explicit events. PostgreSQL `agent_*` and reasoning-artifact projections
+use forced RLS and can be rebuilt; they are not authoritative.
+
+Artifacts cover evidence assessments, primary and alternative hypotheses,
+contradictions/critiques, causal-graph and timeline references, remediation
+recommendations, verification plans, coordinator decisions, and final incident
+assessments. Remediation is proposal-only. The fake CLI/evals use no network,
+credentials, live model, or effect adapter.
 
 ## Distributed delivery and worker data flow
 
@@ -133,6 +178,11 @@ depend inward on domain types. PostgreSQL adapters live under `event_store` and
 provider-neutral tenant-scoped evidence. The official Kubernetes client is
 isolated in `integrations.kubernetes.official`. Investigation logic cannot
 import vendor SDK objects or credentials.
+
+`agents.coordination` and `agents.artifacts` remain deterministic and
+provider-neutral. `agents.service` composes the event, work, gateway, policy,
+evidence, telemetry, and persistence boundaries. Model SDK objects stop in
+`providers`; PostgreSQL objects stop in `agents.postgres`.
 
 ## Identity, tenancy, and governance boundary
 
@@ -288,9 +338,9 @@ authorized operator approves it, a controlled tool performs the recorded
 intent. Aegis then checks telemetry against an explicit recovery window and
 updates the incident record with the action and result.
 
-Layer 1 supplies only the ports and design. It has no live evidence collection,
-hypothesis engine, Kubernetes integration, approval flow, remediation tool, or
-incident-system writer.
+Layers 6–7 supply evidence acquisition/correlation and the governed hypothesis
+workflow. They still have no approval flow, remediation tool, sandbox,
+post-action execution, operator UI, or incident-system writer.
 
 ## Multi-agent investigation topology
 
@@ -342,12 +392,12 @@ better. Fixed roles avoid uncontrolled spawning; ledger mediation avoids opaque
 peer chat; least privilege limits blast radius; budgets and timeouts prevent
 runaway loops; citations and a critic expose unsupported consensus; deterministic
 aggregation and explicit conflict handling prevent race-dependent conclusions.
-Human approval separates analysis from risky action, and the Verification Agent
-prevents a successful tool response from being mistaken for incident recovery.
-
-Layer 1 provides role, artifact, assignment, budget, and ledger interfaces only.
-There is no scheduler, agent execution, aggregation, conflict resolver, approval
-service, or spawning mechanism.
+Human approval will separate analysis from risky action, and a later execution
+layer will use the Verification Agent's durable plan after an approved effect.
+Layer 7 implements the fixed roles, scheduler, typed artifact ledger,
+deterministic conflict/finalization policy, and safe abstention. There is no
+approval service, spawning mechanism, remediation execution, or post-action
+verification in this layer.
 
 ## Memory architecture
 
@@ -362,8 +412,7 @@ derived retrieval surface with source citations.
 All tiers carry tenant scope, provenance, classification, retention/deletion
 policy, and PII controls. Retrieval balances relevance, recency, source quality,
 and topology. Context compaction must retain citations, uncertainty, conflict,
-approval state, and budgets; summaries never replace event history. These are
-Layer 6 requirements, not implemented behavior.
+approval state, and budgets; summaries never replace event history. These are future memory-layer requirements, not implemented behavior.
 
 ## Protocol positioning
 
@@ -431,9 +480,9 @@ verified token is still untrusted as tenant/role authority until
 `IdentityDirectory` resolves it against an authoritative local record.
 
 PostgreSQL owns the implemented event log and durable projections. Migrations
-`0001`/`0002` define identity, governance, ledger, delivery, and read models
-with forced row-level security. Redis will be
-used only where data loss cannot violate correctness. OpenTelemetry carries
+`0001`–`0006` define identity, governance, ledger, delivery, gateway, evidence,
+and specialist read models with forced row-level security. Redis is used only
+where data loss cannot violate correctness. OpenTelemetry carries
 correlation metadata with tenant-safe cardinality; sensitive content is
 excluded by default, and audit-event redaction follows the same principle.
 

@@ -38,17 +38,19 @@ No roadmap item moves from Planned to Implemented without these artifacts.
 flowchart LR
   L1[Layer 1: contracts and local stack]
   L2[Identity, tenancy, RBAC]
-  L3[Event ledger and orchestration]
+  L3[Event ledger]
   L4[Workers and leases]
   L5[Model gateway]
-  L6[Policy, approvals, tools, sandbox]
-  L7[Memory and retrieval]
-  L8[Evals and observability]
-  L9[Enterprise operations and protocols]
-  L1 --> L2 --> L3 --> L4 --> L5 --> L6 --> L7 --> L8 --> L9
+  L6[Evidence connectors]
+  L7[Specialist DAG]
+  L8[Approvals, tools, sandbox]
+  L9[Memory and retrieval]
+  L10[Evals and observability]
+  L11[Enterprise operations and protocols]
+  L1 --> L2 --> L3 --> L4 --> L5 --> L6 --> L7 --> L8 --> L9 --> L10 --> L11
   L3 --> L5
-  L4 --> L7
-  L2 --> L6
+  L4 --> L6
+  L2 --> L8
 ```
 
 Security, threat modeling, migration safety, and failure injection run through
@@ -68,15 +70,15 @@ Each slice is intended to be a reviewable PR with one primary acceptance gate.
 | EP-05 | 3 | Transactional command, intent, inbox, and outbox handling | EP-03 | duplicate and ambiguous-effect recovery tests |
 | EP-06 | 4 | Fenced lease queue and worker lifecycle | EP-03 | stale-writer, renewal, worker-death, and DLQ tests |
 | EP-07 | 5 | Provider routing, budgets, metering, and reconciliation | EP-05, EP-06 | adapter contract and cost-limit tests |
-| EP-08 | 4 | Dynatrace, GitHub, Kubernetes, and runbook read adapters | EP-02, EP-06 | fixture, rate-limit, pagination, provenance tests |
-| EP-09 | 4 | Coordinator DAG and fixed specialist runtime | EP-04, EP-06, EP-07, EP-08 | deterministic parallel aggregation and timeout tests |
-| EP-10 | 5 | Policy engine, exact approvals, and controlled tools | EP-05, EP-09 | no-action-before-approval and replay-denial tests |
-| EP-11 | 5 | Isolated sandbox and capability-scoped credentials | EP-10 | escape, egress, quota, cleanup, and secret tests |
-| EP-12 | 6 | Three-tier memory, pgvector retrieval, and compaction | EP-02, EP-04 | tenant isolation, provenance, deletion, fidelity tests |
-| EP-13 | 7 | Evaluation harness and release-quality gates | EP-09–EP-12 | known regressions blocked by deterministic/adversarial suites |
-| EP-14 | 7 | Production telemetry, audit, SLOs, and cost controls | EP-03–EP-13 | dashboards, alerts, trace/event correlation, SLO burn tests |
-| EP-15 | 8 | Deployment, secrets, backup/restore, HA, and multi-region | EP-14 | signed release, restore/failover, capacity evidence |
-| EP-16 | 8 | MCP adapters and external A2A interoperability | EP-10, EP-14, EP-15 | conformance, tenant, replay, cancellation, malicious-peer tests |
+| EP-08 | 6 | Dynatrace, GitHub, Kubernetes, and runbook read adapters | EP-02, EP-06 | fixture, rate-limit, pagination, provenance tests |
+| EP-09 | 7 | Coordinator DAG and fixed specialist runtime | EP-04, EP-06, EP-07, EP-08 | deterministic parallel aggregation and timeout tests |
+| EP-10 | 8 | Policy engine, exact approvals, and controlled tools | EP-05, EP-09 | no-action-before-approval and replay-denial tests |
+| EP-11 | 8 | Isolated sandbox and capability-scoped credentials | EP-10 | escape, egress, quota, cleanup, and secret tests |
+| EP-12 | 9 | Three-tier memory, pgvector retrieval, and compaction | EP-02, EP-04 | tenant isolation, provenance, deletion, fidelity tests |
+| EP-13 | 10 | Evaluation harness and release-quality gates | EP-09–EP-12 | known regressions blocked by deterministic/adversarial suites |
+| EP-14 | 10 | Production telemetry, audit, SLOs, and cost controls | EP-03–EP-13 | dashboards, alerts, trace/event correlation, SLO burn tests |
+| EP-15 | 11 | Deployment, secrets, backup/restore, HA, and multi-region | EP-14 | signed release, restore/failover, capacity evidence |
+| EP-16 | 11 | MCP adapters and external A2A interoperability | EP-10, EP-14, EP-15 | conformance, tenant, replay, cancellation, malicious-peer tests |
 
 ## EP-01–EP-02: Identity, tenancy, and RBAC
 
@@ -140,8 +142,8 @@ retry/DLQ, authorized operations, reconciliation protocol, fixed telemetry, and
 live Redis/PostgreSQL races. EP-07 is implemented in Layer 5 with neutral
 contracts, OpenAI/Anthropic/mock adapters, tenant routing, fenced reservations,
 versioned charges, resilience, strict schemas, and deterministic evaluations.
-EP-08 connectors are implemented in Layer 6; EP-09 specialist/coordinator
-execution remains planned.
+EP-08 connectors are implemented in Layer 6. EP-09 specialist/coordinator
+execution is implemented in Layer 7 with proposal-only remediation.
 
 ### EP-07 implemented evidence
 
@@ -165,7 +167,7 @@ durable connector-query intent, fenced lifecycle/results/cursors, bounded
 Dynatrace/GitHub/Kubernetes/runbook adapters, content-addressed redacted
 ingestion, quarantine, citations, asynchronous tenant APIs, and deterministic
 timeline correlation are implemented. External environments remain unconfigured
-and unverified; EP-09 specialist/coordinator execution remains planned.
+and unverified. Layer 7 consumes these neutral cited contracts.
 
 - `evidence.query_requested.v1` commits with durable work before network I/O;
   stale lease token/generation tests reject start, result, and cursor writes.
@@ -319,6 +321,13 @@ credentials in CI, while controlled live tests prove adapter compatibility.
 
 ## EP-09: Durable multi-agent execution
 
+**Layer 7 delivery status (2026-08): Implemented.** The `agents` package owns a
+pure replay fold, immutable bounded DAG, eight fixed governed roles, typed
+artifact union, deterministic readiness/order, critic/finalization gates,
+fenced coordinator, model-gateway engine, fake checkout engine, tenant-RLS
+PostgreSQL projections, authorized cursor APIs, bounded telemetry, fake CLI, and
+CI-gated behavior evaluations. ADR 0014 records the decision.
+
 ### Coordinator
 
 - Validate an acyclic investigation plan with fixed assignments and dependencies.
@@ -355,6 +364,19 @@ request human resolution; it never averages conflict into false certainty.
 Randomized completion order, retries, duplicates, timeouts, malformed artifacts,
 conflicting evidence, critic rejection, and budget exhaustion produce the same
 valid incident state or an explicit unresolved outcome.
+
+This gate is met by deterministic tests for cycles/depth/fan-out, role and
+transition denial, replay corruption, citation/provenance validation, stale
+fencing, cancellation, retry/recovery, timeout/provider bugs, prompt injection,
+unknown citations, contradiction/critic abstention, budget exhaustion, RLS,
+pagination, and projection rebuild. The behavior eval matrix covers success,
+ambiguity, contradiction, budget exhaustion, and recovery without network or
+credentials.
+
+The following are not part of EP-09 and remain explicit future work: approval
+service, remediation execution, isolated sandbox, memory/RAG, operator UI,
+MCP/A2A, production deployment, live model calls, and live connector
+certification.
 
 ## EP-10–EP-11: Remediation, approval, tools, and sandbox
 

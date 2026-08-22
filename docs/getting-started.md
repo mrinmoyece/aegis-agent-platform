@@ -1,4 +1,4 @@
-# Getting started with Layers 1–4
+# Getting started with Layers 1–7
 
 This repository teaches the less visible part of agent engineering: deciding
 where durability, security, and vendor boundaries live before writing
@@ -6,8 +6,8 @@ orchestration logic. Layer 1 built the package contracts and local
 infrastructure. Layer 2 adds identity, tenancy, and governance. Layer 3 adds a
 durable PostgreSQL ledger, inbox/outbox, projections, and production repositories.
 Layer 4 adds Redis Streams delivery and fenced worker execution. Layer 5 adds
-the model gateway and cost governance, but not agent
-reasoning.
+the model gateway and cost governance. Layer 6 adds bounded evidence connectors
+and deterministic correlation. Layer 7 adds the governed durable specialist DAG.
 
 ## What you will inspect
 
@@ -24,13 +24,17 @@ reasoning.
   material, through general application code.
 - `control_plane` composes the above behind an authenticated `/v1/*` API plus
   liveness/readiness routes.
-- migrations `0001`–`0003` define governance, ledger, work state, leases, DLQ,
-  roles, grants, triggers, forced RLS, inbox/outbox, and projections.
+- `agents` defines the fixed roles, bounded DAG/replay fold, typed reasoning
+  artifacts, coordinator, strict model/fake engines, and read operations.
+- migrations `0001`–`0006` define governance, ledger, work state, leases, DLQ,
+  model budgets, evidence, specialist projections, roles, grants, triggers,
+  forced RLS, inbox/outbox, and projections.
 - `compose.yaml` describes the local dependencies later layers will integrate.
 - architecture tests prevent infrastructure from leaking into the pure domain.
 
-The durable store and Redis worker substrate are implemented. No model call,
-specialist reasoning, external effect, or live Dynatrace/GitHub connector runs.
+The durable store, worker substrate, gateway, evidence acquisition contracts,
+and specialist reasoning runtime are implemented. No external effect or live
+Dynatrace/GitHub/Kubernetes/model call runs in the deterministic tutorial.
 
 ## Run the fast checks
 
@@ -50,6 +54,10 @@ migration validation. They do not require network services or a running
 identity provider — JWT verification is exercised against deterministic
 fixtures, not a live Keycloak realm.
 
+`make check` also runs `make evals`, which gates the fake checkout scenarios for
+success, ambiguity/abstention, contradiction/critic rejection, budget
+exhaustion, and retry recovery.
+
 Run the live PostgreSQL/Redis suite against disposable services:
 
 ```bash
@@ -60,6 +68,20 @@ AEGIS_TEST_REDIS_URL=redis://... \
 
 The fixture resets that database's `public` schema. Never point it at shared or
 production data.
+
+## Run the governed checkout investigation
+
+```bash
+python -m aegis_agent_platform.agents --scenario success
+python -m aegis_agent_platform.agents --scenario contradiction
+```
+
+The output is a bounded redacted projection of committed typed artifacts. It
+explicitly declares that it uses no live network and executes no remediation.
+Try `ambiguity`, `budget_exhaustion`, and `recovery`, then compare their terminal
+status and artifact list. The coordinator can propose a rollback and verification
+plan, but there is no approval service, write-capable tool, sandbox, or
+post-action verification in Layer 7.
 
 ## Try the identity, tenancy, and governance slice
 
@@ -108,5 +130,5 @@ you intentionally want to delete local data.
 ## Read next
 
 Read `durable-execution.md`, `worker-runtime.md`, ADR 0010/0011,
-`failure-modes.md`, and `runbook.md`, then
+ADR 0014, `failure-modes.md`, and `runbook.md`, then
 compare roadmap gates with `enterprise-checklist.md`.

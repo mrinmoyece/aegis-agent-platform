@@ -67,6 +67,32 @@ intent persistence, controlled tool validation, and sandbox/egress controls.
 to the ledger. No direct chat, recursive spawning, hidden scratchpad authority,
 or capability transfer.
 
+### How does Layer 7 prevent parallel completion order from changing the answer?
+
+**Answer outline:** the coordinator alone declares the immutable acyclic graph.
+Readiness is a pure function of ledger-folded task states. Ready nodes sort by
+declared ordinal and ID; completed task results sort again by ordinal and
+artifact kind/ID before one fenced append. No specialist writes shared state or
+talks to peers. Replay rejects premature dispatch, duplicate identity, and
+unreachable provenance, so wall-clock completion cannot become authority.
+
+### When must the coordinator abstain instead of finalizing?
+
+**Answer outline:** finalization requires a durable selected hypothesis with
+valid immutable citations, confidence at or above the plan threshold, and at
+least one accepted critique with no unsupported claims or unresolved
+contradictions. Missing evidence, contradictory evidence, critic rejection, or
+low confidence produces an explicit abstain/escalate artifact retaining
+unresolved questions. A fluent model response cannot override this runtime gate.
+
+### Why is a remediation recommendation not permission to remediate?
+
+**Answer outline:** Layer 7's artifact constructor requires `proposal_only=true`
+and binds the recommendation to an upstream hypothesis. No write-capable tool
+exists. A later layer must authorize an exact tenant/action/version/expiry,
+persist effect intent, invoke a controlled idempotent tool, record/reconcile the
+outcome, and execute a separate verification plan.
+
 ## Identity and tenancy deep dive
 
 > Layer 2 implements a real vertical slice for these questions

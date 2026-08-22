@@ -21,7 +21,26 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Detect dependency review support
+        id: dependency-review-support
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          endpoint="repos/${GITHUB_REPOSITORY}/dependency-graph/compare/${BASE_SHA}...${HEAD_SHA}"
+          if response="$(gh api --silent "${endpoint}" 2>&1)"; then
+            echo "enabled=true" >> "${GITHUB_OUTPUT}"
+          elif printf '%s\n' "${response}" | grep --quiet "HTTP 403"; then
+            echo "::warning::Dependency graph is unavailable; dependency review is skipped."
+            echo "enabled=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "::error::Dependency graph capability probe failed."
+            printf '%s\n' "${response}" >&2
+            exit 1
+          fi
       - name: Review dependency changes
+        if: steps.dependency-review-support.outputs.enabled == 'true'
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
 
   quality:

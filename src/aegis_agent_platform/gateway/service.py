@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import replace
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from aegis_agent_platform.config import Environment
 from aegis_agent_platform.domain import (
@@ -19,6 +21,7 @@ from aegis_agent_platform.gateway.catalog import (
     ModelCatalog,
     ModelCatalogEntry,
     ModelRouter,
+    RouteDecision,
     RoutePreference,
 )
 from aegis_agent_platform.gateway.repository import (
@@ -85,29 +88,15 @@ class ModelGateway:
         cached = await self._repository.completed(context, request)
         if cached is not None:
             return cached
-        unavailable = frozenset(
-            entry.identity
-            for entry in self._catalog.entries()
-            if self._controls.circuit(entry.identity).state.value == "open"
-        )
-        route = self._router.route(
+        route = self._route(
             request,
-            catalog=self._catalog,
             policy=policy,
             environment=environment,
-            unavailable=unavailable,
             preference=preference,
         )
         candidates = route.candidates[: self._retry_policy.max_failovers + 1]
         token_limit = request.prompt_token_estimate + request.max_output_tokens
-        reservation_cost = max(
-            estimate_cost(
-                candidate.pricing,
-                request.prompt_token_estimate,
-                request.max_output_tokens,
-            )
-            for candidate in candidates
-        )
+        reservation_cost = self._reservation_cost(request, candidates)
         try:
             reservation = await self._repository.reserve(
                 context,
@@ -140,6 +129,8 @@ class ModelGateway:
             if response is not None:
                 try:
                     self._validate_response(request, response)
+                    cost = candidate.pricing.cost(response.usage)
+                    response = replace(response, cost_usd=cost)
                     await self._repository.succeed(
                         context,
                         request,
@@ -163,7 +154,6 @@ class ModelGateway:
                     raise
                 self._metrics.usage(candidate.identity, response.usage)
                 self._metrics.add("latency_ms", candidate.identity, response.latency_ms)
-                cost = candidate.pricing.cost(response.usage)
                 self._metrics.add("cost_usd", candidate.identity, float(cost))
                 self._metrics.add(
                     "reservation_drift_tokens",
@@ -193,6 +183,61 @@ class ModelGateway:
             at=self._clock(),
         )
         raise last_error
+
+    def estimate_reservation_cost(
+        self,
+        request: ModelRequest,
+        policy: TenantPolicy,
+        *,
+        environment: Environment,
+        preference: RoutePreference = RoutePreference.COST,
+    ) -> Decimal:
+        route = self._route(
+            request,
+            policy=policy,
+            environment=environment,
+            preference=preference,
+        )
+        return self._reservation_cost(
+            request,
+            route.candidates[: self._retry_policy.max_failovers + 1],
+        )
+
+    def _route(
+        self,
+        request: ModelRequest,
+        *,
+        policy: TenantPolicy,
+        environment: Environment,
+        preference: RoutePreference,
+    ) -> RouteDecision:
+        unavailable = frozenset(
+            entry.identity
+            for entry in self._catalog.entries()
+            if self._controls.circuit(entry.identity).state.value == "open"
+        )
+        return self._router.route(
+            request,
+            catalog=self._catalog,
+            policy=policy,
+            environment=environment,
+            unavailable=unavailable,
+            preference=preference,
+        )
+
+    @staticmethod
+    def _reservation_cost(
+        request: ModelRequest,
+        candidates: tuple[ModelCatalogEntry, ...],
+    ) -> Decimal:
+        return max(
+            estimate_cost(
+                candidate.pricing,
+                request.prompt_token_estimate,
+                request.max_output_tokens,
+            )
+            for candidate in candidates
+        )
 
     async def _try_model(
         self,
