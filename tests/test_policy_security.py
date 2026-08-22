@@ -73,12 +73,14 @@ def test_allowed_request_and_exact_quota_boundaries() -> None:
 def test_high_risk_and_sensitive_tool_require_approval() -> None:
     policy = tenant_policy()
 
-    risk = PolicyEvaluator().evaluate(_CONTEXT, 
+    risk = PolicyEvaluator().evaluate(
+        _CONTEXT,
         policy,
         replace(request(), risk=RiskLevel.HIGH),
         usage(),
     )
-    tool = PolicyEvaluator().evaluate(_CONTEXT, 
+    tool = PolicyEvaluator().evaluate(
+        _CONTEXT,
         policy,
         replace(request(), tool="remediate"),
         usage(),
@@ -146,7 +148,8 @@ def test_policy_and_quota_violations_deny_by_default(
     changed_usage: QuotaUsage,
     reason: str,
 ) -> None:
-    decision = PolicyEvaluator().evaluate(_CONTEXT, 
+    decision = PolicyEvaluator().evaluate(
+        _CONTEXT,
         tenant_policy(),
         changed_request,
         changed_usage,
@@ -157,7 +160,8 @@ def test_policy_and_quota_violations_deny_by_default(
 
 
 def test_cross_tenant_usage_returns_only_the_cross_tenant_reason() -> None:
-    decision = PolicyEvaluator().evaluate(_CONTEXT, 
+    decision = PolicyEvaluator().evaluate(
+        _CONTEXT,
         tenant_policy(),
         replace(request(), model="unknown", tool="unknown"),
         replace(usage(), tenant_id=TenantId("tenant-beta")),
