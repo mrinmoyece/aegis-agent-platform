@@ -111,6 +111,7 @@ class RemoteJwksProvider:
         if not 1.0 <= cache_ttl_seconds <= 3_600.0:
             raise ValueError("JWKS cache TTL must be between 1 and 3600 seconds")
         self._jwks_url = jwks_url
+        self._allow_http = allow_http
         self._timeout_seconds = timeout_seconds
         self._cache_ttl_seconds = cache_ttl_seconds
         self._monotonic = monotonic
@@ -141,6 +142,14 @@ class RemoteJwksProvider:
                 request,
                 timeout=self._timeout_seconds,
             ) as response:
+                final_url: str = response.geturl()
+                if not final_url.startswith("https://") and not (
+                    self._allow_http and final_url.startswith("http://")
+                ):
+                    raise AuthenticationError(
+                        AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
+                        "JWKS endpoint redirected to a non-HTTPS URL",
+                    )
                 document = json.loads(response.read())
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as error:
             raise AuthenticationError(
