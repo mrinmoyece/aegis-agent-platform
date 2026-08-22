@@ -657,7 +657,8 @@ async def _lock_budget(
     await connection.execute(
         """
         INSERT INTO tenant_model_budget_locks (tenant_id)
-        VALUES (%s) ON CONFLICT (tenant_id) DO NOTHING
+        VALUES (%s)
+        ON CONFLICT (tenant_id) DO UPDATE SET tenant_id = EXCLUDED.tenant_id
         """,
         (tenant_id,),
     )
