@@ -90,13 +90,21 @@ class RedisStreamQueue:
         await self.ensure_group()
         _validate_consumer_read(consumer, count, block_milliseconds)
         try:
-            rows = await self._client.xreadgroup(
-                self._group,
-                consumer,
-                {self._stream: ">"},
-                count=count,
-                block=block_milliseconds,
-            )
+            if block_milliseconds > 0:
+                rows = await self._client.xreadgroup(
+                    self._group,
+                    consumer,
+                    {self._stream: ">"},
+                    count=count,
+                    block=block_milliseconds,
+                )
+            else:
+                rows = await self._client.xreadgroup(
+                    self._group,
+                    consumer,
+                    {self._stream: ">"},
+                    count=count,
+                )
         except RedisError as error:
             raise _classify_redis_error(error) from error
         entries = _stream_entries(rows)
@@ -336,6 +344,7 @@ def _decode_fields(fields: Mapping[object, object]) -> MessageEnvelope:
         KeyError,
         RecursionError,
         TypeError,
+        UnicodeDecodeError,
         ValueError,
         json.JSONDecodeError,
     ) as error:
