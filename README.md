@@ -39,7 +39,7 @@ to end.
 ## Learning path
 
 1. **Foundation:** boundaries, invariants, tooling, local stack.
-2. **Identity and tenancy (current):** authenticated principals, deny-by-default
+2. **Identity and tenancy:** authenticated principals, deny-by-default
    tenant authorization, policy/quota governance, and audit evidence.
 3. **Durable persistence (current):** event ledger, inbox/outbox, projections,
    replay, and PostgreSQL tenant controls.

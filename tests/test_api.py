@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -13,14 +13,22 @@ from uuid import uuid4
 import pytest
 
 from aegis_agent_platform.audit import REDACTED, AuditEventType, InMemoryAuditStore
-from aegis_agent_platform.control_plane.api import ControlPlaneApp, application
-from aegis_agent_platform.domain import DomainEventType, EventEnvelope
+from aegis_agent_platform.control_plane.api import (
+    ControlPlaneApp,
+    RunStatusReader,
+    application,
+)
+from aegis_agent_platform.domain import DomainEventType, EventEnvelope, JsonValue
 from aegis_agent_platform.event_store import (
     EventPage,
     EventStore,
     TransientStorageError,
 )
-from aegis_agent_platform.identity import PLATFORM_TENANT_ID, Principal
+from aegis_agent_platform.identity import (
+    PLATFORM_TENANT_ID,
+    AuthenticationPort,
+    Principal,
+)
 from aegis_agent_platform.policy import InMemoryPolicyRepository
 from aegis_agent_platform.tenancy import (
     InMemoryTenantRepository,
@@ -126,16 +134,20 @@ class PatchedEnvironment:
 
 
 def secured_app(
-    *, event_store: EventStore | None = None
+    *,
+    event_store: EventStore | None = None,
+    authentication: AuthenticationPort | None = None,
+    projections: RunStatusReader | None = None,
 ) -> tuple[ControlPlaneApp, str, InMemoryAuditStore]:
     signing = signing_fixture()
     audit = InMemoryAuditStore()
     app = ControlPlaneApp(
-        authentication=authentication_service(signing),
+        authentication=authentication or authentication_service(signing),
         tenants=InMemoryTenantRepository((Tenant(TENANT_ID, "Tenant Alpha"),)),
         policies=InMemoryPolicyRepository((tenant_policy(),)),
         audit=audit,
         event_store=event_store,
+        projections=projections,
     )
     return app, token(signing), audit
 
@@ -441,6 +453,40 @@ def test_storage_routes_translate_transient_store_failures() -> None:
     assert ledger_status == timeline_status == 503
     assert ledger["error"]["code"] == "storage_unavailable"
     assert timeline["error"]["code"] == "storage_unavailable"
+
+
+def test_authentication_translates_transient_storage_failures() -> None:
+    class FailingAuthentication:
+        def authenticate(self, authorization_header: str | None) -> Principal:
+            del authorization_header
+            raise TransientStorageError("database unavailable")
+
+    app, encoded, _ = secured_app(authentication=FailingAuthentication())
+
+    status, body, _ = request("/v1/me", app=app, authorization=f"Bearer {encoded}")
+
+    assert status == 503
+    assert body["error"]["code"] == "storage_unavailable"
+
+
+def test_projection_route_translates_transient_storage_failures() -> None:
+    class FailingRunStatusReader:
+        async def run_status(
+            self, context: TenantContext, *, limit: int = 100
+        ) -> tuple[Mapping[str, JsonValue], ...]:
+            del context, limit
+            raise TransientStorageError("database unavailable")
+
+    app, encoded, _ = secured_app(projections=FailingRunStatusReader())
+
+    status, body, _ = request(
+        "/v1/tenants/tenant-alpha/projections/run-status",
+        app=app,
+        authorization=f"Bearer {encoded}",
+    )
+
+    assert status == 503
+    assert body["error"]["code"] == "storage_unavailable"
 
 
 def test_duplicate_tenant_records_are_rejected() -> None:

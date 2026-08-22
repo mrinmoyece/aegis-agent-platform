@@ -254,6 +254,9 @@ class ControlPlaneApp:
                 extra_headers=[(b"www-authenticate", b'Bearer realm="aegis"')],
             )
             return None
+        except TransientStorageError:
+            await _respond(send, 503, {"error": {"code": "storage_unavailable"}})
+            return None
         self._audit_event(
             tenant_id=principal.tenant_id,
             event_type=AuditEventType.AUTHENTICATION_OUTCOME,
@@ -426,7 +429,14 @@ class ControlPlaneApp:
         if self._projections is None:
             await _respond(send, 503, {"error": {"code": "storage_not_configured"}})
             return
-        rows = await self._projections.run_status(TenantContext(tenant_id), limit=100)
+        try:
+            rows = await self._projections.run_status(
+                TenantContext(tenant_id),
+                limit=100,
+            )
+        except TransientStorageError:
+            await _respond(send, 503, {"error": {"code": "storage_unavailable"}})
+            return
         await _respond(send, 200, {"runs": list(rows)})
 
     async def _authorize(

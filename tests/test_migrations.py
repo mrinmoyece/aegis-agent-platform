@@ -67,6 +67,14 @@ def test_ledger_schema_is_append_only_tenant_scoped_and_indexed() -> None:
     assert "before update or delete on events" in schema
     assert "event records are append-only" in schema
     assert "create policy tenants_tenant_isolation on tenants" not in schema
+    assert (
+        "add column if not exists assigned_by_kind text not null default 'user'"
+        in schema
+    )
+    assert (
+        "insert into tenants (tenant_id, display_name, enabled, created_at)"
+        in schema
+    )
     adapter = (
         (ROOT / "src" / "aegis_agent_platform" / "event_store" / "postgres.py")
         .read_text(encoding="utf-8")
@@ -74,6 +82,14 @@ def test_ledger_schema_is_append_only_tenant_scoped_and_indexed() -> None:
     )
     assert "from tenant_event_commit_locks" in adapter
     assert "for update skip locked" in adapter
+
+
+def test_platform_tenant_seed_only_exists_in_ledger_migration() -> None:
+    identity_schema = MIGRATION.read_text(encoding="utf-8").lower()
+    ledger_schema = LEDGER_MIGRATION.read_text(encoding="utf-8").lower()
+
+    assert "values ('platform', 'platform', true, now())" not in identity_schema
+    assert "values ('platform', 'platform', true, now())" in ledger_schema
 
 
 def test_migration_declares_explicit_maintenance_role_boundary() -> None:

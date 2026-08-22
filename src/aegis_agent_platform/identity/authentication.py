@@ -26,6 +26,8 @@ from aegis_agent_platform.identity.models import (
     UserId,
 )
 
+_ABSENT = object()
+
 
 class AuthenticationErrorCode(StrEnum):
     """Stable classifications returned without exposing token material."""
@@ -177,6 +179,11 @@ class RemoteJwksProvider:
         for raw_key in document["keys"]:
             key = _parse_rsa_jwk(raw_key)
             if key is not None:
+                if key.key_id in refreshed_keys:
+                    raise AuthenticationError(
+                        AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
+                        "JWKS document contains duplicate key IDs",
+                    )
                 refreshed_keys[key.key_id] = key
         self._cached_keys = refreshed_keys
         self._document_expires_at = now + self._cache_ttl_seconds
@@ -318,6 +325,11 @@ class JwtVerifier:
                 AuthenticationErrorCode.INVALID_CLAIMS,
                 "bearer token claims are invalid",
             ) from error
+        except (TypeError, OverflowError) as error:
+            raise AuthenticationError(
+                AuthenticationErrorCode.INVALID_CLAIMS,
+                "bearer token claims are invalid",
+            ) from error
         return _verified_claims(payload)
 
 
@@ -347,8 +359,10 @@ def _verified_claims(payload: Mapping[str, object]) -> VerifiedClaims:
             AuthenticationErrorCode.INVALID_CLAIMS,
             "audience claim has an invalid type",
         )
-    raw_tenant_id = payload.get("tenant_id")
-    if raw_tenant_id is not None and not isinstance(raw_tenant_id, str):
+    raw_tenant_id = payload.get("tenant_id", _ABSENT)
+    if raw_tenant_id is _ABSENT:
+        raw_tenant_id = None
+    elif not isinstance(raw_tenant_id, str):
         raise AuthenticationError(
             AuthenticationErrorCode.INVALID_CLAIMS,
             "tenant claim has an invalid type",
@@ -403,6 +417,10 @@ class IdentityRecord:
     service_identity: ServiceIdentity | None = None
 
     def __post_init__(self) -> None:
+        if not self.issuer:
+            raise ValueError("identity record issuer must not be empty")
+        if not self.subject:
+            raise ValueError("identity record subject must not be empty")
         has_user = self.user_id is not None
         has_service = self.service_identity is not None
         if has_user == has_service:

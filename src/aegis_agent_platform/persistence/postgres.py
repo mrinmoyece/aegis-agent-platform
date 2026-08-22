@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import datetime
 from decimal import Decimal
 from threading import Lock, RLock
-from typing import Any
+from typing import Any, cast
 from weakref import WeakKeyDictionary
 
 import psycopg
@@ -116,7 +117,8 @@ class PostgresIdentityDirectory(IdentityDirectory):
                     )
                 bindings = self._connection.execute(
                     """
-                    SELECT role, assigned_by, assigned_at, expires_at, revoked_at
+                    SELECT role, assigned_by, assigned_by_kind, assigned_at,
+                        expires_at, revoked_at
                     FROM role_bindings
                     WHERE tenant_id = %s AND identity_id = %s
                     ORDER BY assigned_at, role
@@ -135,14 +137,7 @@ class PostgresIdentityDirectory(IdentityDirectory):
             tenant_id=tenant_id,
             kind=kind,
             role_bindings=tuple(
-                RoleBinding(
-                    tenant_id=tenant_id,
-                    role=Role(row[0]),
-                    assigned_by=UserId(row[1]),
-                    assigned_at=row[2],
-                    expires_at=row[3],
-                    revoked_at=row[4],
-                )
+                _role_binding_from_row(tenant_id, row)
                 for row in bindings
             ),
             user_id=UserId(identity[3]) if identity[3] is not None else None,
@@ -314,6 +309,29 @@ def _set_tenant(connection: psycopg.Connection[Any], context: TenantContext) -> 
     connection.execute(
         "SELECT set_config('aegis.tenant_id', %s, true)",
         (str(context.tenant_id),),
+    )
+
+
+def _role_binding_from_row(
+    tenant_id: TenantId, row: tuple[object, ...]
+) -> RoleBinding:
+    role = cast(str, row[0])
+    assigned_by_raw = row[1]
+    assigned_by_kind = row[2]
+    if not isinstance(assigned_by_raw, str) or not isinstance(assigned_by_kind, str):
+        raise PermanentStorageError("role binding assigned_by fields must be strings")
+    assigned_by = (
+        ServiceIdentity(assigned_by_raw)
+        if assigned_by_kind == "service"
+        else UserId(assigned_by_raw)
+    )
+    return RoleBinding(
+        tenant_id=tenant_id,
+        role=Role(role),
+        assigned_by=assigned_by,
+        assigned_at=cast("datetime", row[3]),
+        expires_at=cast("datetime | None", row[4]),
+        revoked_at=cast("datetime | None", row[5]),
     )
 
 

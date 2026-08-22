@@ -31,6 +31,7 @@ from aegis_agent_platform.event_store.postgres import (
 from aegis_agent_platform.identity import (
     AuthenticationError,
     PrincipalKind,
+    ServiceIdentity,
     TenantId,
     VerifiedClaims,
 )
@@ -485,8 +486,8 @@ def test_durable_repositories_are_tenant_scoped_and_audit_is_redacted() -> None:
             """
             INSERT INTO role_bindings (
                 role_binding_id, tenant_id, identity_id, role, assigned_by,
-                assigned_at
-            ) VALUES (%s, 'tenant-a', %s, 'viewer', 'admin-a',
+                assigned_by_kind, assigned_at
+            ) VALUES (%s, 'tenant-a', %s, 'viewer', 'admin-a', 'service',
                 transaction_timestamp())
             """,
             (uuid4(), identity_id),
@@ -546,6 +547,7 @@ def test_durable_repositories_are_tenant_scoped_and_audit_is_redacted() -> None:
         principal = PostgresIdentityDirectory(connection).resolve(claims)
         assert principal.kind is PrincipalKind.USER
         assert principal.actor_id == "user-a"
+        assert principal.role_bindings[0].assigned_by == ServiceIdentity("admin-a")
         with pytest.raises(AuthenticationError):
             PostgresIdentityDirectory(connection).resolve(
                 VerifiedClaims(

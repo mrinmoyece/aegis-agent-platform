@@ -201,6 +201,48 @@ def test_invalid_optional_claim_types_are_rejected(
     assert captured.value.code is code
 
 
+@pytest.mark.parametrize("claim_name", ["exp", "iat"])
+def test_raw_registered_claim_validation_errors_are_classified(
+    monkeypatch: pytest.MonkeyPatch,
+    claim_name: str,
+) -> None:
+    signing = signing_fixture()
+    verifier = JwtVerifier(
+        JwtValidationConfig(ISSUER, AUDIENCE),
+        StaticJwksProvider((VerificationKey(KEY_ID, "RS256", signing.public_pem),)),
+    )
+    encoded = token(signing)
+
+    def fake_decode(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        if claim_name == "exp":
+            raise OverflowError("overflow")
+        raise TypeError("bad type")
+
+    monkeypatch.setattr(jwt, "decode", fake_decode)
+
+    with pytest.raises(AuthenticationError) as captured:
+        verifier.verify(encoded)
+
+    assert captured.value.code is AuthenticationErrorCode.INVALID_CLAIMS
+
+
+def test_present_null_tenant_claim_is_rejected_but_absent_claim_is_not() -> None:
+    signing = signing_fixture()
+
+    with pytest.raises(AuthenticationError) as captured:
+        authentication_service(signing).authenticate(
+            f"Bearer {token(signing, tenant_id=None, extra_claims={'tenant_id': None})}"
+        )
+
+    assert captured.value.code is AuthenticationErrorCode.INVALID_CLAIMS
+    resolved = JwtVerifier(
+        JwtValidationConfig(ISSUER, AUDIENCE),
+        StaticJwksProvider((VerificationKey(KEY_ID, "RS256", signing.public_pem),)),
+    ).verify(token(signing, tenant_id=None))
+    assert resolved.asserted_tenant_id is None
+
+
 def test_out_of_range_numeric_dates_are_rejected() -> None:
     signing = signing_fixture()
 
@@ -354,6 +396,47 @@ def test_duplicate_identity_records_and_signing_keys_are_rejected() -> None:
         StaticJwksProvider((verification_key, verification_key))
 
 
+def test_remote_jwks_provider_rejects_duplicate_key_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signing = signing_fixture()
+    numbers = signing.private_key.public_key().public_numbers()
+
+    def encoded(value: int) -> str:
+        raw = value.to_bytes((value.bit_length() + 7) // 8, "big")
+        return jwt.utils.base64url_encode(raw).decode()
+
+    payload = json.dumps(
+        {
+            "keys": [
+                {
+                    "kid": KEY_ID,
+                    "alg": "RS256",
+                    "kty": "RSA",
+                    "n": encoded(numbers.n),
+                    "e": encoded(numbers.e),
+                },
+                {
+                    "kid": KEY_ID,
+                    "alg": "RS256",
+                    "kty": "RSA",
+                    "n": encoded(numbers.n),
+                    "e": encoded(numbers.e),
+                },
+            ]
+        }
+    ).encode()
+
+    monkeypatch.setattr(
+        authentication_module,
+        "urlopen",
+        lambda request, timeout: FakeResponse(payload),
+    )
+
+    with pytest.raises(AuthenticationError, match="duplicate key IDs"):
+        RemoteJwksProvider("https://identity.example/certs").get_key(KEY_ID)
+
+
 def test_identity_record_shape_is_validated_at_construction() -> None:
     with pytest.raises(ValueError, match="requires user_id"):
         IdentityRecord(
@@ -363,6 +446,24 @@ def test_identity_record_shape_is_validated_at_construction() -> None:
             kind=PrincipalKind.USER,
             role_bindings=(binding(),),
             service_identity=ServiceIdentity("svc-only"),
+        )
+    with pytest.raises(ValueError, match="issuer must not be empty"):
+        IdentityRecord(
+            issuer="",
+            subject="oidc-user",
+            tenant_id=TENANT_ID,
+            kind=PrincipalKind.USER,
+            role_bindings=(binding(),),
+            user_id=UserId("user-alice"),
+        )
+    with pytest.raises(ValueError, match="subject must not be empty"):
+        IdentityRecord(
+            issuer=ISSUER,
+            subject="",
+            tenant_id=TENANT_ID,
+            kind=PrincipalKind.USER,
+            role_bindings=(binding(),),
+            user_id=UserId("user-alice"),
         )
 
 

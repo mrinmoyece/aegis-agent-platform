@@ -20,6 +20,12 @@ $$;
 GRANT aegis_app TO CURRENT_USER;
 GRANT aegis_maintenance TO CURRENT_USER;
 
+-- Preserve the origin kind for role bindings created before durable identity
+-- directory reads reconstruct assigned_by as a UserId by default.
+ALTER TABLE role_bindings
+    ADD COLUMN IF NOT EXISTS assigned_by_kind text NOT NULL DEFAULT 'user'
+    CHECK (assigned_by_kind IN ('user', 'service'));
+
 CREATE TABLE event_stream_heads (
     tenant_id text NOT NULL REFERENCES tenants (tenant_id),
     aggregate_id text NOT NULL CHECK (aggregate_id <> ''),
@@ -304,5 +310,12 @@ REVOKE ALL ON ALL TABLES IN SCHEMA public FROM aegis_maintenance;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public
     TO aegis_maintenance;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO aegis_maintenance;
+
+-- Seed the platform tenant so that failed-authentication audit events (which
+-- always use tenant_id = 'platform') satisfy the FK from
+-- security_audit_events → tenants even on upgrades from pre-seed 0001.
+INSERT INTO tenants (tenant_id, display_name, enabled, created_at)
+VALUES ('platform', 'Platform', true, now())
+ON CONFLICT (tenant_id) DO NOTHING;
 
 COMMIT;
