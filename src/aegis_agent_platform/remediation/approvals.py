@@ -286,16 +286,21 @@ class RemediationApprovalService:
                 return _approval(state, approval_id)
             approval = _approval(state, approval_id)
             action = state.plan.action(approval.scope.action_id)
+            if approval.status is ApprovalStatus.EXPIRED:
+                raise ApprovalDeniedError("approval_expired")
             if approval.status is not ApprovalStatus.PENDING:
                 raise ApprovalDeniedError("approval_is_not_pending")
             if at >= approval.scope.expires_at:
-                await self._append_expired(
-                    principal,
-                    context,
-                    state,
-                    approval,
-                    at=at,
-                )
+                try:
+                    await self._append_expired(
+                        principal,
+                        context,
+                        state,
+                        approval,
+                        at=at,
+                    )
+                except ConcurrencyError:
+                    continue
                 raise ApprovalDeniedError("approval_expired")
             if (
                 current_policy.tenant_id != state.plan.tenant_id
@@ -622,7 +627,7 @@ class RemediationApprovalService:
             occurred_at=at,
             payload=payload,
             correlation_id=plan.investigation_run_id,
-            actor=ActorReference(principal.actor_id, ActorKind.USER),
+            actor=ActorReference(principal.actor_id, _actor_kind(principal)),
             identity_reference=principal.subject,
             policy_reference=plan.approval_policy.digest,
             idempotency_key=idempotency_key,
@@ -681,6 +686,14 @@ def _matching_decision(
     ):
         raise RemediationIdempotencyConflictError("approval_decision_identifier_reused")
     return True
+
+
+def _actor_kind(principal: Principal) -> ActorKind:
+    return (
+        ActorKind.SERVICE
+        if principal.kind is PrincipalKind.SERVICE
+        else ActorKind.USER
+    )
 
 
 def _safe_rationale(rationale_code: str, comment: str) -> None:

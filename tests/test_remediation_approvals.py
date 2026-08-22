@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
 from aegis_agent_platform.audit import InMemoryAuditStore
 from aegis_agent_platform.domain import (
+    ActorKind,
     ApprovalStatus,
     BlastRadius,
+    DomainEventType,
+    EventEnvelope,
     PolicyOutcome,
     RemediationPlan,
     RemediationState,
@@ -42,6 +46,32 @@ from remediation_helpers import (
     policy,
     principal,
 )
+
+
+class BarrierExpiryRepository(InMemoryRemediationRepository):
+    def __init__(self, barrier: asyncio.Barrier) -> None:
+        super().__init__()
+        self._barrier = barrier
+
+    async def append(
+        self,
+        context: TenantContext,
+        plan_id: UUID,
+        events: Sequence[EventEnvelope],
+        *,
+        expected_version: int,
+    ) -> int:
+        if any(
+            event.event_type is DomainEventType.REMEDIATION_APPROVAL_EXPIRED
+            for event in events
+        ):
+            await asyncio.wait_for(self._barrier.wait(), timeout=3)
+        return await super().append(
+            context,
+            plan_id,
+            events,
+            expected_version=expected_version,
+        )
 
 
 async def proposed(
@@ -337,8 +367,10 @@ def test_concurrent_distinct_grants_are_race_safe() -> None:
                 for index in range(2)
             )
         )
-        assert results[-1].status is ApprovalStatus.GRANTED
-        assert len(results[-1].approver_ids) == 2
+        granted = next(
+            result for result in results if result.status is ApprovalStatus.GRANTED
+        )
+        assert len(granted.approver_ids) == 2
 
     asyncio.run(scenario())
 
@@ -521,6 +553,105 @@ def test_revision_invalidates_prior_approval_and_rebuilds_projection() -> None:
                 ),
                 expected_version=-1,
             )
+
+    asyncio.run(scenario())
+
+
+def test_service_principals_preserve_actor_kind_for_proposal_and_revocation() -> None:
+    async def scenario() -> None:
+        repository = InMemoryRemediationRepository()
+        service = RemediationApprovalService(repository, clock=Clock())
+        selected_policy = policy(quorum=1)
+        selected_plan = plan(
+            selected_policy=selected_policy,
+            requested_by="svc-operator",
+        )
+        proposal = await service.propose(
+            principal("svc-operator", Role.OPERATOR, service=True),
+            CONTEXT,
+            selected_plan,
+            selected_policy,
+            ActionQuotaUsage(0, 0),
+            idempotency_key="service-proposal",
+        )
+        approval_id = next(iter(proposal.state.approvals))
+        await service.revoke(
+            principal("svc-approver", Role.APPROVER, service=True),
+            CONTEXT,
+            selected_plan.plan_id,
+            approval_id,
+            revocation_id=uuid4(),
+            rationale_code="scope_withdrawn",
+        )
+        events = await repository.load(CONTEXT, selected_plan.plan_id)
+        proposed_event = next(
+            event
+            for event in events
+            if event.event_type is DomainEventType.REMEDIATION_PROPOSED
+        )
+        revoked_event = next(
+            event
+            for event in events
+            if event.event_type is DomainEventType.REMEDIATION_APPROVAL_REVOKED
+        )
+        assert proposed_event.actor is not None
+        assert proposed_event.actor.kind is ActorKind.SERVICE
+        assert revoked_event.actor is not None
+        assert revoked_event.actor.kind is ActorKind.SERVICE
+
+    asyncio.run(scenario())
+
+
+def test_concurrent_expired_grants_retry_without_leaking_concurrency_error() -> None:
+    async def scenario() -> None:
+        clock = Clock()
+        repository = BarrierExpiryRepository(asyncio.Barrier(2))
+        service = RemediationApprovalService(
+            repository,
+            clock=clock,
+            uuid_factory=uuid4,
+        )
+        selected_policy = policy(ttl_seconds=60)
+        selected_plan = plan(
+            selected_policy=selected_policy,
+            requested_by="operator",
+        )
+        decision = await service.propose(
+            principal("operator", Role.OPERATOR),
+            CONTEXT,
+            selected_plan,
+            selected_policy,
+            ActionQuotaUsage(0, 0),
+            idempotency_key="expired-race",
+        )
+        approval_id = next(iter(decision.state.approvals))
+        clock.advance(61)
+        results = await asyncio.gather(
+            *(
+                service.decide(
+                    principal(f"approver-{index}", Role.APPROVER),
+                    CONTEXT,
+                    selected_plan.plan_id,
+                    approval_id,
+                    ApprovalDecision.GRANT,
+                    decision_id=uuid4(),
+                    current_policy=selected_policy,
+                    rationale_code="reviewed",
+                    comment="approved",
+                )
+                for index in range(2)
+            ),
+            return_exceptions=True,
+        )
+        assert len(
+            [
+                result
+                for result in results
+                if isinstance(result, ApprovalDeniedError)
+                and str(result) == "approval_expired"
+            ]
+        ) == 2
+        assert not any(isinstance(result, ConcurrencyError) for result in results)
 
     asyncio.run(scenario())
 
