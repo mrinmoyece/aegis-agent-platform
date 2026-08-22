@@ -10,6 +10,8 @@ export type DataAuthority = "event_fact" | "derived_state" | "model_claim" | "op
 export type OperatorSeverity = "info" | "warning" | "critical";
 export type OperatorAuthMode = "oidc_bff" | "deterministic_demo";
 export type ApprovalDecision = "grant" | "deny";
+export type PeerTrustDecision = "activate" | "quarantine" | "revoke";
+export type PeerTrustStatus = "active" | "quarantined" | "revoked";
 export type JsonValue = string | number | boolean | null;
 
 export interface OperatorConfig {
@@ -97,6 +99,22 @@ export interface ErrorEnvelope {
   };
 }
 
+export interface PeerTrustRequest {
+  peer_id: string;
+  peer_digest: string;
+  decision: PeerTrustDecision;
+  rationale_code: string;
+  comment?: string;
+}
+
+export interface PeerTrustResponse {
+  peer_id: string;
+  status: PeerTrustStatus;
+  version: string;
+  duplicate: boolean;
+  server_time: string;
+}
+
 export interface components {
   schemas: {
     OperatorConfig: OperatorConfig;
@@ -109,5 +127,7 @@ export interface components {
     ApprovalDecisionRequest: ApprovalDecisionRequest;
     ApprovalDecisionResponse: ApprovalDecisionResponse;
     ErrorEnvelope: ErrorEnvelope;
+    PeerTrustRequest: PeerTrustRequest;
+    PeerTrustResponse: PeerTrustResponse;
   };
 }

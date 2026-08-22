@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { OperatorItem, PeerTrustRequest, PeerTrustResponse } from '../api/schema';
 import { OperatorItemView } from './OperatorItemView';
@@ -25,6 +25,44 @@ export function ProtocolRegistry({
   );
   const [result, setResult] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const dialogRef = useRef<HTMLElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  // Move focus into the dialog when it opens; restore it when it closes.
+  useEffect(() => {
+    if (selected !== null) {
+      previousFocusRef.current = document.activeElement as HTMLElement;
+      dialogRef.current?.focus();
+    } else {
+      previousFocusRef.current?.focus();
+      previousFocusRef.current = null;
+    }
+  }, [selected]);
+
+  function handleDialogKeyDown(event: React.KeyboardEvent<HTMLElement>): void {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      setSelected(null);
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    // Trap focus within the dialog by cycling through focusable elements.
+    const focusable = Array.from(
+      dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button, input, select, [tabindex]:not([tabindex="-1"])',
+      ) ?? [],
+    ).filter((el) => !el.disabled);
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
 
   const peers = items.filter((item) => item.kind === 'protocol-peer');
   const operations = items.filter((item) => item.kind !== 'protocol-peer');
@@ -147,10 +185,13 @@ export function ProtocolRegistry({
       {selected === null ? null : (
         <div className="modal-backdrop">
           <section
+            ref={dialogRef}
             className="approval-dialog"
             role="dialog"
             aria-modal="true"
             aria-labelledby="peer-trust-title"
+            tabIndex={-1}
+            onKeyDown={handleDialogKeyDown}
           >
             <p className="eyebrow">Exact scope confirmation</p>
             <h2 id="peer-trust-title">Review {selected.title}</h2>

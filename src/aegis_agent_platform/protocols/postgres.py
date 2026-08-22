@@ -214,13 +214,10 @@ class PostgresProtocolLedger:
         if not events:
             raise LookupError("protocol operation not found")
         async with _tenant_transaction(self._connection, self._lock, context):
-            await self._connection.execute(
-                """
-                DELETE FROM protocol_operation_claims
-                WHERE tenant_id = %s AND operation_id = %s
-                """,
-                (str(context.tenant_id), operation_id),
-            )
+            # Do NOT delete the claim row: _apply_operation_events only inserts
+            # a claim when `lease` is provided, so deleting here and passing
+            # lease=None permanently drops the claim projection.  Only the
+            # read-model projection is rebuilt from the event stream.
             await self._connection.execute(
                 """
                 DELETE FROM protocol_operation_projection

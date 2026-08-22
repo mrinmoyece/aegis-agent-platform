@@ -31,6 +31,7 @@ from aegis_agent_platform.domain import (
     WorkLease,
     canonical_json_bytes,
     content_digest,
+    replay_protocol_operation,
 )
 from aegis_agent_platform.identity import (
     AuthorizationService,
@@ -182,7 +183,12 @@ class ProtocolGateway:
             request.idempotency_key,
         )
         if duplicate is not None:
-            if duplicate.request_digest != request.payload_digest:
+            if (
+                duplicate.request_digest != request.payload_digest
+                or duplicate.peer_id != request.peer_id
+                or duplicate.family is not request.family
+                or duplicate.capability_id != request.capability_id
+            ):
                 raise ProtocolPolicyDeniedError("idempotency_key_payload_conflict")
             return self._state_result(duplicate, request.requested_at)
         peer = self._peer(context, request.peer_id)
@@ -393,12 +399,14 @@ class ProtocolGateway:
         events = await self._ledger.load(context, request.operation_id)
         if not events:
             raise LookupError("protocol operation not found")
-        state = await self._ledger.by_idempotency_key(
-            context,
-            request.idempotency_key,
-        )
-        if state is None or state.status is not ProtocolOperationStatus.AMBIGUOUS:
+        # Derive state from the loaded event stream rather than from the
+        # caller-supplied idempotency key; the two could diverge if the key
+        # references a different operation than operation_id.
+        state = replay_protocol_operation(events)
+        if state.status is not ProtocolOperationStatus.AMBIGUOUS:
             raise ProtocolPolicyDeniedError("only_ambiguous_operations_reconcile")
+        if state.peer_id != request.peer_id or state.family is not request.family:
+            raise ProtocolPolicyDeniedError("reconcile_operation_peer_mismatch")
         peer = self._peer(context, request.peer_id)
         boundary = self._boundary(peer)
         if self._metrics is not None:
@@ -495,6 +503,17 @@ class ProtocolGateway:
                 lease=lease,
             )
         result_digest = content_digest(observed.payload)
+        # Validate the reconciled response against the capability output schema
+        # and maximum-bytes bound.  The initial request path always validates
+        # (see ProtocolGateway.request), but the reconcile path previously
+        # bypassed both checks, allowing any JSON payload to be committed.
+        capability = self._capabilities.get(state.capability_id)
+        if capability is not None:
+            result_digest = self._schemas.validate(
+                capability.output_schema,
+                observed.payload,
+                maximum_bytes=capability.maximum_output_bytes,
+            )
         completed_type = (
             DomainEventType.MCP_RECONCILED
             if request.family is ProtocolFamily.MCP
@@ -541,7 +560,13 @@ class ProtocolGateway:
         events = await self._ledger.load(context, request.operation_id)
         if not events:
             raise LookupError("protocol operation not found")
-        peer = self._peer(context, request.peer_id)
+        # Use the peer bound to the loaded operation, not the caller-supplied
+        # peer_id, so that cancellation cannot be routed to a different peer
+        # by supplying a different peer_id in the request.
+        loaded_state = replay_protocol_operation(events)
+        if loaded_state.family is not request.family:
+            raise ProtocolPolicyDeniedError("cancel_operation_family_mismatch")
+        peer = self._peer(context, loaded_state.peer_id)
         boundary = self._boundary(peer)
         requested_type = (
             DomainEventType.MCP_INVOCATION_CANCEL_REQUESTED

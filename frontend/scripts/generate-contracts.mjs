@@ -27,6 +27,14 @@ const decision = union(
   schemas.ApprovalDecisionRequest?.properties?.decision,
   'ApprovalDecisionRequest.decision',
 );
+const peerTrustDecision = union(
+  schemas.PeerTrustRequest?.properties?.decision,
+  'PeerTrustRequest.decision',
+);
+const peerTrustStatus = union(
+  schemas.PeerTrustResponse?.properties?.status,
+  'PeerTrustResponse.status',
+);
 const digest = createHash('sha256').update(source).digest('hex');
 
 // Verify that the hard-coded interface shapes still match the OpenAPI schema.
@@ -109,6 +117,8 @@ export type DataAuthority = ${authority};
 export type OperatorSeverity = ${severity};
 export type OperatorAuthMode = ${authMode};
 export type ApprovalDecision = ${decision};
+export type PeerTrustDecision = ${peerTrustDecision};
+export type PeerTrustStatus = ${peerTrustStatus};
 export type JsonValue = string | number | boolean | null;
 
 export interface OperatorConfig {
@@ -196,6 +206,22 @@ export interface ErrorEnvelope {
   };
 }
 
+export interface PeerTrustRequest {
+  peer_id: string;
+  peer_digest: string;
+  decision: PeerTrustDecision;
+  rationale_code: string;
+  comment?: string;
+}
+
+export interface PeerTrustResponse {
+  peer_id: string;
+  status: PeerTrustStatus;
+  version: string;
+  duplicate: boolean;
+  server_time: string;
+}
+
 export interface components {
   schemas: {
     OperatorConfig: OperatorConfig;
@@ -208,6 +234,8 @@ export interface components {
     ApprovalDecisionRequest: ApprovalDecisionRequest;
     ApprovalDecisionResponse: ApprovalDecisionResponse;
     ErrorEnvelope: ErrorEnvelope;
+    PeerTrustRequest: PeerTrustRequest;
+    PeerTrustResponse: PeerTrustResponse;
   };
 }
 `;

@@ -289,6 +289,25 @@ class A2aClientAdapter:
         observed_digest = content_digest(card)
         if observed_digest != peer.card_digest:
             raise ProtocolSecurityError("a2a_card_digest_drift")
+        # Verify the card carries a JWS signature whose key ID matches the
+        # pinned signing_key_digest registered for this peer.  Full Ed25519
+        # verification requires the peer's public key to be injected — the
+        # key-ID binding check here prevents substitution attacks from keys
+        # not registered for this peer even without the raw key bytes.
+        sigs = card.get("signatures")
+        if not isinstance(sigs, (list, tuple)) or len(sigs) == 0:
+            raise ProtocolSecurityError("a2a_card_signature_missing")
+        compact_jws = sigs[0].get("protected") if isinstance(sigs[0], dict) else None
+        if not isinstance(compact_jws, str):
+            raise ProtocolSecurityError("a2a_card_signature_missing")
+        try:
+            protected_part = compact_jws.split(".")[0]
+            header = json.loads(_decode_b64url(protected_part))
+        except Exception as exc:
+            raise ProtocolSecurityError("a2a_card_signature_invalid") from exc
+        kid = header.get("kid", "")
+        if content_digest(kid.encode()) != peer.signing_key_digest:
+            raise ProtocolSecurityError("a2a_card_signing_key_mismatch")
         capabilities = tuple(
             capability
             for capability_id, capability in self._capabilities.items()
@@ -354,10 +373,20 @@ class A2aClientAdapter:
         request: ProtocolRequest,
     ) -> TransportResponse | None:
         self._validate_peer(peer)
+        # Use the server-assigned task ID from provider_reference when available.
+        # provider_reference is stored as "a2a:{server_task_id}" after a successful
+        # send(). For async tasks where _require_completed raised on ACCEPTED, this
+        # falls back to the local operation_id (which may not be found by the server).
+        server_task_id: str = str(request.operation_id)
+        if (
+            request.provider_reference is not None
+            and request.provider_reference.startswith("a2a:")
+        ):
+            server_task_id = request.provider_reference[len("a2a:"):]
         task = await self._transport.get_task(
             peer.endpoint_origin,
             self._headers(),
-            str(request.operation_id),
+            server_task_id,
         )
         if task is None:
             return None
@@ -388,11 +417,10 @@ class A2aClientAdapter:
     def _validate_peer(self, peer: ProtocolPeer) -> None:
         if peer.family is not ProtocolFamily.A2A:
             raise ProtocolSecurityError("a2a_peer_family_mismatch")
-        if not {
-            ProtocolTransport.JSONRPC_HTTP,
-            ProtocolTransport.HTTP_JSON,
-            ProtocolTransport.GRPC,
-        }.intersection(peer.transports):
+        # This client always emits JSON-RPC HTTP requests; accepting peers
+        # configured only for HTTP_JSON or gRPC would route them through the
+        # wrong binding and silently produce unexpected behaviour.
+        if ProtocolTransport.JSONRPC_HTTP not in peer.transports:
             raise ProtocolSecurityError("a2a_transport_denied")
         addresses = self._resolved_addresses.get(peer.endpoint_origin)
         if addresses is None:
