@@ -16,6 +16,7 @@ _DESTRUCTIVE = re.compile(
         | truncate\b                                      # truncate table
         | drop\s+trigger\b                                # remove append-only guard
         | drop\s+policy\b                                 # remove RLS policy
+        | alter\s+table\s+\S+\s+disable\s+trigger\b      # silence trigger
         | alter\s+table\s+\S+\s+disable\s+row\s+level\s+security
         | alter\s+table\s+\S+\s+no\s+force\s+row\s+level\s+security
     )

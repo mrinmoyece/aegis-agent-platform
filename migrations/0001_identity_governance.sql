@@ -141,8 +141,8 @@ CREATE POLICY security_audit_events_tenant_isolation ON security_audit_events
 -- Seed the platform tenant so that failed-authentication audit events (which
 -- always use tenant_id = 'platform') satisfy the FK reference from
 -- security_audit_events → tenants even when PostgresAuditStore is wired.
-INSERT INTO tenants (tenant_id, display_name, enabled)
-VALUES ('platform', 'Platform', true)
+INSERT INTO tenants (tenant_id, display_name, enabled, created_at)
+VALUES ('platform', 'Platform', true, now())
 ON CONFLICT (tenant_id) DO NOTHING;
 
 COMMIT;
