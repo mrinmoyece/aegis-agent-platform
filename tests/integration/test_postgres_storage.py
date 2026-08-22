@@ -119,7 +119,7 @@ def gateway_route(run_id: UUID) -> tuple[ModelRequest, WorkLease, RouteDecision]
     pricing = gateway_pricing()
     now = datetime.now(UTC)
     request = ModelRequest(
-        request_id=UUID(f"00000000-0000-4000-8000-{run_id.int % 10**12:012d}"),
+        request_id=uuid4(),
         tenant_id=str(TENANT_A.tenant_id),
         run_id=run_id,
         messages=(ModelMessage(MessageRole.USER, (TextPart("hello"),)),),
@@ -132,7 +132,7 @@ def gateway_route(run_id: UUID) -> tuple[ModelRequest, WorkLease, RouteDecision]
     lease = WorkLease(
         work_id=run_id,
         tenant_id=str(TENANT_A.tenant_id),
-        token=UUID(f"10000000-0000-4000-8000-{run_id.int % 10**12:012d}"),
+        token=uuid4(),
         generation=1,
         owner="integration-worker",
         attempt=1,
@@ -234,7 +234,7 @@ def seed_gateway_work(lease: WorkLease) -> None:
                 requested_at, available_at, max_attempts, timeout_seconds,
                 request_event_id, correlation_id, request_payload
             ) VALUES (
-                %s, %s, 'model-call', %s, 'running',
+                %s, %s, 'model-call', %s, 'completed',
                 %s, %s, 1, 60, %s, %s, '{}'::jsonb
             )
             ON CONFLICT (tenant_id, work_id) DO NOTHING
@@ -635,12 +635,8 @@ def test_postgres_gateway_repository_reservation_race_and_fence_rejection() -> N
         first_connection = await app_connection()
         second_connection = await app_connection()
         try:
-            first_request, first_lease, first_route = gateway_route(
-                UUID("20000000-0000-4000-8000-000000000001")
-            )
-            second_request, second_lease, second_route = gateway_route(
-                UUID("20000000-0000-4000-8000-000000000002")
-            )
+            first_request, first_lease, first_route = gateway_route(uuid4())
+            second_request, second_lease, second_route = gateway_route(uuid4())
             seed_gateway_work(first_lease)
             seed_gateway_work(second_lease)
             quotas = QuotaLimits(100, Decimal("1"), 100, Decimal("1"), 10)
@@ -735,9 +731,7 @@ def test_postgres_gateway_repository_rolls_back_failed_projection_mutation() -> 
     async def scenario() -> None:
         connection = await app_connection()
         try:
-            request, lease, route = gateway_route(
-                UUID("20000000-0000-4000-8000-000000000003")
-            )
+            request, lease, route = gateway_route(uuid4())
             seed_gateway_work(lease)
             repository = PostgresGatewayRepository(
                 connection,
@@ -808,9 +802,7 @@ def test_postgres_gateway_repository_rebuilds_model_usage_projection_under_rls()
     async def scenario() -> None:
         connection = await app_connection()
         try:
-            request, lease, route = gateway_route(
-                UUID("20000000-0000-4000-8000-000000000004")
-            )
+            request, lease, route = gateway_route(uuid4())
             seed_gateway_work(lease)
             repository = PostgresGatewayRepository(
                 connection,
