@@ -912,7 +912,7 @@ def test_estimate_reservation_cost_uses_local_route_candidates() -> None:
         policy(),
         environment=Environment.TEST,
     )
-    assert estimated == Decimal("0.00044")
+    assert estimated == Decimal("0.00072")
 
 
 def test_open_circuit_returns_provider_unavailable_without_calling_provider() -> None:

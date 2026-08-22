@@ -151,6 +151,8 @@ class SpecialistBudget:
     max_iterations: int = 2
 
     def __post_init__(self) -> None:
+        if min(self.max_steps, self.max_input_tokens, self.timeout_seconds) <= 0:
+            raise ValueError("specialist budget limits must be positive")
         if not 1 <= self.max_steps <= 64:
             raise ValueError("max_steps must be between 1 and 64")
         if not 1 <= self.max_input_tokens <= 1_000_000:

@@ -242,6 +242,7 @@ class ControlPlaneApp:
                 tenant_id,
                 segments[4],
                 view,
+                correlation_id=correlation_id,
                 cursor=investigation_cursor,
             )
             return
@@ -516,6 +517,7 @@ class ControlPlaneApp:
         run_id: str,
         view: str,
         *,
+        correlation_id: UUID,
         cursor: int,
     ) -> None:
         if not await self._authorize(
@@ -523,6 +525,7 @@ class ControlPlaneApp:
             principal,
             tenant_id,
             Permission.INVESTIGATION_READ,
+            correlation_id=correlation_id,
             resource=f"tenant/{tenant_id}/investigations/{view}",
         ):
             return

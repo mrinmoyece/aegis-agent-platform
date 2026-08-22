@@ -1299,6 +1299,8 @@ def _test_policy() -> TenantPolicy:
         tools_requiring_approval=frozenset(),
         approver_roles=frozenset({Role.APPROVER}),
         quotas=QuotaLimits(10_000, Decimal("10"), 100_000, Decimal("100"), 10),
+        allowed_providers=frozenset({"mock"}),
+        allowed_data_residencies=frozenset({"eu"}),
     )
 
 
