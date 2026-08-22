@@ -119,6 +119,7 @@ class EventEnvelope:
     audit_reference: UUID | None = None
     idempotency_key: str | None = None
     trace_context: TraceContext | None = None
+    previous_aggregate_sequence: int | None = None
     metadata: Mapping[str, JsonValue] = field(
         default_factory=lambda: MappingProxyType({})
     )
@@ -140,6 +141,11 @@ class EventEnvelope:
             raise ValueError("aggregate_sequence cannot be negative")
         if self.global_position is not None and self.global_position < 1:
             raise ValueError("global_position must be positive")
+        if (
+            self.previous_aggregate_sequence is not None
+            and self.previous_aggregate_sequence < 0
+        ):
+            raise ValueError("previous_aggregate_sequence cannot be negative")
         if self.idempotency_key is not None and not self.idempotency_key:
             raise ValueError("idempotency_key cannot be empty")
         object.__setattr__(self, "payload", freeze_json_mapping(self.payload))
@@ -203,6 +209,11 @@ class EventEnvelope:
             audit_reference=_optional_uuid(audit_reference),
             idempotency_key=_optional_string(value.get("idempotency_key")),
             trace_context=trace_context,
+            previous_aggregate_sequence=(
+                int(str(value["previous_aggregate_sequence"]))
+                if value.get("previous_aggregate_sequence") is not None
+                else None
+            ),
             metadata=cast(Mapping[str, JsonValue], metadata),
         )
 

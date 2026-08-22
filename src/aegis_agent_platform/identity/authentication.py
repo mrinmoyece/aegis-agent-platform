@@ -80,7 +80,11 @@ class StaticJwksProvider:
     """Deterministic JWKS test double and offline verifier source."""
 
     def __init__(self, keys: tuple[VerificationKey, ...]) -> None:
-        self._keys = {key.key_id: key for key in keys}
+        self._keys: dict[str, VerificationKey] = {}
+        for key in keys:
+            if key.key_id in self._keys:
+                raise ValueError("duplicate signing key ids are not allowed")
+            self._keys[key.key_id] = key
 
     def get_key(self, key_id: str) -> VerificationKey:
         try:
@@ -143,9 +147,7 @@ class RemoteJwksProvider:
                 timeout=self._timeout_seconds,
             ) as response:
                 final_url = (
-                    response.geturl()
-                    if hasattr(response, "geturl")
-                    else self._jwks_url
+                    response.geturl() if hasattr(response, "geturl") else self._jwks_url
                 )
                 if not final_url.startswith("https://") and not (
                     self._allow_http and final_url.startswith("http://")
@@ -155,7 +157,13 @@ class RemoteJwksProvider:
                         "JWKS endpoint redirected to a non-HTTPS URL",
                     )
                 document = json.loads(response.read())
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as error:
+        except (
+            HTTPError,
+            URLError,
+            TimeoutError,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+        ) as error:
             raise AuthenticationError(
                 AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
                 "JWKS endpoint could not provide signing keys",
@@ -340,9 +348,14 @@ def _verified_claims(payload: Mapping[str, object]) -> VerifiedClaims:
             "audience claim has an invalid type",
         )
     raw_tenant_id = payload.get("tenant_id")
+    if raw_tenant_id is not None and not isinstance(raw_tenant_id, str):
+        raise AuthenticationError(
+            AuthenticationErrorCode.INVALID_CLAIMS,
+            "tenant claim has an invalid type",
+        )
     try:
         asserted_tenant_id = (
-            TenantId(raw_tenant_id) if isinstance(raw_tenant_id, str) else None
+            TenantId(raw_tenant_id) if raw_tenant_id is not None else None
         )
     except ValueError as error:
         raise AuthenticationError(
@@ -359,11 +372,21 @@ def _verified_claims(payload: Mapping[str, object]) -> VerifiedClaims:
         issuer=issuer,
         subject=subject,
         audiences=audiences,
-        expires_at=datetime.fromtimestamp(expires_at, UTC),
-        issued_at=datetime.fromtimestamp(issued_at, UTC),
+        expires_at=_numeric_date(expires_at, claim_name="exp"),
+        issued_at=_numeric_date(issued_at, claim_name="iat"),
         asserted_tenant_id=asserted_tenant_id,
         authorized_party=authorized_party,
     )
+
+
+def _numeric_date(value: int | float, *, claim_name: str) -> datetime:
+    try:
+        return datetime.fromtimestamp(value, UTC)
+    except (OverflowError, OSError, ValueError) as error:
+        raise AuthenticationError(
+            AuthenticationErrorCode.INVALID_CLAIMS,
+            f"{claim_name} claim has an invalid value",
+        ) from error
 
 
 @dataclass(frozen=True, slots=True)
@@ -378,6 +401,18 @@ class IdentityRecord:
     enabled: bool = True
     user_id: UserId | None = None
     service_identity: ServiceIdentity | None = None
+
+    def __post_init__(self) -> None:
+        has_user = self.user_id is not None
+        has_service = self.service_identity is not None
+        if has_user == has_service:
+            raise ValueError("identity record must have exactly one internal identity")
+        if self.kind is PrincipalKind.USER and not has_user:
+            raise ValueError("user identity record requires user_id")
+        if self.kind is PrincipalKind.SERVICE and not has_service:
+            raise ValueError("service identity record requires service_identity")
+        if any(binding.tenant_id != self.tenant_id for binding in self.role_bindings):
+            raise ValueError("identity record role bindings must match the tenant")
 
     def to_principal(self) -> Principal:
         return Principal(
@@ -403,7 +438,12 @@ class InMemoryIdentityDirectory:
     """Deterministic identity repository used by tests and local development."""
 
     def __init__(self, records: tuple[IdentityRecord, ...]) -> None:
-        self._records = {(record.issuer, record.subject): record for record in records}
+        self._records: dict[tuple[str, str], IdentityRecord] = {}
+        for record in records:
+            key = (record.issuer, record.subject)
+            if key in self._records:
+                raise ValueError("duplicate identity records are not allowed")
+            self._records[key] = record
 
     def resolve(self, claims: VerifiedClaims) -> Principal:
         try:

@@ -115,6 +115,7 @@ class PolicyRequest:
 class QuotaUsage:
     """Authoritative tenant-period usage supplied by a later runtime adapter."""
 
+    tenant_id: TenantId
     tenant_tokens_used: int
     tenant_cost_usd: Decimal
     active_runs: int
@@ -148,9 +149,18 @@ class PolicyEvaluator:
         request: PolicyRequest,
         usage: QuotaUsage,
     ) -> PolicyDecision:
+        if (
+            request.tenant_id != policy.tenant_id
+            or usage.tenant_id != policy.tenant_id
+            or usage.tenant_id != request.tenant_id
+        ):
+            return PolicyDecision(
+                decision=Decision.DENY,
+                reasons=("cross_tenant_policy",),
+                policy_version=policy.version,
+                tenant_id=policy.tenant_id,
+            )
         reasons: list[str] = []
-        if request.tenant_id != policy.tenant_id:
-            reasons.append("cross_tenant_policy")
         selectors = (
             ("model_not_allowed", request.model, policy.allowed_models),
             ("tool_not_allowed", request.tool, policy.allowed_tools),
@@ -223,7 +233,11 @@ class InMemoryPolicyRepository:
     """Deterministic policy store for tests and the local API slice."""
 
     def __init__(self, policies: tuple[TenantPolicy, ...]) -> None:
-        self._policies = {policy.tenant_id: policy for policy in policies}
+        self._policies: dict[TenantId, TenantPolicy] = {}
+        for policy in policies:
+            if policy.tenant_id in self._policies:
+                raise ValueError("duplicate tenant policy is not allowed")
+            self._policies[policy.tenant_id] = policy
 
     def get(self, context: TenantContext) -> TenantPolicy | None:
         return self._policies.get(context.tenant_id)

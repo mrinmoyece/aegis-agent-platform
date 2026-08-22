@@ -22,7 +22,7 @@ from aegis_agent_platform.audit import (
 from aegis_agent_platform.config import ConfigurationError, Settings
 from aegis_agent_platform.domain import EventEnvelope, JsonValue
 from aegis_agent_platform.domain.events import thaw_json
-from aegis_agent_platform.event_store import EventStore
+from aegis_agent_platform.event_store import EventStore, TransientStorageError
 from aegis_agent_platform.identity import (
     PLATFORM_TENANT_ID,
     AuthenticationError,
@@ -339,11 +339,15 @@ class ControlPlaneApp:
         if self._event_store is None:
             await _respond(send, 503, {"error": {"code": "storage_not_configured"}})
             return
-        page = await self._event_store.read_all(
-            TenantContext(tenant_id),
-            after_position=after_position,
-            limit=100,
-        )
+        try:
+            page = await self._event_store.read_all(
+                TenantContext(tenant_id),
+                after_position=after_position,
+                limit=100,
+            )
+        except TransientStorageError:
+            await _respond(send, 503, {"error": {"code": "storage_unavailable"}})
+            return
         await _respond(
             send,
             200,
@@ -378,15 +382,19 @@ class ControlPlaneApp:
         if self._event_store is None:
             await _respond(send, 503, {"error": {"code": "storage_not_configured"}})
             return
-        events = [
-            event
-            async for event in self._event_store.read_stream(
-                TenantContext(tenant_id),
-                run_id,
-                after_version=after_version,
-                limit=100,
-            )
-        ]
+        try:
+            events = [
+                event
+                async for event in self._event_store.read_stream(
+                    TenantContext(tenant_id),
+                    run_id,
+                    after_version=after_version,
+                    limit=100,
+                )
+            ]
+        except TransientStorageError:
+            await _respond(send, 503, {"error": {"code": "storage_unavailable"}})
+            return
         await _respond(
             send,
             200,

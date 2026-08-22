@@ -221,7 +221,7 @@ class PostgresEventStore:
                 )
                 return AppendResult(aggregate_version=version)
         except ConcurrencyError:
-            self._telemetry.append_conflicted()
+            _observe_telemetry(self._telemetry.append_conflicted)
             raise
         except psycopg.Error as error:
             raise classify_storage_error(error) from error
@@ -938,7 +938,7 @@ def _event_insert_values(
         event.correlation_id,
         event.causation_id,
         event.actor.actor_id if event.actor else None,
-        event.actor.kind.value if event.actor else None,
+        str(event.actor.kind) if event.actor else None,
         event.identity_reference,
         event.policy_reference,
         event.audit_reference,
@@ -979,6 +979,9 @@ def _event_from_row(row: Sequence[Any]) -> EventEnvelope:
         audit_reference=row[17],
         idempotency_key=row[18],
         trace_context=trace_context,
+        previous_aggregate_sequence=(
+            int(row[21]) if len(row) > 21 and row[21] is not None else None
+        ),
     )
 
 

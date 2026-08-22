@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 import pytest
-from scripts.check_migrations import _validate_migration_names
+from scripts.check_migrations import _validate_migration_names, security_reversals
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "migrations" / "0001_identity_governance.sql"
@@ -66,6 +66,7 @@ def test_ledger_schema_is_append_only_tenant_scoped_and_indexed() -> None:
     assert "unique (tenant_id, aggregate_id, aggregate_sequence)" in schema
     assert "before update or delete on events" in schema
     assert "event records are append-only" in schema
+    assert "create policy tenants_tenant_isolation on tenants" not in schema
     adapter = (
         (ROOT / "src" / "aegis_agent_platform" / "event_store" / "postgres.py")
         .read_text(encoding="utf-8")
@@ -94,10 +95,24 @@ def test_destructive_migration_guard_rejects_optional_truncate_syntax() -> None:
     assert not pattern.search("REVOKE TRUNCATE ON events;".lower())
 
 
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "DROP FUNCTION reject_event_mutation() CASCADE;",
+        "DROP AGGREGATE security.aggregate_name(text);",
+    ],
+)
+def test_security_reversal_guard_rejects_function_and_aggregate_drops(
+    statement: str,
+) -> None:
+    reversals = security_reversals(statement.lower())
+
+    assert len(reversals) == 1
+    assert statement.lower().startswith(reversals[0])
+
+
 def test_migration_name_validation_requires_pattern_and_contiguous_sequence() -> None:
     with pytest.raises(SystemExit, match=r"NNNN_description\.sql"):
         _validate_migration_names([Path("001_bad-name.sql")])
     with pytest.raises(SystemExit, match="contiguous"):
-        _validate_migration_names(
-            [Path("0001_first.sql"), Path("0003_third.sql")]
-        )
+        _validate_migration_names([Path("0001_first.sql"), Path("0003_third.sql")])

@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
+from aegis_agent_platform.domain import require_aware_datetime
+
 
 def _validate_identifier(value: str, name: str) -> None:
     if not value or value != value.strip() or len(value) > 128:
@@ -103,25 +105,19 @@ class RoleBinding:
     revoked_at: datetime | None = None
 
     def __post_init__(self) -> None:
-        if self.assigned_at.tzinfo is None:
-            raise ValueError("assigned_at must be timezone-aware")
-        if (
-            self.role is Role.PLATFORM_ADMIN
-            and self.tenant_id != PLATFORM_TENANT_ID
-        ):
+        require_aware_datetime(self.assigned_at, field_name="assigned_at")
+        if self.role is Role.PLATFORM_ADMIN and self.tenant_id != PLATFORM_TENANT_ID:
             raise ValueError("platform_admin bindings require the platform tenant")
         if self.expires_at is not None:
-            if self.expires_at.tzinfo is None:
-                raise ValueError("expires_at must be timezone-aware")
+            require_aware_datetime(self.expires_at, field_name="expires_at")
             if self.expires_at <= self.assigned_at:
                 raise ValueError("expires_at must follow assigned_at")
-        if self.revoked_at is not None and self.revoked_at.tzinfo is None:
-            raise ValueError("revoked_at must be timezone-aware")
+        if self.revoked_at is not None:
+            require_aware_datetime(self.revoked_at, field_name="revoked_at")
 
     def is_active(self, at: datetime) -> bool:
         """Return whether the binding is active at a caller-supplied time."""
-        if at.tzinfo is None:
-            raise ValueError("authorization time must be timezone-aware")
+        require_aware_datetime(at, field_name="authorization time")
         return (
             self.assigned_at <= at
             and (self.expires_at is None or at < self.expires_at)

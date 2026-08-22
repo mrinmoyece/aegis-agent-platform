@@ -198,9 +198,6 @@ CREATE TABLE tenant_listing_projection (
 
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenants FORCE ROW LEVEL SECURITY;
-CREATE POLICY tenants_tenant_isolation ON tenants
-    USING (tenant_id = current_setting('aegis.tenant_id', true))
-    WITH CHECK (tenant_id = current_setting('aegis.tenant_id', true));
 
 ALTER TABLE event_stream_heads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE event_stream_heads FORCE ROW LEVEL SECURITY;

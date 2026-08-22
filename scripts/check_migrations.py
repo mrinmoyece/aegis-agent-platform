@@ -28,6 +28,8 @@ SECURITY_REVERSAL_PATTERNS = (
     re.compile(r"(?im)^\s*alter\s+table\b.*\bno\s+force\s+row\s+level\s+security\b"),
     re.compile(r"(?im)^\s*drop\s+policy\b"),
     re.compile(r"(?im)^\s*drop\s+trigger\b"),
+    re.compile(r"(?im)^\s*drop\s+function\b"),
+    re.compile(r"(?im)^\s*drop\s+aggregate\b"),
     re.compile(
         r"(?im)^\s*drop\s+function\b[^\n;]*"
         r"\b(?:[a-z_][\w$]*\.)?reject_security_audit_mutation\b"
@@ -68,9 +70,7 @@ def _validate_migration_names(migrations: list[Path]) -> None:
     numbers = migration_numbers(migrations)
     for expected_number, number in enumerate(numbers, start=1):
         if number != expected_number:
-            raise SystemExit(
-                "migration numbering must be contiguous starting at 0001"
-            )
+            raise SystemExit("migration numbering must be contiguous starting at 0001")
 
 
 def security_reversals(schema: str) -> list[str]:

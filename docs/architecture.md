@@ -70,7 +70,7 @@ sequenceDiagram
   participant J as JwtVerifier + JWKS provider
   participant D as IdentityDirectory
   participant Z as AuthorizationService
-  participant Q as PolicyEvaluator
+  participant P as PolicyRepository
   participant A as AuditStore
   C->>CP: Bearer JWT
   CP->>J: verify signature, issuer, audience, expiry
@@ -79,8 +79,8 @@ sequenceDiagram
   D-->>CP: Principal (tenant, roles)
   CP->>Z: decide(principal, tenant_id, permission)
   Z-->>CP: AuthorizationDecision
-  CP->>Q: evaluate(policy, request, usage)
-  Q-->>CP: PolicyDecision (allow/deny/require_approval)
+  CP->>P: get(TenantContext(tenant_id))
+  P-->>CP: TenantPolicy
   CP->>A: append(AuthenticationOutcome, AuthorizationDecision)
 ```
 
@@ -174,9 +174,11 @@ behind a small route set: `/healthz` and `/health/live` for liveness,
 `/readyz` and `/health/ready` for configuration readiness (unauthenticated, as
 in Layer 1), `/v1/me` returning the authenticated principal's tenant and active
 roles, tenant and policy routes, plus bounded redacted ledger, run-timeline, and
-run-status projection reads. Every `/v1/*` route requires a valid bearer token and a passing
-authorization decision, and both authentication and authorization outcomes are
-recorded as audit events before a response is returned. No other `/v1/*`
+run-status projection reads. Every `/v1/*` route requires a valid bearer token,
+but `/v1/me` returns immediately after authentication; the tenant-scoped routes
+also require a passing authorization decision. Authentication outcomes, and
+authorization outcomes where authorization runs, are recorded as audit events
+before a response is returned. No other `/v1/*`
 surface should be assumed until it appears in the code and its tests.
 
 ## Canonical incident: checkout failures after deployment

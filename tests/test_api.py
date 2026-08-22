@@ -10,10 +10,16 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+import pytest
+
 from aegis_agent_platform.audit import REDACTED, AuditEventType, InMemoryAuditStore
 from aegis_agent_platform.control_plane.api import ControlPlaneApp, application
 from aegis_agent_platform.domain import DomainEventType, EventEnvelope
-from aegis_agent_platform.event_store import EventPage, EventStore
+from aegis_agent_platform.event_store import (
+    EventPage,
+    EventStore,
+    TransientStorageError,
+)
 from aegis_agent_platform.identity import PLATFORM_TENANT_ID, Principal
 from aegis_agent_platform.policy import InMemoryPolicyRepository
 from aegis_agent_platform.tenancy import (
@@ -395,6 +401,53 @@ def test_storage_routes_fail_closed_when_adapter_is_not_configured() -> None:
     assert ledger_status == projection_status == 503
     assert ledger["error"]["code"] == "storage_not_configured"
     assert projection["error"]["code"] == "storage_not_configured"
+
+
+def test_storage_routes_translate_transient_store_failures() -> None:
+    class FailingTimelineStore(TimelineEventStore):
+        async def read_stream(
+            self, *args: object, **kwargs: object
+        ) -> AsyncIterator[EventEnvelope]:
+            del args, kwargs
+            raise TransientStorageError("database unavailable")
+            yield  # pragma: no cover
+
+        async def read_all(self, *args: object, **kwargs: object) -> EventPage:
+            del args, kwargs
+            raise TransientStorageError("database unavailable")
+
+    item = EventEnvelope(
+        event_id=uuid4(),
+        tenant_id=str(TENANT_ID),
+        aggregate_id="run-1",
+        event_type=DomainEventType.RUN_STARTED,
+        schema_version=1,
+        occurred_at=datetime(2025, 1, 1, tzinfo=UTC),
+        payload={},
+    )
+    app, encoded, _ = secured_app(event_store=FailingTimelineStore(item))  # type: ignore[arg-type]
+
+    ledger_status, ledger, _ = request(
+        "/v1/tenants/tenant-alpha/ledger",
+        app=app,
+        authorization=f"Bearer {encoded}",
+    )
+    timeline_status, timeline, _ = request(
+        "/v1/tenants/tenant-alpha/runs/run-1/timeline",
+        app=app,
+        authorization=f"Bearer {encoded}",
+    )
+
+    assert ledger_status == timeline_status == 503
+    assert ledger["error"]["code"] == "storage_unavailable"
+    assert timeline["error"]["code"] == "storage_unavailable"
+
+
+def test_duplicate_tenant_records_are_rejected() -> None:
+    tenant = Tenant(TENANT_ID, "Tenant Alpha")
+
+    with pytest.raises(ValueError, match="duplicate tenant records"):
+        InMemoryTenantRepository((tenant, tenant))
 
 
 def test_ledger_rejects_invalid_cursor() -> None:
