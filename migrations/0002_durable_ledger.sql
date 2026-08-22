@@ -311,6 +311,35 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public
     TO aegis_maintenance;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO aegis_maintenance;
 
+-- Cross-tenant identity lookup: SECURITY DEFINER runs as the function owner
+-- (migration executor, a superuser / BYPASSRLS role) so the application role
+-- does not need BYPASSRLS.  The function exposes only the columns required for
+-- authentication and is intentionally read-only.
+CREATE OR REPLACE FUNCTION lookup_identity_by_subject(
+    p_issuer  text,
+    p_subject text
+) RETURNS TABLE(
+    identity_id      uuid,
+    tenant_id        text,
+    identity_kind    text,
+    user_id          text,
+    service_identity text,
+    enabled          boolean
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public, pg_catalog
+STABLE
+AS $$
+    SELECT identity_id, tenant_id, identity_kind, user_id, service_identity, enabled
+    FROM   identities
+    WHERE  issuer   = p_issuer
+      AND  subject  = p_subject
+    LIMIT  1;
+$$;
+
+GRANT EXECUTE ON FUNCTION lookup_identity_by_subject(text, text) TO aegis_app;
+
 -- Seed the platform tenant so that failed-authentication audit events (which
 -- always use tenant_id = 'platform') satisfy the FK from
 -- security_audit_events → tenants even on upgrades from pre-seed 0001.

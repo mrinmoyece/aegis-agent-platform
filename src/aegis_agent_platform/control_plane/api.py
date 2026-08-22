@@ -285,7 +285,13 @@ class ControlPlaneApp:
             resource=f"tenant/{tenant_id}",
         ):
             return
-        tenant = self._tenants.get(TenantContext(tenant_id))
+        try:
+            tenant = await asyncio.get_event_loop().run_in_executor(
+                None, self._tenants.get, TenantContext(tenant_id)
+            )
+        except TransientStorageError:
+            await _respond(send, 503, {"error": {"code": "storage_unavailable"}})
+            return
         if tenant is None:
             await _respond(send, 404, {"error": {"code": "tenant_not_found"}})
             return
@@ -315,7 +321,13 @@ class ControlPlaneApp:
             resource=f"tenant/{tenant_id}/policy",
         ):
             return
-        policy = self._policies.get(TenantContext(tenant_id))
+        try:
+            policy = await asyncio.get_event_loop().run_in_executor(
+                None, self._policies.get, TenantContext(tenant_id)
+            )
+        except TransientStorageError:
+            await _respond(send, 503, {"error": {"code": "storage_unavailable"}})
+            return
         if policy is None:
             await _respond(send, 404, {"error": {"code": "policy_not_found"}})
             return

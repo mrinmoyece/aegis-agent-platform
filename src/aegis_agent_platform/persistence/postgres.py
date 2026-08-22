@@ -88,21 +88,12 @@ class PostgresIdentityDirectory(IdentityDirectory):
         self._lock = _connection_lock(connection)
 
     def resolve(self, claims: VerifiedClaims) -> Principal:
-        if claims.asserted_tenant_id is None:
-            raise AuthenticationError(
-                AuthenticationErrorCode.TENANT_MISMATCH,
-                "durable identity resolution requires a signed tenant claim",
-            )
-        context = TenantContext(claims.asserted_tenant_id)
         try:
-            with _tenant_transaction(self._connection, self._lock, context):
+            with self._connection.transaction(), self._lock:
+                # Use the SECURITY DEFINER function so aegis_runtime does not need
+                # BYPASSRLS for the initial cross-tenant identity lookup.
                 identity = self._connection.execute(
-                    """
-                    SELECT identity_id, tenant_id, identity_kind, user_id,
-                        service_identity, enabled
-                    FROM identities
-                    WHERE issuer = %s AND subject = %s
-                    """,
+                    "SELECT * FROM lookup_identity_by_subject(%s, %s)",
                     (claims.issuer, claims.subject),
                 ).fetchone()
                 if identity is None:
@@ -115,29 +106,43 @@ class PostgresIdentityDirectory(IdentityDirectory):
                         AuthenticationErrorCode.IDENTITY_DISABLED,
                         "identity is disabled",
                     )
+                # Validate optional tenant claim against authoritative tenant_id.
+                stored_tenant_id = TenantId(identity[1])
+                if (
+                    claims.asserted_tenant_id is not None
+                    and claims.asserted_tenant_id != stored_tenant_id
+                ):
+                    raise AuthenticationError(
+                        AuthenticationErrorCode.TENANT_MISMATCH,
+                        "signed tenant claim does not match authoritative tenant",
+                    )
+                # Re-read role bindings with RLS enabled for the confirmed tenant.
+                self._connection.execute(
+                    "SELECT set_config('aegis.tenant_id', %s, true)",
+                    (str(stored_tenant_id),),
+                )
                 bindings = self._connection.execute(
                     """
-                    SELECT role, assigned_by, assigned_by_kind, assigned_at,
-                        expires_at, revoked_at
-                    FROM role_bindings
-                    WHERE tenant_id = %s AND identity_id = %s
-                    ORDER BY assigned_at, role
-                    """,
-                    (str(context.tenant_id), identity[0]),
+                        SELECT role, assigned_by, assigned_by_kind, assigned_at,
+                            expires_at, revoked_at
+                        FROM role_bindings
+                        WHERE tenant_id = %s AND identity_id = %s
+                        ORDER BY assigned_at, role
+                        """,
+                    (str(stored_tenant_id), identity[0]),
                 ).fetchall()
         except AuthenticationError:
             raise
         except psycopg.Error as error:
             raise classify_storage_error(error) from error
-        tenant_id = TenantId(identity[1])
         kind = PrincipalKind(identity[2])
         return Principal(
             subject=claims.subject,
             issuer=claims.issuer,
-            tenant_id=tenant_id,
+            tenant_id=stored_tenant_id,
             kind=kind,
             role_bindings=tuple(
-                _role_binding_from_row(tenant_id, row) for row in bindings
+                _role_binding_from_row(stored_tenant_id, row) for row in bindings
             ),
             user_id=UserId(identity[3]) if identity[3] is not None else None,
             service_identity=(
