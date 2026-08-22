@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from types import MappingProxyType
-from typing import ClassVar, Self, cast
+from typing import ClassVar, Self
 from uuid import UUID
 
 from aegis_agent_platform.domain.events import (
@@ -32,7 +32,7 @@ class _StringConstant(str):
 
     @classmethod
     def _define(cls, value: str) -> Self:
-        member = cast(Self, str.__new__(cls, value))
+        member: Self = str.__new__(cls, value)
         cls._values[value] = member
         return member
 
@@ -43,6 +43,16 @@ class _StringConstant(str):
 
 class WorkStatus(_StringConstant):
     """Authoritative lifecycle states reconstructed from work events."""
+
+    REQUESTED: ClassVar[WorkStatus]
+    PUBLISHED: ClassVar[WorkStatus]
+    CLAIMED: ClassVar[WorkStatus]
+    RUNNING: ClassVar[WorkStatus]
+    RETRY_WAIT: ClassVar[WorkStatus]
+    SUCCEEDED: ClassVar[WorkStatus]
+    FAILED: ClassVar[WorkStatus]
+    CANCELLED: ClassVar[WorkStatus]
+    DEAD_LETTER: ClassVar[WorkStatus]
 
 
 WorkStatus.REQUESTED = WorkStatus._define("requested")
@@ -58,6 +68,12 @@ WorkStatus.DEAD_LETTER = WorkStatus._define("dead_letter")
 
 class FailureClass(_StringConstant):
     """Stable retry policy classification, independent of exception classes."""
+
+    RETRYABLE: ClassVar[FailureClass]
+    PERMANENT: ClassVar[FailureClass]
+    CANCELLED: ClassVar[FailureClass]
+    TIMEOUT: ClassVar[FailureClass]
+    WORKER_BUG: ClassVar[FailureClass]
 
 
 FailureClass.RETRYABLE = FailureClass._define("retryable")

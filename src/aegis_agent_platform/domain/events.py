@@ -64,6 +64,19 @@ class DomainEventType(_StringConstant):
     SIDE_EFFECT_FAILED: ClassVar[DomainEventType]
     OUTBOX_DEAD_LETTERED: ClassVar[DomainEventType]
     TENANT_REGISTERED: ClassVar[DomainEventType]
+    WORK_REQUESTED: ClassVar[DomainEventType]
+    WORK_PUBLISHED: ClassVar[DomainEventType]
+    WORK_CLAIMED: ClassVar[DomainEventType]
+    WORK_STARTED: ClassVar[DomainEventType]
+    WORK_HEARTBEAT: ClassVar[DomainEventType]
+    WORK_LEASE_EXPIRED: ClassVar[DomainEventType]
+    WORK_SUCCEEDED: ClassVar[DomainEventType]
+    WORK_FAILED: ClassVar[DomainEventType]
+    WORK_RETRY_SCHEDULED: ClassVar[DomainEventType]
+    WORK_CANCEL_REQUESTED: ClassVar[DomainEventType]
+    WORK_CANCELLED: ClassVar[DomainEventType]
+    WORK_DEAD_LETTERED: ClassVar[DomainEventType]
+    WORK_RECONCILED: ClassVar[DomainEventType]
 
 
 DomainEventType.INVESTIGATION_REQUESTED = DomainEventType._define(
@@ -91,9 +104,7 @@ DomainEventType.WORK_PUBLISHED = DomainEventType._define("work.published.v1")
 DomainEventType.WORK_CLAIMED = DomainEventType._define("work.claimed.v1")
 DomainEventType.WORK_STARTED = DomainEventType._define("work.started.v1")
 DomainEventType.WORK_HEARTBEAT = DomainEventType._define("work.heartbeat.v1")
-DomainEventType.WORK_LEASE_EXPIRED = DomainEventType._define(
-    "work.lease_expired.v1"
-)
+DomainEventType.WORK_LEASE_EXPIRED = DomainEventType._define("work.lease_expired.v1")
 DomainEventType.WORK_SUCCEEDED = DomainEventType._define("work.succeeded.v1")
 DomainEventType.WORK_FAILED = DomainEventType._define("work.failed.v1")
 DomainEventType.WORK_RETRY_SCHEDULED = DomainEventType._define(
@@ -103,9 +114,7 @@ DomainEventType.WORK_CANCEL_REQUESTED = DomainEventType._define(
     "work.cancel_requested.v1"
 )
 DomainEventType.WORK_CANCELLED = DomainEventType._define("work.cancelled.v1")
-DomainEventType.WORK_DEAD_LETTERED = DomainEventType._define(
-    "work.dead_lettered.v1"
-)
+DomainEventType.WORK_DEAD_LETTERED = DomainEventType._define("work.dead_lettered.v1")
 DomainEventType.WORK_RECONCILED = DomainEventType._define("work.reconciled.v1")
 
 
