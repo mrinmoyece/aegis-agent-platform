@@ -7,7 +7,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Protocol
+from typing import Protocol, cast
 from uuid import UUID, uuid4
 
 from aegis_agent_platform.agents.artifacts import (
@@ -224,8 +224,7 @@ class DurableCoordinator:
                             DomainEventType.INVESTIGATION_BUDGET_EXHAUSTED,
                             {
                                 "reason": (
-                                    budget_reason
-                                    or "global_runtime_budget_exhausted"
+                                    budget_reason or "global_runtime_budget_exhausted"
                                 )
                             },
                             suffix=f"budget:{state.version}",
@@ -611,6 +610,7 @@ class DurableCoordinator:
         estimator = getattr(self._engine, "estimate_cost", None)
         if not callable(estimator):
             return Decimal("0")
+        estimate_cost = cast("Callable[[SpecialistContext], Decimal]", estimator)
         context = self._specialist_context(
             state,
             assignment,
@@ -618,7 +618,7 @@ class DurableCoordinator:
             attempt=state.tasks[assignment.assignment_id].attempts + 1,
         )
         try:
-            return estimator(context)
+            return estimate_cost(context)
         except Exception:
             return Decimal("0")
 

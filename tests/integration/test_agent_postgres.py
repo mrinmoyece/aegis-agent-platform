@@ -95,6 +95,7 @@ def test_specialist_projection_fencing_rls_and_rebuild() -> None:
                 CONTEXT,
                 dispatches[0].message.message_id,
                 lease_owner="agent-integration-delivery",
+                lease_expires_at=dispatches[0].lease_expires_at,
                 published_at=now,
             )
             async with connection.transaction():

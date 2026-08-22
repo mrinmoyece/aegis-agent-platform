@@ -813,11 +813,13 @@ def _validate_final_assessment(
         for item in state.artifacts
         if isinstance(item, RemediationRecommendationArtifact)
     }
-    if hypotheses.get(artifact.selected_hypothesis_id) is None:
+    selected_hypothesis_id = artifact.selected_hypothesis_id
+    if selected_hypothesis_id is None or hypotheses.get(selected_hypothesis_id) is None:
         raise ArtifactPolicyError("final assessment cites an unknown hypothesis")
     if artifact.selected_hypothesis_id != decision.selected_hypothesis_id:
         raise ArtifactPolicyError("final assessment selected hypothesis diverges")
-    if recommendations.get(artifact.recommendation_id) is None:
+    recommendation_id = artifact.recommendation_id
+    if recommendation_id is None or recommendations.get(recommendation_id) is None:
         raise ArtifactPolicyError("final assessment cites an unknown recommendation")
 
 

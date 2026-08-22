@@ -111,6 +111,18 @@ class DomainEventType(_StringConstant):
     CORRELATION_COMPLETED: ClassVar[DomainEventType]
     CORRELATION_FAILED: ClassVar[DomainEventType]
     SOURCE_CURSOR_ADVANCED: ClassVar[DomainEventType]
+    INVESTIGATION_PLAN_RECORDED: ClassVar[DomainEventType]
+    INVESTIGATION_CANCEL_REQUESTED: ClassVar[DomainEventType]
+    INVESTIGATION_BUDGET_EXHAUSTED: ClassVar[DomainEventType]
+    SPECIALIST_TASK_DISPATCH_REQUESTED: ClassVar[DomainEventType]
+    SPECIALIST_TASK_STARTED: ClassVar[DomainEventType]
+    SPECIALIST_TASK_SUCCEEDED: ClassVar[DomainEventType]
+    SPECIALIST_TASK_FAILED: ClassVar[DomainEventType]
+    SPECIALIST_TASK_TIMED_OUT: ClassVar[DomainEventType]
+    SPECIALIST_TASK_CANCELLED: ClassVar[DomainEventType]
+    REASONING_ARTIFACT_RECORDED: ClassVar[DomainEventType]
+    COORDINATOR_DECISION_RECORDED: ClassVar[DomainEventType]
+    INVESTIGATION_FINALIZED: ClassVar[DomainEventType]
 
 
 DomainEventType.INVESTIGATION_REQUESTED = DomainEventType._define(
@@ -248,9 +260,7 @@ DomainEventType.SPECIALIST_TASK_STARTED = DomainEventType._define(
 DomainEventType.SPECIALIST_TASK_SUCCEEDED = DomainEventType._define(
     "specialist.succeeded.v1"
 )
-DomainEventType.SPECIALIST_TASK_FAILED = DomainEventType._define(
-    "specialist.failed.v1"
-)
+DomainEventType.SPECIALIST_TASK_FAILED = DomainEventType._define("specialist.failed.v1")
 DomainEventType.SPECIALIST_TASK_TIMED_OUT = DomainEventType._define(
     "specialist.timed_out.v1"
 )

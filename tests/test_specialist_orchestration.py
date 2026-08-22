@@ -236,10 +236,13 @@ def test_artifacts_round_trip_with_immutable_linkage_and_redaction() -> None:
     critique = next(
         item for item in success.artifacts if isinstance(item, CritiqueArtifact)
     )
-    malformed = artifact_to_payload(critique) | {
+    malformed = dict(artifact_to_payload(critique)) | {
         "produced_by": AgentRole.HYPOTHESIS_REVIEWER.value
     }
-    malformed["body"] = dict(malformed["body"], accepted="false")
+    malformed["body"] = dict(
+        cast("Mapping[str, JsonValue]", malformed["body"]),
+        accepted="false",
+    )
     with pytest.raises(ValueError, match="accepted must be a JSON boolean"):
         artifact_from_payload(malformed)
     assert AgentRole("hypothesis_reviewer") is AgentRole.HYPOTHESIS_REVIEWER
@@ -910,12 +913,14 @@ def test_finish_or_fail_raises_when_state_is_neither_runnable_nor_terminal() -> 
             run_id=run_id,
             created_at=NOW,
         ),
-        assignments=(canonical_checkout_plan(
-            tenant_id=TENANT,
-            incident_id="checkout-stuck",
-            run_id=run_id,
-            created_at=NOW,
-        ).assignments[1],),
+        assignments=(
+            canonical_checkout_plan(
+                tenant_id=TENANT,
+                incident_id="checkout-stuck",
+                run_id=run_id,
+                created_at=NOW,
+            ).assignments[1],
+        ),
     )
     state = InvestigationState(
         plan=plan,
@@ -1437,8 +1442,9 @@ def test_execute_returns_terminal_state_without_reprocessing() -> None:
     assert replayed == state
 
 
-def test_canonical_engine_rejects_cancelled_execution_and_reports_zero_estimate(
-) -> None:
+def test_canonical_engine_rejects_cancelled_execution_and_reports_zero_estimate() -> (
+    None
+):
     plan = canonical_checkout_plan(
         tenant_id=TENANT,
         incident_id="checkout-cancelled-engine",

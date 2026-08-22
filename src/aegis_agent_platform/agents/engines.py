@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from enum import StrEnum
 from hashlib import sha256
-from typing import TypedDict
+from typing import TypedDict, cast
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from aegis_agent_platform.agents.artifacts import (
@@ -165,8 +165,9 @@ class GatewaySpecialistEngine:
         estimator = getattr(self._gateway, "estimate_reservation_cost", None)
         if not callable(estimator):
             return Decimal("0")
+        estimate_reservation_cost = cast("Callable[..., Decimal]", estimator)
         prompt = _specialist_prompt(context)
-        return estimator(
+        return estimate_reservation_cost(
             ModelRequest(
                 request_id=self._uuid_factory(),
                 tenant_id=context.tenant_id,
