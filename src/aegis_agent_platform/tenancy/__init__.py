@@ -15,7 +15,6 @@ class TenantContext:
     tenant_id: TenantId
 
     def __post_init__(self) -> None:
-        """Reject absent tenant context at the boundary."""
         if not isinstance(self.tenant_id, TenantId):
             raise ValueError("tenant_id must be a TenantId")
 
@@ -48,7 +47,7 @@ class InMemoryTenantRepository:
         self._tenants: dict[TenantId, Tenant] = {}
         for tenant in tenants:
             if tenant.tenant_id in self._tenants:
-                raise ValueError("duplicate tenant record")
+                raise ValueError("duplicate tenant records are not allowed")
             self._tenants[tenant.tenant_id] = tenant
 
     def get(self, context: TenantContext) -> Tenant | None:

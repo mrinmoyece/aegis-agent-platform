@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, tzinfo
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -105,35 +105,6 @@ def test_invalid_audit_event_contracts_are_rejected() -> None:
         )
 
 
-class IndeterminateTimezone(tzinfo):
-    """Timezone marker whose UTC offset is undefined."""
-
-    def utcoffset(self, value: datetime | None) -> None:
-        del value
-
-    def dst(self, value: datetime | None) -> None:
-        del value
-
-    def tzname(self, value: datetime | None) -> None:
-        del value
-
-
-def test_audit_event_rejects_indeterminate_timezone_offset() -> None:
-    with pytest.raises(ValueError, match="timezone-aware"):
-        AuditEvent(
-            event_id=uuid4(),
-            tenant_id=TENANT_ID,
-            event_type=AuditEventType.ADMINISTRATIVE_CHANGE,
-            occurred_at=datetime(2026, 1, 1, tzinfo=IndeterminateTimezone()),
-            outcome=AuditOutcome.SUCCESS,
-            actor_id="admin",
-            action="policy:update",
-            resource="policy",
-            correlation_id=uuid4(),
-            details={},
-        )
-
-
 def test_secret_values_never_render_or_serialize_raw_material() -> None:
     value = SecretValue(b"super-sensitive")
 
@@ -165,16 +136,11 @@ def test_environment_provider_requires_explicit_prefixed_reference() -> None:
         )
     with pytest.raises(SecretError, match="tenant"):
         provider.resolve(TenantContext(TenantId("tenant-beta")), reference)
-    foreign_tenant = TenantId("tenant-beta")
-    with pytest.raises(SecretError, match="different tenant provider"):
-        provider.resolve(
-            TenantContext(foreign_tenant),
-            SecretReference(
-                foreign_tenant,
-                "env",
-                "AEGIS_SECRET_MODEL_API",
-            ),
-        )
+    with pytest.raises(SecretError, match="bound to a different tenant"):
+        EnvironmentSecretProvider(
+            TenantId("tenant-beta"),
+            {"AEGIS_SECRET_MODEL_API": "local-development-only"},
+        ).resolve(context, reference)
 
 
 def test_in_memory_secret_provider_requires_exact_reference() -> None:

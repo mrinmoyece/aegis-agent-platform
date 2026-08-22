@@ -1,16 +1,17 @@
-# Getting started with Layers 1–2
+# Getting started with Layers 1–3
 
 This repository teaches the less visible part of agent engineering: deciding
 where durability, security, and vendor boundaries live before writing
 orchestration logic. Layer 1 built the package contracts and local
-infrastructure. Layer 2 adds a small, real control-plane vertical slice for
-identity, tenancy, and governance. The code stays intentionally small; the
-contracts, tests, and checks are the lesson.
+infrastructure. Layer 2 adds identity, tenancy, and governance. Layer 3 adds a
+durable PostgreSQL ledger, inbox/outbox, projections, and production repositories
+without adding workers or agent execution.
 
 ## What you will inspect
 
 - `domain` owns immutable, provider-neutral event data.
-- `event_store` and `queueing` define persistence ports without adapters.
+- `event_store` defines ports plus the PostgreSQL ledger, inbox/outbox, and
+  projection adapters; `queueing` remains a future worker port.
 - `identity` verifies bearer JWTs and resolves authoritative, tenant-scoped
   principals; `identity.authorization` makes deny-by-default access decisions.
 - `tenancy` carries validated tenant context through every tenant-scoped port.
@@ -21,13 +22,13 @@ contracts, tests, and checks are the lesson.
   material, through general application code.
 - `control_plane` composes the above behind an authenticated `/v1/*` API plus
   liveness/readiness routes.
-- `migrations/0001_identity_governance.sql` defines the Postgres schema and
-  row-level security these boundaries are designed to persist against.
+- migrations `0001` and `0002` define identity/governance and the durable ledger,
+  roles, grants, triggers, forced RLS, inbox/outbox, and projections.
 - `compose.yaml` describes the local dependencies later layers will integrate.
 - architecture tests prevent infrastructure from leaking into the pure domain.
 
-No durable runtime, event store, queue worker, or live Dynatrace/GitHub
-connector runs yet — see `limitations.md` for the complete gap list.
+The durable store is implemented. No Redis queue worker, model call, agent
+execution, external effect, or live Dynatrace/GitHub connector runs yet.
 
 ## Run the fast checks
 
@@ -46,6 +47,16 @@ documentation links, repository manifests, and (from Layer 2) ordered SQL
 migration validation. They do not require network services or a running
 identity provider — JWT verification is exercised against deterministic
 fixtures, not a live Keycloak realm.
+
+Run the live PostgreSQL suite against a disposable database:
+
+```bash
+AEGIS_TEST_DATABASE_URL=postgresql://... \
+  python -m pytest tests/integration
+```
+
+The fixture resets that database's `public` schema. Never point it at shared or
+production data.
 
 ## Try the identity, tenancy, and governance slice
 
@@ -80,24 +91,17 @@ After startup:
 The imported Keycloak realm has no users and self-registration disabled, so it
 demonstrates the expected configuration shape (issuer, JWKS URL, audience) for
 `RemoteJwksProvider` rather than a ready-to-use login flow. Calling `/v1/me`
-on the exported process returns `503 authentication_not_configured`, regardless
-of the header, because no identity directory adapter is wired. A separately
-constructed `ControlPlaneApp` with injected test fixtures returns
-`401 missing_token` when credentials are absent, as shown in
-`tests/test_api.py`. Obtaining a real token against this realm and wiring the
-process through `RemoteJwksProvider` is a deployment exercise, not something the
-fast local checks assume works. PostgreSQL now
-initializes with the identity/governance migration
-(`migrations/0001_identity_governance.sql`), but the control plane's default
-repositories remain in-memory — no adapter connects them to Postgres yet, so
-nothing you do through the API survives a restart.
+on the module-level demo application returns `503 authentication_not_configured`;
+obtaining a real token and wiring an authentication service through
+`RemoteJwksProvider` is a deployment exercise, not something the fast local
+checks assume works. PostgreSQL initializes both forward migrations. Production composition must
+explicitly inject the PostgreSQL repositories and event store; the module-level
+demo application remains fail-closed and does not invent development identities.
 
 Stop and remove containers with `docker compose down`. Add `--volumes` only when
 you intentionally want to delete local data.
 
 ## Read next
 
-Read `architecture.md`, then the ADRs in numerical order (especially ADR 0004
-and ADR 0009). Compare the acceptance gates in `roadmap.md` with the status
-table in `enterprise-checklist.md`, and read `threat-model.md`'s Layer 2
-residual-risk section for exactly what is and is not proven so far.
+Read `durable-execution.md`, ADR 0010, `failure-modes.md`, and `runbook.md`, then
+compare roadmap gates with `enterprise-checklist.md`.

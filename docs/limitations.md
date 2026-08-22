@@ -1,9 +1,7 @@
 # Limitations and production gaps
 
-## Current Layer 1 implementation
+## Foundation capabilities and remaining runtime gaps
 
-- No event-store adapter, projection, migration, or durable orchestration
-  exists beyond the identity/tenancy/governance schema described below.
 - No queue backend, renewal implementation, fencing enforcement, retry, or
   reconciliation exists.
 - Dynatrace and GitHub packages are interfaces, not working connectors.
@@ -34,24 +32,20 @@
   wrong-issuer/wrong-audience/unsupported-algorithm tokens, and expired/revoked
   role bindings. That suite runs against deterministic fixtures and a mocked
   JWKS transport, not a live database or identity provider — proving the same
-  guarantees against a running Postgres and Keycloak instance is the remaining
-  Layer 2 acceptance-gate work in `roadmap.md`.
+  guarantees against a running Keycloak instance remains deployment work.
 - `RemoteJwksProvider` can call a real Keycloak-compatible JWKS endpoint and
   refreshes its cache after a bounded TTL, but
   live network reachability, realm population, and key rotation against an
   actual running identity provider are deployment concerns, not something the
   fast local checks exercise. The imported local Keycloak realm has no users.
-- The control plane's default identity, tenant, policy, and audit repositories
-  are deterministic in-memory adapters. `migrations/0001_identity_governance.sql`
-  defines the durable Postgres schema (tenants, identities, role bindings,
-  tenant policies, tenant quotas, an append-only audit table) with row-level
-  security, and its constraints are asserted statically by
-  `tests/test_migrations.py`, but no adapter connects the in-memory ports to a
-  running Postgres yet — state does not survive a process restart.
+- The module-level demo application defaults to deterministic in-memory
+  repositories and fail-closed authentication. Production PostgreSQL
+  repositories exist, but deployment composition must inject connections and
+  authentication explicitly.
 - `PolicyEvaluator` deterministically evaluates quota *limits* against a
-  tenant-bound, caller-supplied `QuotaUsage` snapshot; there is no authoritative usage
-  accounting yet, since that requires the durable runtime planned for Layers
-  3–4.
+  caller-supplied `QuotaUsage` snapshot; there is no authoritative usage
+  accounting emission yet. Layer 3 provides the rebuildable usage projection;
+  later runtime events must populate it.
 - Secrets are handled only by `EnvironmentSecretProvider`, a local-development
   provider requiring an `AEGIS_SECRET_` prefix. There is no vault-backed
   broker, rotation, or centralized access audit. Example Compose credentials
@@ -60,14 +54,33 @@
   is for local learning. It is not hardened, highly available, backed up, or
   suitable for real tenant data.
 
+## Current Layer 3 implementation (durable persistence and eventing)
+
+- PostgreSQL event append, expected-version concurrency, inbox/outbox,
+  projections, replay, durable Layer 2 repositories, forced RLS, immutable
+  event/audit rows, and authorized ledger inspection are implemented and tested.
+- The fast 90% coverage suite excludes live-database adapter lines; a separate
+  six-test PostgreSQL 16 suite executes migrations and those adapters in CI.
+- Global positions provide ordering, not a no-gap promise after rolled-back
+  identity allocations. Aggregate sequence is gapless.
+- The outbox is delivery state only. There is no publisher/Redis notifier,
+  worker lifecycle, model/provider call, live connector, agent execution,
+  approval service, or external effect adapter.
+- Exactly-once effects are not claimed. Intent/result contracts and idempotency
+  keys exist, but later adapters must implement idempotency or reconciliation.
+- Projections cover generic run status, artifacts, approvals, usage, and tenant
+  listings. They do not imply the incident-specific state machine exists.
+- Backup/restore, retention, partitioning, high availability, maintenance-role
+  brokering, and migration downgrade automation are not implemented. Security
+  migrations are forward-only; correction uses additive migrations.
+
 ## Claims deliberately not made
 
 Aegis does not currently diagnose checkout failures, protect production data,
 guarantee exactly-once effects, provide a secure code sandbox, satisfy a
-compliance framework, meet an SLO, or support multi-region recovery. Passing a
-JWT verification and authorization check locally does not mean tenant
-isolation, quota enforcement, or audit durability have been proven against a
-real deployment.
+compliance framework, meet an SLO, or support multi-region recovery. Live local
+PostgreSQL tests prove specific RLS and durability controls, not production
+deployment hardening or operational readiness.
 
 ## Closing gaps
 

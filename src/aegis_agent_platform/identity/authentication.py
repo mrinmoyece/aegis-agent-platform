@@ -11,7 +11,6 @@ from enum import StrEnum
 from threading import Lock
 from typing import Protocol
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 import jwt
@@ -26,6 +25,8 @@ from aegis_agent_platform.identity.models import (
     TenantId,
     UserId,
 )
+
+_ABSENT = object()
 
 
 class AuthenticationErrorCode(StrEnum):
@@ -84,7 +85,7 @@ class StaticJwksProvider:
         self._keys: dict[str, VerificationKey] = {}
         for key in keys:
             if key.key_id in self._keys:
-                raise ValueError("duplicate static signing key identifier")
+                raise ValueError("duplicate signing key ids are not allowed")
             self._keys[key.key_id] = key
 
     def get_key(self, key_id: str) -> VerificationKey:
@@ -109,7 +110,10 @@ class RemoteJwksProvider:
         cache_ttl_seconds: float = 300.0,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
-        _require_allowed_jwks_url(jwks_url, allow_http=allow_http)
+        if not jwks_url.startswith("https://") and not (
+            allow_http and jwks_url.startswith("http://")
+        ):
+            raise ValueError("JWKS URL must use HTTPS outside explicit development")
         if not 1.0 <= cache_ttl_seconds <= 3_600.0:
             raise ValueError("JWKS cache TTL must be between 1 and 3600 seconds")
         self._jwks_url = jwks_url
@@ -117,24 +121,22 @@ class RemoteJwksProvider:
         self._timeout_seconds = timeout_seconds
         self._cache_ttl_seconds = cache_ttl_seconds
         self._monotonic = monotonic
-        self._keys: dict[str, VerificationKey] = {}
-        self._expires_at = 0.0
-        self._refresh_lock = Lock()
+        self._lock = Lock()
+        self._cached_keys: dict[str, VerificationKey] = {}
+        self._document_expires_at = 0.0
 
     def get_key(self, key_id: str) -> VerificationKey:
         now = self._monotonic()
-        if now >= self._expires_at:
-            with self._refresh_lock:
-                now = self._monotonic()
-                if now >= self._expires_at:
-                    self._refresh(now)
-        try:
-            return self._keys[key_id]
-        except KeyError as error:
-            raise AuthenticationError(
-                AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
-                "signing key was not found",
-            ) from error
+        with self._lock:
+            if now >= self._document_expires_at:
+                self._refresh(now)
+            key = self._cached_keys.get(key_id)
+            if key is not None:
+                return key
+        raise AuthenticationError(
+            AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
+            "signing key was not found",
+        )
 
     def _refresh(self, now: float) -> None:
         request = Request(  # noqa: S310 - URL scheme is constrained above
@@ -146,16 +148,16 @@ class RemoteJwksProvider:
                 request,
                 timeout=self._timeout_seconds,
             ) as response:
-                try:
-                    _require_allowed_jwks_url(
-                        response.geturl(),
-                        allow_http=self._allow_http,
-                    )
-                except ValueError as error:
+                final_url = (
+                    response.geturl() if hasattr(response, "geturl") else self._jwks_url
+                )
+                if not final_url.startswith("https://") and not (
+                    self._allow_http and final_url.startswith("http://")
+                ):
                     raise AuthenticationError(
                         AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
-                        "JWKS endpoint redirected to a disallowed transport",
-                    ) from error
+                        "JWKS endpoint redirected to a non-HTTPS URL",
+                    )
                 document = json.loads(response.read())
         except (
             HTTPError,
@@ -173,32 +175,18 @@ class RemoteJwksProvider:
                 AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
                 "JWKS document is invalid",
             )
-        refreshed: dict[str, VerificationKey] = {}
+        refreshed_keys: dict[str, VerificationKey] = {}
         for raw_key in document["keys"]:
             key = _parse_rsa_jwk(raw_key)
             if key is not None:
-                if key.key_id in refreshed:
+                if key.key_id in refreshed_keys:
                     raise AuthenticationError(
                         AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
-                        "JWKS document contains duplicate signing keys",
+                        "JWKS document contains duplicate key IDs",
                     )
-                refreshed[key.key_id] = key
-        if not refreshed:
-            raise AuthenticationError(
-                AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
-                "JWKS document contains no usable signing keys",
-            )
-        self._keys = refreshed
-        self._expires_at = now + self._cache_ttl_seconds
-
-
-def _require_allowed_jwks_url(url: str, *, allow_http: bool) -> None:
-    parsed = urlsplit(url)
-    if parsed.scheme == "https" and parsed.netloc:
-        return
-    if allow_http and parsed.scheme == "http" and parsed.netloc:
-        return
-    raise ValueError("JWKS URL must use HTTPS outside explicit development")
+                refreshed_keys[key.key_id] = key
+        self._cached_keys = refreshed_keys
+        self._document_expires_at = now + self._cache_ttl_seconds
 
 
 def _parse_rsa_jwk(raw_key: object) -> VerificationKey | None:
@@ -210,11 +198,14 @@ def _parse_rsa_jwk(raw_key: object) -> VerificationKey | None:
     if raw_key["kty"] != "RSA":
         return None
     try:
-        modulus = int.from_bytes(jwt.utils.base64url_decode(raw_key["n"]))
-        exponent = int.from_bytes(jwt.utils.base64url_decode(raw_key["e"]))
+        modulus = int.from_bytes(jwt.utils.base64url_decode(raw_key["n"]), "big")
+        exponent = int.from_bytes(jwt.utils.base64url_decode(raw_key["e"]), "big")
         public_key = rsa.RSAPublicNumbers(exponent, modulus).public_key()
-    except (TypeError, ValueError):
-        return None
+    except (TypeError, ValueError) as error:
+        raise AuthenticationError(
+            AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
+            "JWKS key material is invalid",
+        ) from error
     pem = public_key.public_bytes(
         serialization.Encoding.PEM,
         serialization.PublicFormat.SubjectPublicKeyInfo,
@@ -368,44 +359,48 @@ def _verified_claims(payload: Mapping[str, object]) -> VerifiedClaims:
             AuthenticationErrorCode.INVALID_CLAIMS,
             "audience claim has an invalid type",
         )
-    asserted_tenant_id: TenantId | None = None
-    if "tenant_id" in payload:
-        raw_tenant_id = payload["tenant_id"]
-        if not isinstance(raw_tenant_id, str):
-            raise AuthenticationError(
-                AuthenticationErrorCode.INVALID_CLAIMS,
-                "tenant claim has an invalid type",
-            )
-        try:
-            asserted_tenant_id = TenantId(raw_tenant_id)
-        except ValueError as error:
-            raise AuthenticationError(
-                AuthenticationErrorCode.INVALID_CLAIMS,
-                "tenant claim has an invalid value",
-            ) from error
+    raw_tenant_id = payload.get("tenant_id", _ABSENT)
+    if raw_tenant_id is _ABSENT:
+        raw_tenant_id = None
+    elif not isinstance(raw_tenant_id, str):
+        raise AuthenticationError(
+            AuthenticationErrorCode.INVALID_CLAIMS,
+            "tenant claim has an invalid type",
+        )
+    try:
+        asserted_tenant_id = (
+            TenantId(raw_tenant_id) if raw_tenant_id is not None else None
+        )
+    except ValueError as error:
+        raise AuthenticationError(
+            AuthenticationErrorCode.INVALID_CLAIMS,
+            "tenant claim has an invalid value",
+        ) from error
     authorized_party = payload.get("azp")
     if authorized_party is not None and not isinstance(authorized_party, str):
         raise AuthenticationError(
             AuthenticationErrorCode.INVALID_CLAIMS,
             "authorized party claim has an invalid type",
         )
-    try:
-        expires_at_datetime = datetime.fromtimestamp(expires_at, UTC)
-        issued_at_datetime = datetime.fromtimestamp(issued_at, UTC)
-    except (OverflowError, OSError, ValueError) as error:
-        raise AuthenticationError(
-            AuthenticationErrorCode.INVALID_CLAIMS,
-            "token NumericDate claim is outside the supported range",
-        ) from error
     return VerifiedClaims(
         issuer=issuer,
         subject=subject,
         audiences=audiences,
-        expires_at=expires_at_datetime,
-        issued_at=issued_at_datetime,
+        expires_at=_numeric_date(expires_at, claim_name="exp"),
+        issued_at=_numeric_date(issued_at, claim_name="iat"),
         asserted_tenant_id=asserted_tenant_id,
         authorized_party=authorized_party,
     )
+
+
+def _numeric_date(value: int | float, *, claim_name: str) -> datetime:
+    try:
+        return datetime.fromtimestamp(value, UTC)
+    except (OverflowError, OSError, ValueError) as error:
+        raise AuthenticationError(
+            AuthenticationErrorCode.INVALID_CLAIMS,
+            f"{claim_name} claim has an invalid value",
+        ) from error
 
 
 @dataclass(frozen=True, slots=True)
@@ -422,7 +417,20 @@ class IdentityRecord:
     service_identity: ServiceIdentity | None = None
 
     def __post_init__(self) -> None:
-        self.to_principal()
+        if not self.issuer:
+            raise ValueError("identity record issuer must not be empty")
+        if not self.subject:
+            raise ValueError("identity record subject must not be empty")
+        has_user = self.user_id is not None
+        has_service = self.service_identity is not None
+        if has_user == has_service:
+            raise ValueError("identity record must have exactly one internal identity")
+        if self.kind is PrincipalKind.USER and not has_user:
+            raise ValueError("user identity record requires user_id")
+        if self.kind is PrincipalKind.SERVICE and not has_service:
+            raise ValueError("service identity record requires service_identity")
+        if any(binding.tenant_id != self.tenant_id for binding in self.role_bindings):
+            raise ValueError("identity record role bindings must match the tenant")
 
     def to_principal(self) -> Principal:
         return Principal(
@@ -452,7 +460,7 @@ class InMemoryIdentityDirectory:
         for record in records:
             key = (record.issuer, record.subject)
             if key in self._records:
-                raise ValueError("duplicate authoritative identity record")
+                raise ValueError("duplicate identity records are not allowed")
             self._records[key] = record
 
     def resolve(self, claims: VerifiedClaims) -> Principal:
@@ -477,6 +485,14 @@ class InMemoryIdentityDirectory:
                 "signed tenant claim does not match the identity record",
             )
         return record.to_principal()
+
+
+class AuthenticationPort(Protocol):
+    """Structural port satisfied by any callable that authenticates a bearer token."""
+
+    def authenticate(self, authorization_header: str | None) -> Principal:
+        """Raise AuthenticationError on failure; return Principal on success."""
+        ...
 
 
 class AuthenticationService:

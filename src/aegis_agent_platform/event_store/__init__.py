@@ -1,38 +1,145 @@
-"""Append-only event persistence port."""
+"""Append-only event persistence contracts."""
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
+from dataclasses import dataclass
+from datetime import datetime
+from enum import StrEnum
 from typing import Protocol
+from uuid import UUID
 
-from aegis_agent_platform.domain import EventEnvelope
+from aegis_agent_platform.domain import EventEnvelope, JsonValue
 from aegis_agent_platform.tenancy import TenantContext
 
 
+class StorageError(Exception):
+    """Base class for secret-safe, classified storage failures."""
+
+
+class TransientStorageError(StorageError):
+    """A retryable connectivity, serialization, or availability failure."""
+
+
+class PermanentStorageError(StorageError):
+    """A non-retryable schema, validation, or integrity failure."""
+
+
+class ConcurrencyError(PermanentStorageError):
+    """The aggregate version changed before an append committed."""
+
+    def __init__(self, expected: int, actual: int) -> None:
+        super().__init__(
+            f"optimistic concurrency conflict: expected {expected}, actual {actual}"
+        )
+        self.expected = expected
+        self.actual = actual
+
+
+class ReplayCorruptionError(PermanentStorageError):
+    """Committed ordering violates the gapless aggregate contract."""
+
+
+class OutboxStatus(StrEnum):
+    """Delivery projection states; event history remains authoritative."""
+
+    PENDING = "pending"
+    LEASED = "leased"
+    PUBLISHED = "published"
+    DEAD_LETTER = "dead_letter"
+
+
+@dataclass(frozen=True, slots=True)
+class OutboxMessage:
+    """Outgoing delivery committed atomically with its causing events."""
+
+    message_id: UUID
+    destination: str
+    payload: Mapping[str, JsonValue]
+    headers: Mapping[str, JsonValue]
+    available_at: datetime
+    max_attempts: int = 8
+    event_id: UUID | None = None
+
+    def __post_init__(self) -> None:
+        if not self.destination:
+            raise ValueError("outbox destination is required")
+        if self.available_at.tzinfo is None or self.available_at.utcoffset() is None:
+            raise ValueError("outbox available_at must be timezone-aware")
+        if self.max_attempts < 1:
+            raise ValueError("outbox max_attempts must be positive")
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimedOutboxMessage:
+    """Leased outbox row returned to one publisher."""
+
+    message: OutboxMessage
+    attempt_count: int
+    lease_owner: str
+    lease_expires_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class EventPage:
+    """Bounded deterministic page in global commit order."""
+
+    events: tuple[EventEnvelope, ...]
+    next_cursor: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class AppendResult:
+    """Result of a normal or inbox-deduplicated append."""
+
+    aggregate_version: int
+    duplicate: bool = False
+
+
 class EventStore(Protocol):
-    """Tenant-scoped append and read contract."""
+    """Tenant-scoped append, replay, and delivery contract."""
 
     async def append(
         self,
-        tenant: TenantContext,
-        aggregate_id: str,
+        context: TenantContext,
         events: Sequence[EventEnvelope],
         *,
         expected_version: int,
+        outbox: Sequence[OutboxMessage] = (),
     ) -> int:
-        """Append one tenant's events atomically.
+        """Append one aggregate batch and outgoing work atomically."""
+        ...
 
-        Implementations must reject envelopes whose tenant ID or aggregate ID
-        does not match the validated stream context and return its new version.
-        """
+    async def append_from_inbox(
+        self,
+        context: TenantContext,
+        *,
+        source: str,
+        message_id: str,
+        events: Sequence[EventEnvelope],
+        expected_version: int,
+        outbox: Sequence[OutboxMessage] = (),
+    ) -> AppendResult:
+        """Deduplicate one delivery and atomically commit resulting work."""
         ...
 
     def read_stream(
         self,
-        tenant: TenantContext,
+        context: TenantContext,
         aggregate_id: str,
         *,
         after_version: int = 0,
+        limit: int = 100,
     ) -> AsyncIterator[EventEnvelope]:
-        """Read an aggregate stream in committed order."""
+        """Read one aggregate in gapless committed order."""
+        ...
+
+    async def read_all(
+        self,
+        context: TenantContext,
+        *,
+        after_position: int = 0,
+        limit: int = 100,
+    ) -> EventPage:
+        """Read a bounded tenant page in global commit order."""
         ...

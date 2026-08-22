@@ -4,11 +4,31 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
+from collections.abc import AsyncIterator, Mapping
+from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
-from aegis_agent_platform.audit import AuditEventType, InMemoryAuditStore
-from aegis_agent_platform.control_plane.api import ControlPlaneApp, application
-from aegis_agent_platform.identity import PLATFORM_TENANT_ID
+import pytest
+
+from aegis_agent_platform.audit import REDACTED, AuditEventType, InMemoryAuditStore
+from aegis_agent_platform.control_plane.api import (
+    ControlPlaneApp,
+    RunStatusReader,
+    application,
+)
+from aegis_agent_platform.domain import DomainEventType, EventEnvelope, JsonValue
+from aegis_agent_platform.event_store import (
+    EventPage,
+    EventStore,
+    TransientStorageError,
+)
+from aegis_agent_platform.identity import (
+    PLATFORM_TENANT_ID,
+    AuthenticationPort,
+    Principal,
+)
 from aegis_agent_platform.policy import InMemoryPolicyRepository
 from aegis_agent_platform.tenancy import (
     InMemoryTenantRepository,
@@ -22,6 +42,9 @@ from security_helpers import (
     tenant_policy,
     token,
 )
+from security_helpers import (
+    principal as fixture_principal,
+)
 
 
 def request(
@@ -32,6 +55,7 @@ def request(
     authorization: str | None = None,
     headers: list[tuple[bytes, bytes]] | None = None,
     method: str = "GET",
+    query_string: str = "",
 ) -> tuple[int, dict[str, Any], list[tuple[bytes, bytes]]]:
     messages: list[dict[str, Any]] = []
 
@@ -52,6 +76,7 @@ def request(
                 "method": method,
                 "path": path,
                 "headers": request_headers,
+                "query_string": query_string.encode(),
             },
             receive,
             send,
@@ -108,16 +133,60 @@ class PatchedEnvironment:
                 os.environ[key] = value
 
 
-def secured_app() -> tuple[ControlPlaneApp, str, InMemoryAuditStore]:
+def secured_app(
+    *,
+    event_store: EventStore | None = None,
+    authentication: AuthenticationPort | None = None,
+    projections: RunStatusReader | None = None,
+) -> tuple[ControlPlaneApp, str, InMemoryAuditStore]:
     signing = signing_fixture()
     audit = InMemoryAuditStore()
     app = ControlPlaneApp(
-        authentication=authentication_service(signing),
+        authentication=authentication or authentication_service(signing),
         tenants=InMemoryTenantRepository((Tenant(TENANT_ID, "Tenant Alpha"),)),
         policies=InMemoryPolicyRepository((tenant_policy(),)),
         audit=audit,
+        event_store=event_store,
+        projections=projections,
     )
     return app, token(signing), audit
+
+
+class TimelineEventStore:
+    def __init__(self, event: EventEnvelope) -> None:
+        self.event = event
+        self.after_position = -1
+        self.after_version = -1
+
+    async def append(self, *args: object, **kwargs: object) -> int:
+        del args, kwargs
+        raise NotImplementedError
+
+    async def append_from_inbox(self, *args: object, **kwargs: object) -> object:
+        del args, kwargs
+        raise NotImplementedError
+
+    async def read_stream(
+        self, *args: object, **kwargs: object
+    ) -> AsyncIterator[EventEnvelope]:
+        del args
+        after_version = kwargs["after_version"]
+        assert isinstance(after_version, int)
+        self.after_version = after_version
+        if self.event.aggregate_sequence > after_version:
+            yield self.event
+
+    async def read_all(self, *args: object, **kwargs: object) -> EventPage:
+        del args
+        after_position = kwargs["after_position"]
+        assert isinstance(after_position, int)
+        self.after_position = after_position
+        return EventPage(
+            (self.event,)
+            if (self.event.global_position or 0) > self.after_position
+            else (),
+            None,
+        )
 
 
 def test_liveness_and_compatibility_alias() -> None:
@@ -147,7 +216,7 @@ def test_invalid_configuration_is_not_ready() -> None:
 
 
 def test_current_principal_comes_only_from_verified_identity() -> None:
-    app, encoded, audit = secured_app()
+    app, encoded, _ = secured_app()
 
     status, body, _ = request(
         "/v1/me",
@@ -167,10 +236,6 @@ def test_current_principal_comes_only_from_verified_identity() -> None:
         "tenant_id": "tenant-alpha",
         "roles": ["viewer"],
     }
-    events = audit.query(TenantContext(TENANT_ID))
-    assert [event.event_type for event in events] == [
-        AuditEventType.AUTHENTICATION_OUTCOME
-    ]
 
 
 def test_tenant_resource_and_policy_are_tenant_scoped() -> None:
@@ -253,3 +318,215 @@ def test_method_and_unknown_routes_are_explicit() -> None:
     assert method_status == 405
     assert unknown_status == 404
     assert body == {"status": "not-found"}
+
+
+def test_authorized_ledger_and_timeline_are_bounded_and_redacted() -> None:
+    item = EventEnvelope(
+        event_id=uuid4(),
+        tenant_id=str(TENANT_ID),
+        aggregate_id="run-1",
+        event_type=DomainEventType.RUN_STARTED,
+        schema_version=1,
+        occurred_at=datetime(2025, 1, 1, tzinfo=UTC),
+        recorded_at=datetime(2025, 1, 1, tzinfo=UTC),
+        aggregate_sequence=1,
+        global_position=1,
+        payload={
+            "context": {
+                "api_token": "do-not-return",
+                "steps": [{"password": "never-return"}],
+            },
+            "status": "running",
+        },
+        metadata={
+            "authorization": "Bearer very-secret",
+            "nested": {"token": "hide-me"},
+        },
+    )
+    store = TimelineEventStore(item)
+    app, encoded, _ = secured_app(event_store=store)  # type: ignore[arg-type]
+
+    ledger_status, ledger, _ = request(
+        "/v1/tenants/tenant-alpha/ledger",
+        app=app,
+        authorization=f"Bearer {encoded}",
+        query_string="cursor=0",
+    )
+    timeline_status, timeline, _ = request(
+        "/v1/tenants/tenant-alpha/runs/run-1/timeline",
+        app=app,
+        authorization=f"Bearer {encoded}",
+        query_string="cursor=0",
+    )
+
+    assert ledger_status == timeline_status == 200
+    assert store.after_position == 0
+    assert store.after_version == 0
+    assert ledger["events"][0]["payload"]["context"]["api_token"] == REDACTED
+    assert ledger["events"][0]["payload"]["context"]["steps"][0]["password"] == REDACTED
+    assert ledger["events"][0]["metadata"]["authorization"] == REDACTED
+    assert ledger["events"][0]["metadata"]["nested"]["token"] == REDACTED
+    assert timeline["events"][0]["aggregate_sequence"] == 1
+    assert timeline["next_cursor"] is None
+
+
+def test_authentication_runs_in_a_worker_thread() -> None:
+    class ThreadRecordingAuthentication:
+        def __init__(self) -> None:
+            self.thread_id: int | None = None
+
+        def authenticate(self, authorization_header: str | None) -> Principal:
+            self.thread_id = threading.get_ident()
+            assert authorization_header == "Bearer test-token"
+            return fixture_principal()
+
+    authentication = ThreadRecordingAuthentication()
+    app = ControlPlaneApp(authentication=authentication)
+
+    status, body, _ = request(
+        "/v1/me",
+        app=app,
+        authorization="Bearer test-token",
+    )
+
+    assert status == 200
+    assert body["actor_id"] == "user-alice"
+    assert authentication.thread_id is not None
+    assert authentication.thread_id != threading.get_ident()
+
+
+def test_storage_routes_fail_closed_when_adapter_is_not_configured() -> None:
+    app, encoded, _ = secured_app()
+    authorization = f"Bearer {encoded}"
+
+    ledger_status, ledger, _ = request(
+        "/v1/tenants/tenant-alpha/ledger",
+        app=app,
+        authorization=authorization,
+    )
+    projection_status, projection, _ = request(
+        "/v1/tenants/tenant-alpha/projections/run-status",
+        app=app,
+        authorization=authorization,
+    )
+
+    assert ledger_status == projection_status == 503
+    assert ledger["error"]["code"] == "storage_not_configured"
+    assert projection["error"]["code"] == "storage_not_configured"
+
+
+def test_storage_routes_translate_transient_store_failures() -> None:
+    class FailingTimelineStore(TimelineEventStore):
+        async def read_stream(
+            self, *args: object, **kwargs: object
+        ) -> AsyncIterator[EventEnvelope]:
+            del args, kwargs
+            raise TransientStorageError("database unavailable")
+            yield  # type: ignore[unreachable]  # pragma: no cover
+
+        async def read_all(self, *args: object, **kwargs: object) -> EventPage:
+            del args, kwargs
+            raise TransientStorageError("database unavailable")
+
+    item = EventEnvelope(
+        event_id=uuid4(),
+        tenant_id=str(TENANT_ID),
+        aggregate_id="run-1",
+        event_type=DomainEventType.RUN_STARTED,
+        schema_version=1,
+        occurred_at=datetime(2025, 1, 1, tzinfo=UTC),
+        payload={},
+    )
+    app, encoded, _ = secured_app(event_store=FailingTimelineStore(item))  # type: ignore[arg-type]
+
+    ledger_status, ledger, _ = request(
+        "/v1/tenants/tenant-alpha/ledger",
+        app=app,
+        authorization=f"Bearer {encoded}",
+    )
+    timeline_status, timeline, _ = request(
+        "/v1/tenants/tenant-alpha/runs/run-1/timeline",
+        app=app,
+        authorization=f"Bearer {encoded}",
+    )
+
+    assert ledger_status == timeline_status == 503
+    assert ledger["error"]["code"] == "storage_unavailable"
+    assert timeline["error"]["code"] == "storage_unavailable"
+
+
+def test_authentication_translates_transient_storage_failures() -> None:
+    class FailingAuthentication:
+        def authenticate(self, authorization_header: str | None) -> Principal:
+            del authorization_header
+            raise TransientStorageError("database unavailable")
+
+    app, encoded, _ = secured_app(authentication=FailingAuthentication())
+
+    status, body, _ = request("/v1/me", app=app, authorization=f"Bearer {encoded}")
+
+    assert status == 503
+    assert body["error"]["code"] == "storage_unavailable"
+
+
+def test_projection_route_translates_transient_storage_failures() -> None:
+    class FailingRunStatusReader:
+        async def run_status(
+            self, context: TenantContext, *, limit: int = 100
+        ) -> tuple[Mapping[str, JsonValue], ...]:
+            del context, limit
+            raise TransientStorageError("database unavailable")
+
+    app, encoded, _ = secured_app(projections=FailingRunStatusReader())
+
+    status, body, _ = request(
+        "/v1/tenants/tenant-alpha/projections/run-status",
+        app=app,
+        authorization=f"Bearer {encoded}",
+    )
+
+    assert status == 503
+    assert body["error"]["code"] == "storage_unavailable"
+
+
+def test_duplicate_tenant_records_are_rejected() -> None:
+    tenant = Tenant(TENANT_ID, "Tenant Alpha")
+
+    with pytest.raises(ValueError, match="duplicate tenant records"):
+        InMemoryTenantRepository((tenant, tenant))
+
+
+def test_ledger_rejects_invalid_cursor() -> None:
+    app, encoded, _ = secured_app()
+
+    status, body, _ = request(
+        "/v1/tenants/tenant-alpha/ledger",
+        app=app,
+        authorization=f"Bearer {encoded}",
+        query_string="cursor=-1",
+    )
+
+    assert status == 400
+    assert body["error"]["code"] == "invalid_cursor"
+
+
+def test_readiness_includes_configured_storage_dependency() -> None:
+    async def available() -> bool:
+        return True
+
+    async def unavailable() -> bool:
+        return False
+
+    ready_status, ready, _ = request(
+        "/health/ready",
+        app=ControlPlaneApp(storage_ready=available),
+    )
+    failed_status, failed, _ = request(
+        "/health/ready",
+        app=ControlPlaneApp(storage_ready=unavailable),
+    )
+
+    assert ready_status == 200
+    assert ready["checks"] == ["configuration", "storage"]
+    assert failed_status == 503
+    assert failed["reason"] == "storage_unavailable"

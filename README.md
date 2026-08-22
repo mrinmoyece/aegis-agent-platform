@@ -14,18 +14,14 @@ deployments, Kubernetes/runtime changes, and runbooks. This narrow story makes
 durability, evidence provenance, authorization, and safe effects testable end
 to end.
 
-> **Current status: Layer 2 — Identity and tenancy governance.** Layer 1's
-> contracts and guardrails are joined by a small, real control-plane vertical
-> slice: standards-correct local JWT verification (signature, issuer,
-> audience, expiry, key rotation via JWKS) against deterministic fixtures, a
-> Keycloak-compatible JWKS/issuer/audience configuration abstraction, deny-by-
-> default tenant authorization with fixed roles, tenant-scoped policy and
-> quota evaluation, redacted append-only security audit events, a secret
-> reference abstraction, and a Postgres migration adding tenant row-level
-> security. Live network reachability to a running Keycloak realm is
-> deployment-dependent and not exercised by the fast local checks. Durable
-> event-sourced runtime, queue workers, and live Dynatrace/GitHub connectors
-> remain planned in later layers. See
+> **Current status: Layer 3 — Durable PostgreSQL ledger.** Layer 2 identity and
+> governance now have production PostgreSQL repositories and live forced-RLS
+> tests. Layer 3 adds additive immutable event envelopes, expected-version
+> atomic append, transactional inbox/outbox, deterministic replay, rebuildable
+> projections/checkpoints, append-only event/audit enforcement, tenant-scoped
+> ledger/timeline read APIs, and PostgreSQL 16 migration/concurrency tests.
+> Redis workers, model calls, live evidence connectors, agent execution, and
+> external effects remain planned. See
 > [Limitations and production gaps](docs/limitations.md) for the complete,
 > honest gap list.
 
@@ -43,9 +39,10 @@ to end.
 ## Learning path
 
 1. **Foundation:** boundaries, invariants, tooling, local stack.
-2. **Identity and tenancy (current):** authenticated principals, deny-by-default
+2. **Identity and tenancy:** authenticated principals, deny-by-default
    tenant authorization, policy/quota governance, and audit evidence.
-3. **Durable orchestration:** event-backed runs and deterministic transitions.
+3. **Durable persistence (current):** event ledger, inbox/outbox, projections,
+   replay, and PostgreSQL tenant controls.
 4. **Workers and leases:** reliable claiming, retries, and recovery.
 5. **Tools and sandboxing:** policy-gated effects and isolation.
 6. **Memory and retrieval:** tenant-safe context with provenance.
@@ -113,6 +110,8 @@ into a structured learning path.
 src/aegis_agent_platform/  Importable platform boundaries
   integrations/            Typed future integration ports; no connectors yet
   agents/                  Fixed roles and typed coordination artifacts
+  event_store/             PostgreSQL ledger, inbox/outbox, and projections
+  persistence/             PostgreSQL identity/governance repositories
 tests/                     Fast foundation and architecture tests
 docs/                      Architecture, threat model, roadmap, and ADRs
 deploy/                    Local observability configuration

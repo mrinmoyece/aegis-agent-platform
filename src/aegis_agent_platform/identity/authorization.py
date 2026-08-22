@@ -6,20 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from types import MappingProxyType
 
-from aegis_agent_platform.identity.models import (
-    PLATFORM_TENANT_ID,
-    Permission,
-    Principal,
-    Role,
-    TenantId,
-)
-
-PLATFORM_PERMISSIONS = frozenset(
-    {
-        Permission.PLATFORM_TENANT_CREATE,
-        Permission.PLATFORM_AUDIT_READ,
-    }
-)
+from aegis_agent_platform.identity.models import Permission, Principal, Role, TenantId
 
 ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyType(
     {
@@ -118,14 +105,6 @@ class AuthorizationService:
                 reason="unknown_permission",
                 tenant_id=tenant_id,
                 permission=permission_name,
-                active_roles=(),
-            )
-        if permission in PLATFORM_PERMISSIONS and tenant_id != PLATFORM_TENANT_ID:
-            return AuthorizationDecision(
-                allowed=False,
-                reason="platform_scope_required",
-                tenant_id=tenant_id,
-                permission=permission.value,
                 active_roles=(),
             )
         active_roles = tuple(

@@ -82,9 +82,9 @@ Each slice is intended to be a reviewable PR with one primary acceptance gate.
 Layer 2 implements the EP-01 verification/principal core and the EP-02
 application authorization model, tenant-scoped repository contracts, SQL
 schema, RLS policies, and negative application tests. The live Keycloak
-rotation/revocation drill, PostgreSQL-backed adapters, separate database roles,
-and database-level cross-tenant denial suite remain required before the full
-EP-01/EP-02 operational exit gate can be claimed.
+rotation/revocation drill still remains before the full EP-01/EP-02 operational
+exit gate can be claimed. PostgreSQL-backed adapters, separate database roles,
+and the database-level cross-tenant denial suite are implemented in this layer.
 
 ### Implementation
 
@@ -122,6 +122,14 @@ No authenticated request can access an authoritative resource without explicit
 tenant authorization, and the negative test matrix proves isolation.
 
 ## EP-03–EP-05: Event persistence and durable orchestration
+
+**Layer 3 delivery status (2026-08):** EP-03 persistence, EP-04 generic
+projection/checkpoint mechanics, and EP-05 inbox/outbox transaction mechanics are
+implemented in `event_store.postgres`, `projections`, and migration `0002`.
+Live PostgreSQL tests prove expected-version races, rollback, append-only rows,
+RLS denial, replay, inbox deduplication, outbox claim/dead-letter behavior, and
+projection rebuild. The incident-specific state machine, external effects, and
+ambiguous-effect reconciliation remain planned; their exit gates are not claimed.
 
 ### Storage model
 

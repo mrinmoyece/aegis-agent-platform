@@ -105,6 +105,18 @@ def main() -> None:
             "compose.yaml missing services: " + ", ".join(sorted(missing_services))
         )
 
+    database_url = services["api"]["environment"]["AEGIS_DATABASE_URL"]
+    if "aegis_runtime:" not in database_url:
+        raise SystemExit("API database URL must use the non-superuser runtime login")
+    init_mounts = services["postgres"]["volumes"]
+    if not any("40-create-app-user.sh" in volume for volume in init_mounts):
+        raise SystemExit("PostgreSQL must create the restricted runtime login")
+    runtime_init = (ROOT / "docker" / "postgres" / "40-create-app-user.sh").read_text(
+        encoding="utf-8"
+    )
+    if "LOGIN INHERIT NOBYPASSRLS" not in runtime_init:
+        raise SystemExit("runtime database login must inherit only the app role")
+
     for service_name, service in services.items():
         for port in service.get("ports", []):
             rendered = port if isinstance(port, str) else str(port)

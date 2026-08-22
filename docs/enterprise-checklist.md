@@ -12,7 +12,7 @@ Status meanings:
 | Typed Python package and strict checks | Implemented | `pyproject.toml`, `Makefile`, CI |
 | Architecture dependency rule | Implemented | `tests/test_architecture.py` |
 | Liveness and configuration readiness | Implemented | control-plane ASGI tests |
-| Local pgvector PostgreSQL | Scaffolded | `compose.yaml` |
+| Local pgvector PostgreSQL | Implemented | Compose plus live PostgreSQL 16 tests |
 | Local Redis | Scaffolded | `compose.yaml` |
 | Local OIDC realm | Scaffolded | Keycloak import |
 | OTLP, Prometheus, and Grafana topology | Scaffolded | `deploy/` |
@@ -44,14 +44,17 @@ Status meanings:
 | Live Keycloak network round-trip and key-rotation drills | Planned | Layer 2, deployment-dependent |
 | Cross-tenant, expired-token, revoked-role, and quota/policy negative-test suite | Implemented | `tests/test_identity_security.py`, `tests/test_policy_security.py`, `tests/test_audit_secrets.py`, `tests/test_api.py` |
 | EP-01 OIDC key-rotation and emergency-revocation drill | Planned | EP-01 operational exit evidence |
-| EP-02 durable Postgres RLS enforcement proven against a live database | Planned | EP-02 database exit evidence |
-| Durable Postgres-backed identity/tenant/policy/audit adapters | Planned | Layer 3–4; schema in `migrations/0001_identity_governance.sql` |
+| EP-02 durable Postgres RLS enforcement proven against a live database | Implemented | `tests/integration/test_postgres_storage.py` forced-RLS and append-only coverage |
+| Durable Postgres-backed identity/tenant/policy/audit adapters | Implemented | `persistence.postgres`, live RLS/audit tests |
 | Vault-backed secret broker with rotation | Planned | Layer 5 |
-| Quota usage accounting from authoritative runtime state | Planned | Layer 3–4 |
-| Append-only event store | Planned | Layer 3 |
-| Additive event upcasting | Planned | Layer 3 |
-| Deterministic run state machine | Planned | Layer 3 |
-| Intent-before-side-effect enforcement | Planned | Layer 3 |
+| Quota usage accounting projection | Implemented | Rebuildable usage view; runtime emission planned |
+| Append-only event store | Implemented | `PostgresEventStore`, migration `0002`, live race/immutability tests |
+| Additive event compatibility | Implemented | additive defaults and legacy fixture replay |
+| Deterministic run state machine | Planned | Layer 4; generic run-status projection exists |
+| Intent-before-side-effect enforcement | Scaffolded | typed intent/result events; no effect path exists |
+| Transactional inbox/outbox | Implemented | deduplication, atomic append, claims, retry/DLQ |
+| Rebuildable projections/checkpoints | Implemented | run/artifact/approval/usage/tenant views |
+| Authorized ledger/timeline inspection | Implemented | tenant-scoped redacted read-only API |
 | Durable queue and fenced leases | Planned | Layer 4 |
 | Retry, timeout, dead-letter, and recovery policy | Planned | Layer 4 |
 | Provider adapters and normalized metering | Planned | Layer 4 |

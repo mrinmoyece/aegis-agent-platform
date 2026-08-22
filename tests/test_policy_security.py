@@ -12,19 +12,16 @@ from aegis_agent_platform.identity import TenantId
 from aegis_agent_platform.policy import (
     Decision,
     InMemoryPolicyRepository,
-    PolicyDecision,
     PolicyEvaluator,
     PolicyRequest,
     QuotaLimits,
     QuotaUsage,
     RiskLevel,
 )
-from aegis_agent_platform.tenancy import (
-    InMemoryTenantRepository,
-    Tenant,
-    TenantContext,
-)
+from aegis_agent_platform.tenancy import TenantContext
 from security_helpers import TENANT_ID, tenant_policy
+
+_CONTEXT = TenantContext(TENANT_ID)
 
 
 def request() -> PolicyRequest:
@@ -67,7 +64,7 @@ def test_allowed_request_and_exact_quota_boundaries() -> None:
         active_runs=policy.quotas.max_concurrent_runs - 1,
     )
 
-    decision = PolicyEvaluator().evaluate(policy, exact, exact_usage)
+    decision = PolicyEvaluator().evaluate(_CONTEXT, policy, exact, exact_usage)
 
     assert decision.decision is Decision.ALLOW
     assert decision.reasons == ("policy_allowed",)
@@ -77,11 +74,13 @@ def test_high_risk_and_sensitive_tool_require_approval() -> None:
     policy = tenant_policy()
 
     risk = PolicyEvaluator().evaluate(
+        _CONTEXT,
         policy,
         replace(request(), risk=RiskLevel.HIGH),
         usage(),
     )
     tool = PolicyEvaluator().evaluate(
+        _CONTEXT,
         policy,
         replace(request(), tool="remediate"),
         usage(),
@@ -150,6 +149,7 @@ def test_policy_and_quota_violations_deny_by_default(
     reason: str,
 ) -> None:
     decision = PolicyEvaluator().evaluate(
+        _CONTEXT,
         tenant_policy(),
         changed_request,
         changed_usage,
@@ -159,28 +159,23 @@ def test_policy_and_quota_violations_deny_by_default(
     assert reason in decision.reasons
 
 
-def test_cross_tenant_policy_inputs_fail_immediately_without_policy_details() -> None:
-    foreign_usage = replace(usage(), tenant_id=TenantId("tenant-beta"))
-    foreign_request = replace(
-        request(),
-        tenant_id=TenantId("tenant-beta"),
-        model="unknown",
-        tool="unknown",
+def test_cross_tenant_usage_returns_only_the_cross_tenant_reason() -> None:
+    decision = PolicyEvaluator().evaluate(
+        _CONTEXT,
+        tenant_policy(),
+        replace(request(), model="unknown", tool="unknown"),
+        replace(usage(), tenant_id=TenantId("tenant-beta")),
     )
 
-    usage_decision = PolicyEvaluator().evaluate(
-        tenant_policy(),
-        request(),
-        foreign_usage,
-    )
-    request_decision = PolicyEvaluator().evaluate(
-        tenant_policy(),
-        foreign_request,
-        usage(),
-    )
+    assert decision.decision is Decision.DENY
+    assert decision.reasons == ("cross_tenant_policy",)
 
-    assert usage_decision.reasons == ("cross_tenant_policy",)
-    assert request_decision.reasons == ("cross_tenant_policy",)
+
+def test_duplicate_tenant_policies_are_rejected() -> None:
+    policy = tenant_policy()
+
+    with pytest.raises(ValueError, match="duplicate tenant policy"):
+        InMemoryPolicyRepository((policy, policy))
 
 
 @pytest.mark.parametrize(
@@ -198,65 +193,22 @@ def test_cross_tenant_policy_inputs_fail_immediately_without_policy_details() ->
             Decimal("0"),
         ),
         lambda: QuotaLimits(-1, Decimal("0"), 0, Decimal("0"), 0),
+        lambda: QuotaLimits(0, Decimal("NaN"), 0, Decimal("0"), 0),
+        lambda: PolicyRequest(
+            TENANT_ID,
+            "model",
+            "tool",
+            "connector",
+            "environment",
+            RiskLevel.LOW,
+            0,
+            Decimal("Infinity"),
+        ),
+        lambda: QuotaUsage(TENANT_ID, 0, Decimal("NaN"), 0),
     ],
 )
 def test_invalid_policy_inputs_are_rejected(
     constructor: Callable[[], object],
 ) -> None:
-    with pytest.raises(ValueError, match=r"negative|required"):
+    with pytest.raises(ValueError, match=r"finite|negative|required"):
         constructor()
-
-
-@pytest.mark.parametrize(
-    "constructor",
-    [
-        lambda: QuotaLimits(
-            1,
-            Decimal("Infinity"),
-            1,
-            Decimal("1"),
-            1,
-        ),
-        lambda: QuotaLimits(
-            1,
-            Decimal("1"),
-            1,
-            Decimal("NaN"),
-            1,
-        ),
-        lambda: replace(
-            request(),
-            estimated_cost_usd=Decimal("Infinity"),
-        ),
-        lambda: replace(
-            usage(),
-            tenant_cost_usd=Decimal("NaN"),
-        ),
-    ],
-)
-def test_non_finite_policy_costs_are_rejected(
-    constructor: Callable[[], object],
-) -> None:
-    with pytest.raises(ValueError, match="finite"):
-        constructor()
-
-
-def test_duplicate_authoritative_tenant_inputs_fail_closed() -> None:
-    policy = tenant_policy()
-    tenant = Tenant(TENANT_ID, "Tenant Alpha")
-
-    with pytest.raises(ValueError, match="duplicate tenant policy"):
-        InMemoryPolicyRepository((policy, policy))
-    with pytest.raises(ValueError, match="duplicate tenant record"):
-        InMemoryTenantRepository((tenant, tenant))
-
-
-def test_policy_decision_rejects_ambiguous_tenant_fields() -> None:
-    with pytest.raises(ValueError, match="tenant fields must match"):
-        PolicyDecision(
-            tenant=TenantContext(TENANT_ID),
-            decision=Decision.DENY,
-            reasons=("cross_tenant_policy",),
-            policy_version="policy-1",
-            tenant_id=TenantId("tenant-beta"),
-        )

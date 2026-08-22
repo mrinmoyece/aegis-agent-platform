@@ -105,9 +105,9 @@ class RoleBinding:
     revoked_at: datetime | None = None
 
     def __post_init__(self) -> None:
-        if self.role is Role.PLATFORM_ADMIN and self.tenant_id != PLATFORM_TENANT_ID:
-            raise ValueError("platform_admin must be bound to the platform tenant")
         require_aware_datetime(self.assigned_at, field_name="assigned_at")
+        if self.role is Role.PLATFORM_ADMIN and self.tenant_id != PLATFORM_TENANT_ID:
+            raise ValueError("platform_admin bindings require the platform tenant")
         if self.expires_at is not None:
             require_aware_datetime(self.expires_at, field_name="expires_at")
             if self.expires_at <= self.assigned_at:

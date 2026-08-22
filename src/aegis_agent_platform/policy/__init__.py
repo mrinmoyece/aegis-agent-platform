@@ -11,6 +11,13 @@ from aegis_agent_platform.identity import Role, TenantId
 from aegis_agent_platform.tenancy import TenantContext
 
 
+def _require_finite_non_negative_decimal(value: Decimal, name: str) -> None:
+    if not value.is_finite():
+        raise ValueError(f"{name} must be finite")
+    if value < 0:
+        raise ValueError(f"{name} cannot be negative")
+
+
 class Decision(StrEnum):
     """Possible governance outcomes before a side effect is attempted."""
 
@@ -46,9 +53,14 @@ class QuotaLimits:
         )
         if any(value < 0 for value in numeric):
             raise ValueError("quota integer limits cannot be negative")
-        costs = (self.max_run_cost_usd, self.max_tenant_cost_usd_per_period)
-        if any(not value.is_finite() or value < 0 for value in costs):
-            raise ValueError("quota cost limits must be finite and non-negative")
+        _require_finite_non_negative_decimal(
+            self.max_run_cost_usd,
+            "max_run_cost_usd",
+        )
+        _require_finite_non_negative_decimal(
+            self.max_tenant_cost_usd_per_period,
+            "max_tenant_cost_usd_per_period",
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,14 +103,12 @@ class PolicyRequest:
         names = (self.model, self.tool, self.connector, self.environment)
         if any(not value for value in names):
             raise ValueError("policy request selectors are required")
-        if (
-            self.estimated_tokens < 0
-            or not self.estimated_cost_usd.is_finite()
-            or self.estimated_cost_usd < 0
-        ):
-            raise ValueError(
-                "estimated quota consumption must be finite and non-negative"
-            )
+        if self.estimated_tokens < 0:
+            raise ValueError("estimated tokens cannot be negative")
+        _require_finite_non_negative_decimal(
+            self.estimated_cost_usd,
+            "estimated_cost_usd",
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,29 +121,23 @@ class QuotaUsage:
     active_runs: int
 
     def __post_init__(self) -> None:
-        if (
-            self.tenant_tokens_used < 0
-            or not self.tenant_cost_usd.is_finite()
-            or self.tenant_cost_usd < 0
-            or self.active_runs < 0
-        ):
-            raise ValueError("quota usage must be finite and non-negative")
+        if self.tenant_tokens_used < 0 or self.active_runs < 0:
+            raise ValueError("quota usage cannot be negative")
+        _require_finite_non_negative_decimal(
+            self.tenant_cost_usd,
+            "tenant_cost_usd",
+        )
 
 
 @dataclass(frozen=True, slots=True)
 class PolicyDecision:
     """Auditable deterministic governance result."""
 
-    tenant: TenantContext
     decision: Decision
     reasons: tuple[str, ...]
     policy_version: str
     tenant_id: TenantId
     required_approver_roles: tuple[Role, ...] = ()
-
-    def __post_init__(self) -> None:
-        if self.tenant.tenant_id != self.tenant_id:
-            raise ValueError("policy decision tenant fields must match")
 
 
 class PolicyEvaluator:
@@ -141,13 +145,20 @@ class PolicyEvaluator:
 
     def evaluate(
         self,
+        context: TenantContext,
         policy: TenantPolicy,
         request: PolicyRequest,
         usage: QuotaUsage,
     ) -> PolicyDecision:
-        if request.tenant_id != policy.tenant_id or usage.tenant_id != policy.tenant_id:
+        # All mutable inputs are validated against the trusted context so a
+        # caller cannot obtain a decision for a foreign tenant by supplying a
+        # mutually-consistent but unauthorised triple.
+        if (
+            policy.tenant_id != context.tenant_id
+            or request.tenant_id != context.tenant_id
+            or usage.tenant_id != context.tenant_id
+        ):
             return PolicyDecision(
-                tenant=TenantContext(policy.tenant_id),
                 decision=Decision.DENY,
                 reasons=("cross_tenant_policy",),
                 policy_version=policy.version,
@@ -188,7 +199,6 @@ class PolicyEvaluator:
             reasons.append("tenant_concurrency_limit_exceeded")
         if reasons:
             return PolicyDecision(
-                tenant=TenantContext(policy.tenant_id),
                 decision=Decision.DENY,
                 reasons=tuple(reasons),
                 policy_version=policy.version,
@@ -199,7 +209,6 @@ class PolicyEvaluator:
             or request.tool in policy.tools_requiring_approval
         )
         return PolicyDecision(
-            tenant=TenantContext(policy.tenant_id),
             decision=(
                 Decision.REQUIRE_APPROVAL if requires_approval else Decision.ALLOW
             ),
@@ -231,7 +240,7 @@ class InMemoryPolicyRepository:
         self._policies: dict[TenantId, TenantPolicy] = {}
         for policy in policies:
             if policy.tenant_id in self._policies:
-                raise ValueError("duplicate tenant policy")
+                raise ValueError("duplicate tenant policy is not allowed")
             self._policies[policy.tenant_id] = policy
 
     def get(self, context: TenantContext) -> TenantPolicy | None:

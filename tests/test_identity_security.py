@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import json
-from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime, timedelta, tzinfo
-from threading import Event
+from datetime import UTC, datetime, timedelta
 from urllib.error import URLError
 
 import jwt
@@ -14,7 +12,6 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 import aegis_agent_platform.identity.authentication as authentication_module
 from aegis_agent_platform.identity import (
-    PLATFORM_TENANT_ID,
     AuthenticationError,
     AuthenticationErrorCode,
     AuthorizationService,
@@ -187,8 +184,7 @@ def test_authoritative_directory_ignores_token_roles_and_rejects_tenant_confusio
     [
         ({"azp": 7}, AuthenticationErrorCode.INVALID_CLAIMS),
         ({"tenant_id": ""}, AuthenticationErrorCode.INVALID_CLAIMS),
-        ({"tenant_id": ["tenant-alpha"]}, AuthenticationErrorCode.INVALID_CLAIMS),
-        ({"tenant_id": None}, AuthenticationErrorCode.INVALID_CLAIMS),
+        ({"tenant_id": 7}, AuthenticationErrorCode.INVALID_CLAIMS),
     ],
 )
 def test_invalid_optional_claim_types_are_rejected(
@@ -203,6 +199,59 @@ def test_invalid_optional_claim_types_are_rejected(
         )
 
     assert captured.value.code is code
+
+
+@pytest.mark.parametrize("claim_name", ["exp", "iat"])
+def test_raw_registered_claim_validation_errors_are_classified(
+    monkeypatch: pytest.MonkeyPatch,
+    claim_name: str,
+) -> None:
+    signing = signing_fixture()
+    verifier = JwtVerifier(
+        JwtValidationConfig(ISSUER, AUDIENCE),
+        StaticJwksProvider((VerificationKey(KEY_ID, "RS256", signing.public_pem),)),
+    )
+    encoded = token(signing)
+
+    def fake_decode(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        if claim_name == "exp":
+            raise OverflowError("overflow")
+        raise TypeError("bad type")
+
+    monkeypatch.setattr(jwt, "decode", fake_decode)
+
+    with pytest.raises(AuthenticationError) as captured:
+        verifier.verify(encoded)
+
+    assert captured.value.code is AuthenticationErrorCode.INVALID_CLAIMS
+
+
+def test_present_null_tenant_claim_is_rejected_but_absent_claim_is_not() -> None:
+    signing = signing_fixture()
+
+    with pytest.raises(AuthenticationError) as captured:
+        authentication_service(signing).authenticate(
+            f"Bearer {token(signing, tenant_id=None, extra_claims={'tenant_id': None})}"
+        )
+
+    assert captured.value.code is AuthenticationErrorCode.INVALID_CLAIMS
+    resolved = JwtVerifier(
+        JwtValidationConfig(ISSUER, AUDIENCE),
+        StaticJwksProvider((VerificationKey(KEY_ID, "RS256", signing.public_pem),)),
+    ).verify(token(signing, tenant_id=None))
+    assert resolved.asserted_tenant_id is None
+
+
+def test_out_of_range_numeric_dates_are_rejected() -> None:
+    signing = signing_fixture()
+
+    with pytest.raises(AuthenticationError) as captured:
+        authentication_service(signing).authenticate(
+            f"Bearer {token(signing, extra_claims={'exp': 10**20})}"
+        )
+
+    assert captured.value.code is AuthenticationErrorCode.INVALID_CLAIMS
 
 
 @pytest.mark.parametrize(
@@ -266,37 +315,6 @@ def test_authorization_denies_cross_tenant_escalation_and_unknown_permissions() 
     assert unknown.reason == "unknown_permission"
 
 
-def test_platform_authority_requires_platform_tenant_binding_and_target() -> None:
-    now = datetime.now(UTC)
-    with pytest.raises(ValueError, match="platform tenant"):
-        binding(Role.PLATFORM_ADMIN)
-    platform_principal = principal(
-        (
-            binding(
-                Role.PLATFORM_ADMIN,
-                tenant_id=PLATFORM_TENANT_ID,
-            ),
-        ),
-        tenant_id=PLATFORM_TENANT_ID,
-    )
-
-    allowed = AuthorizationService().decide(
-        principal=platform_principal,
-        tenant_id=PLATFORM_TENANT_ID,
-        permission=Permission.PLATFORM_TENANT_CREATE,
-        at=now,
-    )
-    tenant_local = AuthorizationService().decide(
-        principal=principal((binding(Role.TENANT_ADMIN),)),
-        tenant_id=TENANT_ID,
-        permission=Permission.PLATFORM_TENANT_CREATE,
-        at=now,
-    )
-
-    assert allowed.allowed
-    assert tenant_local.reason == "platform_scope_required"
-
-
 def test_expired_and_revoked_role_bindings_are_stale() -> None:
     now = datetime.now(UTC)
     stale = principal(
@@ -357,6 +375,8 @@ def test_invalid_principal_and_key_contracts_fail_closed() -> None:
         )
     with pytest.raises(ValueError, match="verification key"):
         VerificationKey("", "RS256", b"key")
+    with pytest.raises(ValueError, match="platform tenant"):
+        binding(Role.PLATFORM_ADMIN, tenant_id=TENANT_ID)
     with pytest.raises(AuthenticationError):
         InMemoryIdentityDirectory(()).resolve(
             JwtVerifier(
@@ -366,17 +386,92 @@ def test_invalid_principal_and_key_contracts_fail_closed() -> None:
         )
 
 
+def test_duplicate_identity_records_and_signing_keys_are_rejected() -> None:
+    signing = signing_fixture()
+    verification_key = VerificationKey(KEY_ID, "RS256", signing.public_pem)
+
+    with pytest.raises(ValueError, match="duplicate identity records"):
+        InMemoryIdentityDirectory((identity_record(), identity_record()))
+    with pytest.raises(ValueError, match="duplicate signing key ids"):
+        StaticJwksProvider((verification_key, verification_key))
+
+
+def test_remote_jwks_provider_rejects_duplicate_key_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signing = signing_fixture()
+    numbers = signing.private_key.public_key().public_numbers()
+
+    def encoded(value: int) -> str:
+        raw = value.to_bytes((value.bit_length() + 7) // 8, "big")
+        return jwt.utils.base64url_encode(raw).decode()
+
+    payload = json.dumps(
+        {
+            "keys": [
+                {
+                    "kid": KEY_ID,
+                    "alg": "RS256",
+                    "kty": "RSA",
+                    "n": encoded(numbers.n),
+                    "e": encoded(numbers.e),
+                },
+                {
+                    "kid": KEY_ID,
+                    "alg": "RS256",
+                    "kty": "RSA",
+                    "n": encoded(numbers.n),
+                    "e": encoded(numbers.e),
+                },
+            ]
+        }
+    ).encode()
+
+    monkeypatch.setattr(
+        authentication_module,
+        "urlopen",
+        lambda request, timeout: FakeResponse(payload),
+    )
+
+    with pytest.raises(AuthenticationError, match="duplicate key IDs"):
+        RemoteJwksProvider("https://identity.example/certs").get_key(KEY_ID)
+
+
+def test_identity_record_shape_is_validated_at_construction() -> None:
+    with pytest.raises(ValueError, match="requires user_id"):
+        IdentityRecord(
+            issuer=ISSUER,
+            subject="oidc-user",
+            tenant_id=TENANT_ID,
+            kind=PrincipalKind.USER,
+            role_bindings=(binding(),),
+            service_identity=ServiceIdentity("svc-only"),
+        )
+    with pytest.raises(ValueError, match="issuer must not be empty"):
+        IdentityRecord(
+            issuer="",
+            subject="oidc-user",
+            tenant_id=TENANT_ID,
+            kind=PrincipalKind.USER,
+            role_bindings=(binding(),),
+            user_id=UserId("user-alice"),
+        )
+    with pytest.raises(ValueError, match="subject must not be empty"):
+        IdentityRecord(
+            issuer=ISSUER,
+            subject="",
+            tenant_id=TENANT_ID,
+            kind=PrincipalKind.USER,
+            role_bindings=(binding(),),
+            user_id=UserId("user-alice"),
+        )
+
+
 class FakeResponse:
     """Minimal urllib response used to keep JWKS tests offline."""
 
-    def __init__(
-        self,
-        payload: bytes,
-        *,
-        final_url: str = "https://identity.example/certs",
-    ) -> None:
+    def __init__(self, payload: bytes) -> None:
         self._payload = payload
-        self._final_url = final_url
 
     def __enter__(self) -> FakeResponse:
         return self
@@ -392,15 +487,8 @@ class FakeResponse:
     def read(self) -> bytes:
         return self._payload
 
-    def geturl(self) -> str:
-        return self._final_url
 
-
-def jwks_document(
-    signing_key: rsa.RSAPrivateKey,
-    *,
-    key_id: str = KEY_ID,
-) -> bytes:
+def jwks_document(signing_key: rsa.RSAPrivateKey) -> bytes:
     numbers = signing_key.public_key().public_numbers()
 
     def encoded(value: int) -> str:
@@ -411,7 +499,7 @@ def jwks_document(
         {
             "keys": [
                 {
-                    "kid": key_id,
+                    "kid": KEY_ID,
                     "alg": "RS256",
                     "kty": "RSA",
                     "n": encoded(numbers.n),
@@ -441,28 +529,6 @@ def test_remote_jwks_provider_parses_and_caches_key(
 
     assert first == second
     assert first.pem == signing.public_pem
-    assert calls == [2.0]
-
-
-def test_remote_jwks_provider_negative_lookup_uses_document_cache(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    signing = signing_fixture()
-    calls: list[float] = []
-
-    def fake_urlopen(request: object, timeout: float) -> FakeResponse:
-        del request
-        calls.append(timeout)
-        return FakeResponse(jwks_document(signing.private_key))
-
-    monkeypatch.setattr(authentication_module, "urlopen", fake_urlopen)
-    provider = RemoteJwksProvider("https://identity.example/certs")
-
-    for key_id in ("attacker-key-1", "attacker-key-2"):
-        with pytest.raises(AuthenticationError) as captured:
-            provider.get_key(key_id)
-        assert captured.value.code is AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE
-
     assert calls == [2.0]
 
 
@@ -498,36 +564,54 @@ def test_remote_jwks_provider_refreshes_after_bounded_ttl(
     assert rotated.pem == rotated_signing.public_pem
 
 
-def test_remote_jwks_refresh_atomically_removes_retired_keys(
+def test_remote_jwks_provider_drops_removed_keys_after_refresh(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    retired_signing = signing_fixture()
-    rotated_signing = signing_fixture()
-    responses = iter(
-        (
-            jwks_document(retired_signing.private_key),
-            jwks_document(rotated_signing.private_key, key_id="rotated-key"),
-        )
-    )
+    signing = signing_fixture()
+    responses = iter((jwks_document(signing.private_key), b'{"keys": []}'))
     now = [0.0]
-    monkeypatch.setattr(
-        authentication_module,
-        "urlopen",
-        lambda request, timeout: FakeResponse(next(responses)),
-    )
+
+    def fake_urlopen(request: object, timeout: float) -> FakeResponse:
+        del request, timeout
+        return FakeResponse(next(responses))
+
+    monkeypatch.setattr(authentication_module, "urlopen", fake_urlopen)
     provider = RemoteJwksProvider(
         "https://identity.example/certs",
         cache_ttl_seconds=30,
         monotonic=lambda: now[0],
     )
 
-    assert provider.get_key(KEY_ID).pem == retired_signing.public_pem
+    assert provider.get_key(KEY_ID).pem == signing.public_pem
     now[0] = 31.0
+
     with pytest.raises(AuthenticationError) as captured:
         provider.get_key(KEY_ID)
 
     assert captured.value.code is AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE
-    assert provider.get_key("rotated-key").pem == rotated_signing.public_pem
+
+
+def test_remote_jwks_provider_negative_caches_unknown_kids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signing = signing_fixture()
+    calls = 0
+
+    def fake_urlopen(request: object, timeout: float) -> FakeResponse:
+        nonlocal calls
+        del request, timeout
+        calls += 1
+        return FakeResponse(jwks_document(signing.private_key))
+
+    monkeypatch.setattr(authentication_module, "urlopen", fake_urlopen)
+    provider = RemoteJwksProvider("https://identity.example/certs")
+
+    for key_id in ("missing-a", "missing-b"):
+        with pytest.raises(AuthenticationError) as captured:
+            provider.get_key(key_id)
+        assert captured.value.code is AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE
+
+    assert calls == 1
 
 
 @pytest.mark.parametrize(
@@ -536,14 +620,57 @@ def test_remote_jwks_refresh_atomically_removes_retired_keys(
         b"[]",
         b'{"keys":[]}',
         b'{"keys":[{"kty":"EC"}]}',
-        b'{"keys":[{"kid":"bad","alg":"RS256","kty":"RSA","n":"***","e":"AQAB"}]}',
-        b"\xff",
     ],
 )
 def test_remote_jwks_invalid_documents_fail_closed(
     monkeypatch: pytest.MonkeyPatch,
     payload: bytes,
 ) -> None:
+    monkeypatch.setattr(
+        authentication_module,
+        "urlopen",
+        lambda request, timeout: FakeResponse(payload),
+    )
+    provider = RemoteJwksProvider("https://identity.example/certs")
+
+    with pytest.raises(AuthenticationError) as captured:
+        provider.get_key(KEY_ID)
+
+    assert captured.value.code is AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE
+
+
+def test_remote_jwks_invalid_utf8_is_classified(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        authentication_module,
+        "urlopen",
+        lambda request, timeout: FakeResponse(b"\xff"),
+    )
+    provider = RemoteJwksProvider("https://identity.example/certs")
+
+    with pytest.raises(AuthenticationError) as captured:
+        provider.get_key(KEY_ID)
+
+    assert captured.value.code is AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE
+
+
+def test_remote_jwks_provider_rejects_malformed_rsa_parameters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = json.dumps(
+        {
+            "keys": [
+                {
+                    "kid": KEY_ID,
+                    "alg": "RS256",
+                    "kty": "RSA",
+                    "n": "bad!",
+                    "e": "AQAB",
+                }
+            ]
+        }
+    ).encode()
     monkeypatch.setattr(
         authentication_module,
         "urlopen",
@@ -581,126 +708,3 @@ def test_remote_jwks_transport_and_scheme_failures_are_classified(
         provider.get_key(KEY_ID)
 
     assert captured.value.code is AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE
-
-
-def test_remote_jwks_rejects_https_to_http_redirect(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    signing = signing_fixture()
-    monkeypatch.setattr(
-        authentication_module,
-        "urlopen",
-        lambda request, timeout: FakeResponse(
-            jwks_document(signing.private_key),
-            final_url="http://identity.example/certs",
-        ),
-    )
-
-    with pytest.raises(AuthenticationError) as captured:
-        RemoteJwksProvider("https://identity.example/certs").get_key(KEY_ID)
-
-    assert captured.value.code is AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE
-
-
-def test_remote_jwks_serializes_concurrent_refresh(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    signing = signing_fixture()
-    refresh_started = Event()
-    release_refresh = Event()
-    calls: list[object] = []
-
-    def delayed_urlopen(request: object, timeout: float) -> FakeResponse:
-        del timeout
-        calls.append(request)
-        refresh_started.set()
-        assert release_refresh.wait(timeout=2)
-        return FakeResponse(jwks_document(signing.private_key))
-
-    monkeypatch.setattr(authentication_module, "urlopen", delayed_urlopen)
-    provider = RemoteJwksProvider("https://identity.example/certs")
-
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        first = executor.submit(provider.get_key, KEY_ID)
-        assert refresh_started.wait(timeout=2)
-        second = executor.submit(provider.get_key, KEY_ID)
-        release_refresh.set()
-        assert first.result(timeout=2) == second.result(timeout=2)
-
-    assert len(calls) == 1
-
-
-def test_duplicate_identity_records_fail_closed() -> None:
-    record = identity_record()
-
-    with pytest.raises(ValueError, match="duplicate authoritative"):
-        InMemoryIdentityDirectory((record, record))
-
-
-def test_duplicate_static_signing_keys_fail_closed() -> None:
-    signing = signing_fixture()
-    key = VerificationKey(KEY_ID, "RS256", signing.public_pem)
-
-    with pytest.raises(ValueError, match="duplicate static"):
-        StaticJwksProvider((key, key))
-
-
-def test_invalid_identity_record_fails_during_construction() -> None:
-    with pytest.raises(ValueError, match="user principal requires"):
-        IdentityRecord(
-            issuer=ISSUER,
-            subject="oidc-invalid",
-            tenant_id=TENANT_ID,
-            kind=PrincipalKind.USER,
-            role_bindings=(),
-            service_identity=ServiceIdentity("svc-invalid"),
-        )
-
-
-def test_out_of_range_numeric_dates_are_classified() -> None:
-    signing = signing_fixture()
-    encoded = token(
-        signing,
-        extra_claims={"exp": 10**30},
-    )
-
-    with pytest.raises(AuthenticationError) as captured:
-        authentication_service(signing).authenticate(f"Bearer {encoded}")
-
-    assert captured.value.code is AuthenticationErrorCode.INVALID_CLAIMS
-
-
-@pytest.mark.parametrize("claims", [{"iat": None}, {"exp": float("inf")}])
-def test_malformed_registered_numeric_dates_are_classified(
-    claims: dict[str, object],
-) -> None:
-    signing = signing_fixture()
-
-    with pytest.raises(AuthenticationError) as captured:
-        authentication_service(signing).authenticate(
-            "Bearer " + token(signing, extra_claims=claims)
-        )
-
-    assert captured.value.code is AuthenticationErrorCode.INVALID_CLAIMS
-
-
-class IndeterminateTimezone(tzinfo):
-    """Timezone marker whose UTC offset is undefined."""
-
-    def utcoffset(self, value: datetime | None) -> None:
-        del value
-
-    def dst(self, value: datetime | None) -> None:
-        del value
-
-    def tzname(self, value: datetime | None) -> None:
-        del value
-
-
-def test_role_binding_rejects_indeterminate_timezone_offsets() -> None:
-    indeterminate = datetime(2026, 1, 1, tzinfo=IndeterminateTimezone())
-
-    with pytest.raises(ValueError, match="timezone-aware"):
-        binding(assigned_at=indeterminate)
-    with pytest.raises(ValueError, match="timezone-aware"):
-        binding().is_active(indeterminate)

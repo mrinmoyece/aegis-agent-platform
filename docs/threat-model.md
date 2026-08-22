@@ -3,9 +3,9 @@
 ## Scope and assumptions
 
 This model covers the intended platform and marks control status honestly.
-Layer 1 established contracts and guardrails; Layer 2 adds a real identity,
-tenancy, and governance vertical slice described below and in
-`architecture.md`. The system assumes model output, tool output, retrieved
+Layer 1 established contracts; Layer 2 added identity and governance. Layer 3
+adds the durable PostgreSQL ledger, forced RLS, inbox/outbox, projections, and
+live database isolation evidence. The system assumes model output, tool output, retrieved
 content, and tenant input can be hostile. Cloud, identity provider, model
 provider, and operator accounts can be compromised. Prompt instructions are
 never trusted as controls.
@@ -38,18 +38,18 @@ never trusted as controls.
 
 | Threat | Example impact | Required control | Current status |
 | --- | --- | --- | --- |
-| Tenant confusion | Cross-tenant reads or work claims | Explicit tenant context, database policy, negative tests | Deny-by-default authorization and tenant-scoped repositories implemented (in-memory) with a committed cross-tenant negative-test suite (`tests/test_identity_security.py`, `tests/test_api.py`); Postgres row-level security defined in migration and asserted statically (`tests/test_migrations.py`), but not yet exercised against a live database |
+| Tenant confusion | Cross-tenant reads or work claims | Explicit tenant context, database policy, negative tests | PostgreSQL repositories use transaction-local context; forced RLS and confused-deputy denial are proven against PostgreSQL 16 |
 | Identity spoofing | Attacker acts as an operator | OIDC validation, key rotation, audience checks | Standards-correct JWT signature/issuer/audience/expiry/algorithm verification implemented against deterministic fixtures and a Keycloak-compatible JWKS config, with a committed negative-test suite for malformed/expired/wrong-issuer/wrong-audience/unsupported-algorithm tokens; live-IdP key-rotation drills against a running Keycloak remain a deployment-time check |
 | Prompt injection | Model invokes unauthorized tool | Typed tool allowlist, runtime policy, approval | Boundary only |
 | Confused deputy | Tool uses broader platform privilege | Scoped capability token per invocation | Planned |
-| Duplicate delivery | Repeated financial or external effect | Intent event, idempotency key, reconciliation | Invariant only |
-| Event tampering | False state or missing audit evidence | Append controls, hashes/retention, restricted roles | Redacted, additive-schema audit events implemented (in-memory) with a committed test suite proving redaction and append-only behavior at the application layer (`tests/test_audit_secrets.py`); append-only database trigger and row-level security defined in migration and asserted statically, but durable wiring, retention, and access review remain planned |
+| Duplicate delivery | Repeated financial or external effect | Intent event, idempotency key, reconciliation | Inbox deduplication and atomic event/outbox commit implemented; effect reconciliation remains planned |
+| Event tampering | False state or missing audit evidence | Append controls, hashes/retention, restricted roles | Event/audit update-delete rejected by grants and live-tested triggers; retention and access review remain planned |
 | Sandbox escape | Host or network compromise | Strong isolation, deny-by-default egress, quotas | Boundary only |
 | Secret exfiltration | Credentials in prompts or telemetry | Brokered secrets, redaction, content policy | Secret-reference abstraction, redacted `SecretValue`, and audit-detail redaction implemented; only a local environment-variable provider exists, no vault-backed broker |
 | Provider data leakage | Sensitive content retained externally | Provider policy, classification, regional routing | Planned |
 | Resource exhaustion | Runaway token/tool loop | Budgets, deadlines, queue backpressure, quotas | Pure tenant quota/risk policy evaluator implemented; authoritative usage accounting and runtime enforcement planned with the durable runtime |
 | Supply-chain compromise | Malicious build dependency/action | Pinned actions, review, scanning, attestations | Partial |
-| Telemetry leakage | Tenant data in labels or traces | Redaction and bounded-cardinality conventions | Planned |
+| Telemetry leakage | Tenant data in labels or traces | Redaction and bounded-cardinality conventions | Storage telemetry accepts counts/durations only; end-to-end telemetry remains planned |
 | Evaluation poisoning | Unsafe release passes gates | Dataset provenance, immutable results, approvals | Planned |
 | Evidence spoofing | Forged logs or change metadata drives a false hypothesis | Authenticated adapters, immutable references, timestamps, source labeling | Contracts only |
 | Stale correlation | Unrelated deployment is blamed for checkout failures | Explicit time windows, topology, counter-evidence, confidence | Planned |
@@ -142,17 +142,23 @@ committed automated test suite (`tests/test_identity_security.py`,
 malformed/expired/wrong-issuer/wrong-audience/unsupported-algorithm tokens,
 expired and revoked role bindings, quota/policy allow-deny-require-approval
 boundaries, and audit redaction/append-only behavior at the application
-layer — all against deterministic fixtures. What remains open: the default
-repositories (`InMemoryIdentityDirectory`, `InMemoryTenantRepository`,
-`InMemoryPolicyRepository`, `InMemoryAuditStore`) are deterministic in-process
-fixtures; the Postgres migration defines the durable, row-level-secured
-equivalents and its schema is asserted statically
-(`tests/test_migrations.py`), but no adapter connects them yet, so restart
-loses all state and the row-level-security policies have not been exercised
-against a running database. `RemoteJwksProvider` is tested against a mocked
+layer — all against deterministic fixtures. Layer 3 adds PostgreSQL equivalents
+and live RLS evidence. `RemoteJwksProvider` is tested against a mocked
 HTTPS transport, not a live Keycloak realm — whether that realm is reachable,
 populated with users, and rotated correctly is a deployment concern not
 verified by these tests. Quota *limits* are evaluated deterministically;
 quota *usage* accounting has no authoritative source until the durable
 runtime lands. Secrets remain local-environment-variable only; there is no
 vault-backed broker, rotation, or leak-scanning pipeline.
+
+## Layer 3 residual risk
+
+The ledger, inbox/outbox mechanics, projections, durable Layer 2 repositories,
+and database isolation are implemented and live-tested. This does not prove
+exactly-once effects: no effect adapter exists, and a future crash after target
+acceptance will require idempotency or reconciliation. The outbox has leasing
+and dead-letter representation but no publisher or Redis notifier. Projection
+handlers cover representative typed events; the incident state machine and
+agent scheduler remain absent. The maintenance role requires deployment-time
+credential brokering and approval. Backup, restore, retention, partitioning,
+HA, and regional recovery remain Layer 8.

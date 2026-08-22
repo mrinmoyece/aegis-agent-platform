@@ -66,7 +66,7 @@ class Settings:
                 "AEGIS_OIDC_CLOCK_SKEW_SECONDS must be an integer"
             ) from error
 
-        settings = cls(
+        return cls(
             environment=environment,
             service_name=values.get(
                 "AEGIS_SERVICE_NAME",
@@ -88,7 +88,6 @@ class Settings:
             ),
             oidc_clock_skew_seconds=clock_skew_seconds,
         )
-        return settings
 
     def validate(self) -> None:
         """Reject settings that would make process behavior ambiguous or unsafe."""

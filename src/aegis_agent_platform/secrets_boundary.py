@@ -65,7 +65,7 @@ class SecretProvider(Protocol):
 
 
 class EnvironmentSecretProvider:
-    """Development provider bound to one tenant and environment snapshot."""
+    """Development provider over an explicit environment snapshot."""
 
     provider_name = "env"
 
@@ -74,10 +74,7 @@ class EnvironmentSecretProvider:
         self._values = dict(values)
 
     @classmethod
-    def from_process_environment(
-        cls,
-        tenant_id: TenantId,
-    ) -> EnvironmentSecretProvider:
+    def from_process_environment(cls, tenant_id: TenantId) -> EnvironmentSecretProvider:
         """Capture process environment only when explicitly requested."""
         return cls(tenant_id, os.environ)
 
@@ -87,10 +84,10 @@ class EnvironmentSecretProvider:
         reference: SecretReference,
     ) -> SecretValue:
         _require_tenant(context, reference)
-        if reference.tenant_id != self._tenant_id:
-            raise SecretError("secret reference targets a different tenant provider")
         if reference.provider != self.provider_name:
             raise SecretError("secret reference targets a different provider")
+        if context.tenant_id != self._tenant_id:
+            raise SecretError("environment provider is bound to a different tenant")
         if reference.version is not None:
             raise SecretError("environment secrets do not support versions")
         if not reference.name.startswith("AEGIS_SECRET_"):
