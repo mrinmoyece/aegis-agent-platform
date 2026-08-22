@@ -348,6 +348,7 @@ def test_inbox_deduplication_and_outbox_claim_race() -> None:
                 TENANT_A,
                 crash_message.message_id,
                 lease_owner="reconciling-publisher",
+                lease_expires_at=reclaimed[0].lease_expires_at,
                 published_at=expiry + timedelta(minutes=1),
             )
             async with first_connection.transaction():
