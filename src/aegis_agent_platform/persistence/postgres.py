@@ -89,7 +89,7 @@ class PostgresIdentityDirectory(IdentityDirectory):
 
     def resolve(self, claims: VerifiedClaims) -> Principal:
         try:
-            with self._connection.transaction(), self._lock:
+            with self._lock, self._connection.transaction():
                 # Use the SECURITY DEFINER function so aegis_runtime does not need
                 # BYPASSRLS for the initial cross-tenant identity lookup.
                 identity = self._connection.execute(

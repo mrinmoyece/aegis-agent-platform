@@ -303,6 +303,10 @@ GRANT DELETE ON projection_checkpoints, run_status_projection,
     artifact_index_projection, pending_approvals_projection,
     usage_quota_projection, tenant_listing_projection TO aegis_app;
 GRANT USAGE, SELECT ON SEQUENCE events_global_position_seq TO aegis_app;
+-- Grant sequence privileges for tables with generated/serial columns not covered
+-- by the blanket USAGE,SELECT above (security_audit_events has sequence_number,
+-- and the 0001 identity tables have implicit sequences).
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO aegis_app;
 
 REVOKE UPDATE, DELETE, TRUNCATE ON events, security_audit_events
     FROM PUBLIC, aegis_app;
@@ -338,6 +342,10 @@ AS $$
     LIMIT  1;
 $$;
 
+-- Revoke PUBLIC execute before granting narrowly to aegis_app.
+-- PostgreSQL grants EXECUTE to PUBLIC by default; a SECURITY DEFINER function
+-- that bypasses RLS must not be callable by arbitrary database roles.
+REVOKE EXECUTE ON FUNCTION lookup_identity_by_subject(text, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION lookup_identity_by_subject(text, text) TO aegis_app;
 
 -- Seed the platform tenant so that failed-authentication audit events (which

@@ -145,14 +145,18 @@ class PolicyEvaluator:
 
     def evaluate(
         self,
+        context: TenantContext,
         policy: TenantPolicy,
         request: PolicyRequest,
         usage: QuotaUsage,
     ) -> PolicyDecision:
+        # All mutable inputs are validated against the trusted context so a
+        # caller cannot obtain a decision for a foreign tenant by supplying a
+        # mutually-consistent but unauthorised triple.
         if (
-            request.tenant_id != policy.tenant_id
-            or usage.tenant_id != policy.tenant_id
-            or usage.tenant_id != request.tenant_id
+            policy.tenant_id != context.tenant_id
+            or request.tenant_id != context.tenant_id
+            or usage.tenant_id != context.tenant_id
         ):
             return PolicyDecision(
                 decision=Decision.DENY,
