@@ -116,7 +116,7 @@ def test_secret_values_never_render_or_serialize_raw_material() -> None:
 
 def test_environment_provider_requires_explicit_prefixed_reference() -> None:
     provider = EnvironmentSecretProvider(
-        {"AEGIS_SECRET_MODEL_API": "local-development-only"}
+        TENANT_ID, {"AEGIS_SECRET_MODEL_API": "local-development-only"}
     )
     context = TenantContext(TENANT_ID)
     reference = SecretReference(TENANT_ID, "env", "AEGIS_SECRET_MODEL_API")
@@ -136,6 +136,11 @@ def test_environment_provider_requires_explicit_prefixed_reference() -> None:
         )
     with pytest.raises(SecretError, match="tenant"):
         provider.resolve(TenantContext(TenantId("tenant-beta")), reference)
+    with pytest.raises(SecretError, match="bound to a different tenant"):
+        EnvironmentSecretProvider(
+            TenantId("tenant-beta"),
+            {"AEGIS_SECRET_MODEL_API": "local-development-only"},
+        ).resolve(context, reference)
 
 
 def test_in_memory_secret_provider_requires_exact_reference() -> None:

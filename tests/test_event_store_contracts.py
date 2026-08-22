@@ -35,17 +35,24 @@ from aegis_agent_platform.projections import (
 from aegis_agent_platform.tenancy import TenantContext
 
 
-def stored_event(position: int, sequence: int = 1) -> EventEnvelope:
+def stored_event(
+    position: int,
+    sequence: int = 1,
+    *,
+    aggregate_id: str = "run-a",
+    previous_aggregate_sequence: int | None = None,
+) -> EventEnvelope:
     return EventEnvelope(
         event_id=uuid4(),
         tenant_id="tenant-a",
-        aggregate_id="run-a",
+        aggregate_id=aggregate_id,
         event_type=DomainEventType.RUN_STARTED,
         schema_version=1,
         occurred_at=datetime(2025, 1, 1, tzinfo=UTC),
         recorded_at=datetime(2025, 1, 1, tzinfo=UTC),
         aggregate_sequence=sequence,
         global_position=position,
+        previous_aggregate_sequence=previous_aggregate_sequence,
         payload={},
     )
 
@@ -166,6 +173,90 @@ def test_projection_detects_sequence_corruption() -> None:
         asyncio.run(engine.catch_up(TenantContext(TenantId("tenant-a")), "run-status"))
 
 
+def test_projection_detects_checkpoint_resume_sequence_gaps() -> None:
+    repository = FakeProjectionRepository()
+    repository.position = 6
+    engine = ProjectionEngine(
+        FakeEventStore((stored_event(7, 4, previous_aggregate_sequence=2),)),  # type: ignore[arg-type]
+        repository,
+    )
+
+    with pytest.raises(ReplayCorruptionError, match="sequence gap"):
+        asyncio.run(engine.catch_up(TenantContext(TenantId("tenant-a")), "run-status"))
+
+
+def test_append_from_inbox_ignores_telemetry_failures_on_conflict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class RaisingTelemetry:
+        def append_completed(self, event_count: int, elapsed_seconds: float) -> None:
+            del event_count, elapsed_seconds
+
+        def append_conflicted(self) -> None:
+            raise RuntimeError("telemetry down")
+
+        def outbox_lag_observed(self, lag_seconds: float) -> None:
+            del lag_seconds
+
+        def projection_lag_observed(self, lag_events: int) -> None:
+            del lag_events
+
+    class DummyAsyncConnection:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def execute(self, *args: object, **kwargs: object) -> object:
+            del args, kwargs
+            self.calls += 1
+
+            class InsertedCursor:
+                async def fetchone(self) -> tuple[str]:
+                    return ("message-1",)
+
+            if self.calls == 1:
+                return InsertedCursor()
+            raise AssertionError("execute should not run after conflict")
+
+    @asynccontextmanager
+    async def noop_transaction(
+        connection: object, lock: object, context: TenantContext
+    ) -> AsyncIterator[None]:
+        del connection, lock, context
+        yield
+
+    async def conflicted_append(
+        self: PostgresEventStore,
+        events: Sequence[EventEnvelope],
+        *,
+        expected_version: int,
+        outbox: Sequence[object],
+    ) -> int:
+        del self, events, expected_version, outbox
+        raise ConcurrencyError(0, 1)
+
+    monkeypatch.setattr(postgres_module, "_tenant_transaction", noop_transaction)
+    store = PostgresEventStore(
+        DummyAsyncConnection(),  # type: ignore[arg-type]
+        telemetry=RaisingTelemetry(),
+    )
+    monkeypatch.setattr(
+        store,
+        "_append_in_transaction",
+        conflicted_append.__get__(store, PostgresEventStore),
+    )
+
+    with pytest.raises(ConcurrencyError):
+        asyncio.run(
+            store.append_from_inbox(
+                TenantContext(TenantId("tenant-a")),
+                source="worker",
+                message_id="message-1",
+                events=[pending_event()],
+                expected_version=0,
+            )
+        )
+
+
 def test_outbox_contract_rejects_ambiguous_delivery_metadata() -> None:
     with pytest.raises(ValueError, match="max_attempts"):
         OutboxMessage(
@@ -192,9 +283,7 @@ def test_postgres_failures_have_stable_retry_classification() -> None:
 def test_projection_helpers_classify_invalid_uuid_and_decimal_values() -> None:
     with pytest.raises(PermanentStorageError, match="uuid artifact_id"):
         _required_uuid({"artifact_id": "not-a-uuid"}, "artifact_id")
-    with pytest.raises(
-        PermanentStorageError, match="finite non-negative cost_usd"
-    ):
+    with pytest.raises(PermanentStorageError, match="finite non-negative cost_usd"):
         _required_decimal({"cost_usd": "NaN"}, "cost_usd")
 
 

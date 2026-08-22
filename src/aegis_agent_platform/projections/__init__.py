@@ -108,7 +108,9 @@ def _validate_page(
         raise ReplayCorruptionError("projection page overlaps its checkpoint")
 
     for event in events:
-        previous = aggregate_versions.get(event.aggregate_id)
+        previous = aggregate_versions.get(
+            event.aggregate_id, event.previous_aggregate_sequence
+        )
         if previous is not None and event.aggregate_sequence != previous + 1:
             raise ReplayCorruptionError("aggregate sequence gap detected during replay")
         aggregate_versions[event.aggregate_id] = event.aggregate_sequence

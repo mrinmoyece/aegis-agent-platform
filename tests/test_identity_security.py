@@ -184,6 +184,7 @@ def test_authoritative_directory_ignores_token_roles_and_rejects_tenant_confusio
     [
         ({"azp": 7}, AuthenticationErrorCode.INVALID_CLAIMS),
         ({"tenant_id": ""}, AuthenticationErrorCode.INVALID_CLAIMS),
+        ({"tenant_id": 7}, AuthenticationErrorCode.INVALID_CLAIMS),
     ],
 )
 def test_invalid_optional_claim_types_are_rejected(
@@ -198,6 +199,17 @@ def test_invalid_optional_claim_types_are_rejected(
         )
 
     assert captured.value.code is code
+
+
+def test_out_of_range_numeric_dates_are_rejected() -> None:
+    signing = signing_fixture()
+
+    with pytest.raises(AuthenticationError) as captured:
+        authentication_service(signing).authenticate(
+            f"Bearer {token(signing, extra_claims={'exp': 10**20})}"
+        )
+
+    assert captured.value.code is AuthenticationErrorCode.INVALID_CLAIMS
 
 
 @pytest.mark.parametrize(
@@ -329,6 +341,28 @@ def test_invalid_principal_and_key_contracts_fail_closed() -> None:
                 JwtValidationConfig(ISSUER, AUDIENCE),
                 StaticJwksProvider(()),
             ).verify("invalid")
+        )
+
+
+def test_duplicate_identity_records_and_signing_keys_are_rejected() -> None:
+    signing = signing_fixture()
+    verification_key = VerificationKey(KEY_ID, "RS256", signing.public_pem)
+
+    with pytest.raises(ValueError, match="duplicate identity records"):
+        InMemoryIdentityDirectory((identity_record(), identity_record()))
+    with pytest.raises(ValueError, match="duplicate signing key ids"):
+        StaticJwksProvider((verification_key, verification_key))
+
+
+def test_identity_record_shape_is_validated_at_construction() -> None:
+    with pytest.raises(ValueError, match="requires user_id"):
+        IdentityRecord(
+            issuer=ISSUER,
+            subject="oidc-user",
+            tenant_id=TENANT_ID,
+            kind=PrincipalKind.USER,
+            role_bindings=(binding(),),
+            service_identity=ServiceIdentity("svc-only"),
         )
 
 
@@ -495,6 +529,22 @@ def test_remote_jwks_invalid_documents_fail_closed(
         authentication_module,
         "urlopen",
         lambda request, timeout: FakeResponse(payload),
+    )
+    provider = RemoteJwksProvider("https://identity.example/certs")
+
+    with pytest.raises(AuthenticationError) as captured:
+        provider.get_key(KEY_ID)
+
+    assert captured.value.code is AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE
+
+
+def test_remote_jwks_invalid_utf8_is_classified(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        authentication_module,
+        "urlopen",
+        lambda request, timeout: FakeResponse(b"\xff"),
     )
     provider = RemoteJwksProvider("https://identity.example/certs")
 

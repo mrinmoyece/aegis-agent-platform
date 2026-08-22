@@ -199,7 +199,12 @@ request = PolicyRequest(
     environment="prod", risk=RiskLevel.HIGH,
     estimated_tokens=200, estimated_cost_usd=Decimal("1"),
 )
-usage = QuotaUsage(tenant_tokens_used=0, tenant_cost_usd=Decimal("0"), active_runs=0)
+usage = QuotaUsage(
+    tenant_id=tenant,
+    tenant_tokens_used=0,
+    tenant_cost_usd=Decimal("0"),
+    active_runs=0,
+)
 
 decision = PolicyEvaluator().evaluate(policy, request, usage)
 print(decision.decision, decision.reasons, decision.required_approver_roles)
@@ -261,8 +266,11 @@ from aegis_agent_platform.secrets_boundary import (
 from aegis_agent_platform.identity import TenantId
 from aegis_agent_platform.tenancy import TenantContext
 
-provider = EnvironmentSecretProvider({"AEGIS_SECRET_DYNATRACE_TOKEN": "local-only-example"})
 tenant_id = TenantId("tenant-alpha")
+provider = EnvironmentSecretProvider(
+    tenant_id,
+    {"AEGIS_SECRET_DYNATRACE_TOKEN": "local-only-example"},
+)
 context = TenantContext(tenant_id)
 reference = SecretReference(
     tenant_id=tenant_id,
@@ -277,17 +285,20 @@ print(value.reveal())     # b'local-only-example'
 
 `EnvironmentSecretProvider` deliberately requires the `AEGIS_SECRET_` prefix so
 a typo cannot accidentally resolve an unrelated environment variable. This is a
-local-development provider; every resolution also requires a matching trusted
-`TenantContext`. It is not a secret broker — there is no rotation,
+local-development provider bound to one tenant's trusted `TenantContext`, so one
+tenant cannot resolve another tenant's captured process environment by guessing
+secret names. It is not a secret broker — there is no rotation,
 versioning, or centralized access audit yet; see
 [Limitations](limitations.md).
 
 ## 8. The whole slice behind one API
 
-`control_plane.api.ControlPlaneApp` wires every piece above behind a small
-route set. `/healthz` and `/health/live` (liveness) and `/readyz` and
-`/health/ready` (configuration readiness) stay unauthenticated, matching Layer
-1. Everything under `/v1/` requires a valid bearer token:
+`control_plane.api.ControlPlaneApp` wires the authenticated identity directory,
+authorization service, tenant repository, policy repository, and audit store
+behind a small route set. `/healthz` and `/health/live` (liveness) and `/readyz`
+and `/health/ready` (configuration readiness) stay unauthenticated, matching
+Layer 1. Everything under `/v1/` requires a valid bearer token, but `/v1/me`
+returns directly after authentication without an authorization decision:
 
 | Route | Requires | Returns |
 | --- | --- | --- |
@@ -295,10 +306,12 @@ route set. `/healthz` and `/health/live` (liveness) and `/readyz` and
 | `/v1/tenants/{tenant_id}` | `tenant:read` in that tenant | the tenant record |
 | `/v1/tenants/{tenant_id}/policy` | `policy:read` in that tenant | the tenant's governance policy and quotas |
 
-Every authentication attempt and every authorization decision is recorded as
-an audit event before a response is returned — a 401 or 403 is not a silent
-failure. Construct a `ControlPlaneApp` with the pieces above (or its
-in-memory defaults) and drive it directly, the same way
+Every authentication attempt and every authorization decision taken for a
+tenant-scoped route is recorded as an audit event before a response is returned
+— a 401 or 403 is not a silent failure. Construct a `ControlPlaneApp` with the
+pieces above; for protected routes you must inject a real
+`AuthenticationService`, because the in-memory defaults intentionally return
+`503 authentication_not_configured`. Drive it directly, the same way
 `tests/test_api.py` drives the Layer 1 health surface, to see this end to end.
 
 ## What this tutorial does not prove
