@@ -234,7 +234,7 @@ def seed_gateway_work(lease: WorkLease) -> None:
                 requested_at, available_at, max_attempts, timeout_seconds,
                 request_event_id, correlation_id, request_payload
             ) VALUES (
-                %s, %s, 'model-call', %s, 'completed',
+                %s, %s, 'model-call', %s, 'succeeded',
                 %s, %s, 1, 60, %s, %s, '{}'::jsonb
             )
             ON CONFLICT (tenant_id, work_id) DO NOTHING
