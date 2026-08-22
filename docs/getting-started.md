@@ -29,8 +29,11 @@ reasoning.
 - `compose.yaml` describes the local dependencies later layers will integrate.
 - architecture tests prevent infrastructure from leaking into the pure domain.
 
-The durable store and Redis worker substrate are implemented. No model call,
-specialist reasoning, external effect, or live Dynatrace/GitHub connector runs.
+The durable store and Redis worker substrate are implemented. Layer 5 now also
+includes an executable `ModelGateway` plus fake and live provider adapters, so
+real model calls can run when those adapters are configured. The local quick
+checks and most integration paths still rely on deterministic fixtures or
+scripted providers rather than live external model, Dynatrace, or GitHub calls.
 
 ## Run the fast checks
 

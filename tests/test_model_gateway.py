@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -62,7 +62,11 @@ from aegis_agent_platform.gateway import (
 )
 from aegis_agent_platform.identity import Role, TenantId
 from aegis_agent_platform.policy import QuotaLimits, RiskLevel, TenantPolicy
-from aegis_agent_platform.providers import ScriptedModelProvider
+from aegis_agent_platform.providers import (
+    CancellationToken,
+    ModelProvider,
+    ScriptedModelProvider,
+)
 from aegis_agent_platform.runtime.backoff import ExponentialBackoff
 from aegis_agent_platform.tenancy import TenantContext
 
@@ -221,7 +225,7 @@ def lease(run_id: UUID = RUN_ID, generation: int = 1) -> WorkLease:
 
 
 def gateway(
-    providers: dict[str, ScriptedModelProvider],
+    providers: Mapping[str, ModelProvider],
     repository: InMemoryGatewayRepository,
     entries: tuple[ModelCatalogEntry, ...],
     *,
@@ -229,6 +233,7 @@ def gateway(
     max_failovers: int = 1,
     clock: list[float] | None = None,
     tokens_per_minute: int = 100_000,
+    sleep: Callable[[float], Awaitable[None]] | None = None,
 ) -> ModelGateway:
     monotonic = (lambda: clock[0]) if clock is not None else (lambda: 0)
     identities = tuple(entry.identity for entry in entries)
@@ -252,7 +257,7 @@ def gateway(
         metrics=GatewayMetrics(identities),
         tracer=GatewayTracer(identities),
         clock=lambda: NOW,
-        sleep=lambda _delay: asyncio.sleep(0),
+        sleep=sleep or (lambda _delay: asyncio.sleep(0)),
     )
 
 
@@ -640,6 +645,80 @@ def test_retry_failures_are_durably_recorded_before_success() -> None:
     assert failures[0].payload["attempt"] == 1
 
 
+def test_retry_sleep_and_provider_timeout_respect_remaining_deadline() -> None:
+    class TimeoutRecordingProvider:
+        provider_name = "mock-a"
+
+        def __init__(self) -> None:
+            self.timeouts: list[float] = []
+            self.calls = 0
+
+        async def complete(
+            self,
+            request: ModelRequest,
+            model: ModelIdentity,
+            *,
+            cancellation: CancellationToken | None = None,
+        ) -> ModelResponse:
+            del model, cancellation
+            self.calls += 1
+            self.timeouts.append(request.timeout_seconds)
+            raise ModelGatewayError(
+                ModelErrorClass.PROVIDER_UNAVAILABLE,
+                "outage",
+                retryable=True,
+            )
+
+    model_request = request()
+    model_request = ModelRequest(
+        request_id=model_request.request_id,
+        tenant_id=model_request.tenant_id,
+        run_id=model_request.run_id,
+        messages=model_request.messages,
+        max_output_tokens=model_request.max_output_tokens,
+        prompt_token_estimate=model_request.prompt_token_estimate,
+        requested_model=model_request.requested_model,
+        tools=model_request.tools,
+        response_schema=model_request.response_schema,
+        temperature=model_request.temperature,
+        timeout_seconds=0.02,
+        idempotency_key=model_request.idempotency_key,
+    )
+    work_lease = lease()
+    repository = InMemoryGatewayRepository((work_lease,))
+    provider = TimeoutRecordingProvider()
+    delays: list[float] = []
+
+    async def bounded_sleep(delay: float) -> None:
+        delays.append(delay)
+        await asyncio.sleep(delay)
+
+    service = gateway(
+        {"mock-a": provider},
+        repository,
+        (catalog_entry(),),
+        max_attempts=2,
+        max_failovers=0,
+        sleep=bounded_sleep,
+    )
+
+    with pytest.raises(ModelGatewayError):
+        asyncio.run(
+            service.complete(
+                TenantContext(TENANT),
+                model_request,
+                work_lease,
+                policy(models=frozenset({MODEL_A.catalog_key})),
+                environment=Environment.TEST,
+            )
+        )
+
+    assert provider.calls == 1
+    assert provider.timeouts == pytest.approx([0.02], rel=0, abs=0.01)
+    assert delays
+    assert delays[0] <= model_request.timeout_seconds
+
+
 @pytest.mark.parametrize(
     "error_class",
     [
@@ -800,6 +879,54 @@ def test_gateway_does_not_open_circuit_on_local_admission_failure() -> None:
     assert failure.value.code == "local_rate_limit"
     assert service._controls.circuit(MODEL_A).state is CircuitState.CLOSED
     assert provider.calls == []
+
+
+def test_half_open_probe_releases_busy_flag_after_cancellation() -> None:
+    class CancellingProvider:
+        provider_name = "mock-a"
+
+        async def complete(
+            self,
+            request: ModelRequest,
+            model: ModelIdentity,
+            *,
+            cancellation: CancellationToken | None = None,
+        ) -> ModelResponse:
+            del request, model, cancellation
+            raise asyncio.CancelledError
+
+    now = [0.0]
+    work_lease = lease()
+    repository = InMemoryGatewayRepository((work_lease,))
+    service = gateway(
+        {"mock-a": CancellingProvider()},
+        repository,
+        (catalog_entry(),),
+        max_attempts=1,
+        max_failovers=0,
+        clock=now,
+    )
+    circuit = service._controls.circuit(MODEL_A)
+    circuit.acquire()
+    circuit.fail()
+    circuit.acquire()
+    circuit.fail()
+    now[0] = 30.0
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(
+            service.complete(
+                TenantContext(TENANT),
+                request(),
+                work_lease,
+                policy(models=frozenset({MODEL_A.catalog_key})),
+                environment=Environment.TEST,
+            )
+        )
+
+    assert circuit.state is CircuitState.HALF_OPEN
+    circuit.acquire()
+    circuit.release_probe()
 
 
 def test_duplicate_request_returns_same_response_without_second_charge() -> None:
@@ -1154,6 +1281,45 @@ def test_unknown_tool_call_is_rejected() -> None:
                 work_lease,
                 policy(models=frozenset({MODEL_A.catalog_key})),
                 environment=Environment.TEST,
+            )
+        )
+
+
+def test_response_model_mismatch_is_billed_before_failure() -> None:
+    model_request = request()
+    work_lease = lease()
+    mismatched = response(model_request, model=MODEL_B)
+    repository = InMemoryGatewayRepository((work_lease,))
+    service = gateway(
+        {"mock-a": ScriptedModelProvider("mock-a", (mismatched,))},
+        repository,
+        (catalog_entry(),),
+        max_attempts=1,
+        max_failovers=0,
+    )
+
+    with pytest.raises(ModelGatewayError, match="response_model_mismatch"):
+        asyncio.run(
+            service.complete(
+                TenantContext(TENANT),
+                model_request,
+                work_lease,
+                policy(models=frozenset({MODEL_A.catalog_key})),
+                environment=Environment.TEST,
+            )
+        )
+    assert not next(iter(repository.reservations.values())).active
+    assert repository.usage_summary(TenantContext(TENANT))["calls"] == 1
+
+
+def test_duplicate_tool_names_are_rejected() -> None:
+    schema = JsonSchema("tool", {"type": "object", "properties": {}})
+
+    with pytest.raises(ValueError, match="tool names must be unique"):
+        request(
+            tools=(
+                ToolDefinition("duplicate", "First", schema),
+                ToolDefinition("duplicate", "Second", schema),
             )
         )
 

@@ -40,6 +40,9 @@ CREATE INDEX model_budget_reservations_active_idx
     ON model_budget_reservations (tenant_id, run_id, created_at)
     WHERE status = 'active';
 
+-- Budget admission reads this projection. Rebuilds must replace tenant rows
+-- atomically (or hold an admission lock) because delete-then-replay across
+-- multiple transactions can transiently report zero historical usage.
 CREATE TABLE model_usage_projection (
     tenant_id text NOT NULL REFERENCES tenants (tenant_id),
     request_id uuid NOT NULL,

@@ -323,6 +323,9 @@ class ModelRequest:
             raise ValueError("temperature must be between 0 and 2")
         object.__setattr__(self, "messages", tuple(self.messages))
         object.__setattr__(self, "tools", tuple(self.tools))
+        tool_names = [tool.name for tool in self.tools]
+        if len(tool_names) != len(set(tool_names)):
+            raise ValueError("tool names must be unique")
 
 
 @dataclass(frozen=True, slots=True)

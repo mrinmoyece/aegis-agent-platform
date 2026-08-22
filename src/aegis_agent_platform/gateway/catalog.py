@@ -32,6 +32,12 @@ class RouteDeniedError(PermissionError):
 
 @dataclass(frozen=True, slots=True)
 class ModelCatalogEntry:
+    """Catalog metadata for one provider model.
+
+    `fallback_models` is reserved for a future routing ADR and is currently not
+    consulted by `ModelRouter` or `ModelGateway`.
+    """
+
     identity: ModelIdentity
     capabilities: ModelCapabilities
     pricing: PricingVersion

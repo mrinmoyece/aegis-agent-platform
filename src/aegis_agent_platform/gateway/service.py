@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import suppress
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from aegis_agent_platform.config import Environment
 from aegis_agent_platform.domain import (
     ModelErrorClass,
     ModelGatewayError,
+    ModelIdentity,
     ModelRequest,
     ModelResponse,
     ToolCallPart,
@@ -30,6 +32,7 @@ from aegis_agent_platform.gateway.repository import (
 )
 from aegis_agent_platform.gateway.resilience import (
     CircuitOpenError,
+    CircuitState,
     ProviderControls,
     RetryPolicy,
 )
@@ -143,7 +146,11 @@ class ModelGateway:
             )
             if response is not None:
                 try:
-                    self._validate_response(request, response)
+                    self._validate_response(
+                        request,
+                        response,
+                        expected_model=candidate.identity,
+                    )
                     await self._repository.succeed(
                         context,
                         request,
@@ -212,8 +219,10 @@ class ModelGateway:
     ) -> tuple[ModelResponse | None, ModelGatewayError | None]:
         model = candidate.identity
         circuit = self._controls.circuit(model)
+        probe_acquired = False
         try:
             circuit.acquire()
+            probe_acquired = circuit.state is CircuitState.HALF_OPEN
         except CircuitOpenError:
             self._metrics.add("circuit_open", model)
             return None, ModelGatewayError(
@@ -258,9 +267,24 @@ class ModelGateway:
                             at=self._clock(),
                         )
                         self._metrics.add("attempts", model)
+                        remaining_seconds = (
+                            deadline - asyncio.get_running_loop().time()
+                        )
+                        if remaining_seconds <= 0:
+                            raise ModelGatewayError(
+                                ModelErrorClass.TIMEOUT,
+                                "provider_attempt_timeout",
+                                retryable=True,
+                            )
                         with self._tracer.attempt(model):
                             response = await provider.complete(
-                                request,
+                                replace(
+                                    request,
+                                    timeout_seconds=min(
+                                        request.timeout_seconds,
+                                        remaining_seconds,
+                                    ),
+                                ),
                                 model,
                                 cancellation=cancellation,
                             )
@@ -293,6 +317,10 @@ class ModelGateway:
                         if error.retry_after_seconds is not None
                         else self._retry_policy.backoff.delay(attempt).total_seconds()
                     )
+                    remaining_seconds = deadline - asyncio.get_running_loop().time()
+                    if remaining_seconds <= 0:
+                        break
+                    delay = min(delay, remaining_seconds)
                     await self._sleep(delay)
                     continue
                 circuit.succeed()
@@ -301,6 +329,9 @@ class ModelGateway:
             if not isinstance(error, asyncio.CancelledError):
                 circuit.fail()
             raise
+        finally:
+            if probe_acquired:
+                circuit.release_probe()
         if last_error is not None and _provider_health_failure(last_error):
             circuit.fail()
         return None, last_error
@@ -374,11 +405,23 @@ class ModelGateway:
             validate_schema(tool.input_schema)
 
     @staticmethod
-    def _validate_response(request: ModelRequest, response: ModelResponse) -> None:
+    def _validate_response(
+        request: ModelRequest,
+        response: ModelResponse,
+        *,
+        expected_model: ModelIdentity,
+    ) -> None:
         if response.request_id != request.request_id:
             raise ModelGatewayError(
                 ModelErrorClass.MALFORMED_RESPONSE,
                 "response_request_id_mismatch",
+                retryable=False,
+                billing_ambiguous=True,
+            )
+        if response.model != expected_model:
+            raise ModelGatewayError(
+                ModelErrorClass.MALFORMED_RESPONSE,
+                "response_model_mismatch",
                 retryable=False,
                 billing_ambiguous=True,
             )

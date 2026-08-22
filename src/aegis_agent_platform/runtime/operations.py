@@ -225,7 +225,9 @@ class WorkerOperations:
             Role.TENANT_ADMIN,
             Role.PLATFORM_ADMIN,
         }.intersection(decision.active_roles):
-            raise OperationDeniedError("operator or administrator permission required")
+            raise OperationDeniedError(
+                "tenant administrator or platform administrator permission required"
+            )
         try:
             result = await self._repository.reconcile_expired(
                 context,

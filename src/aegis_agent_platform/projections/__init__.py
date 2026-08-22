@@ -88,7 +88,14 @@ class ProjectionEngine:
     async def rebuild(
         self, context: TenantContext, projection_name: str
     ) -> ProjectionCheckpoint:
-        """Discard and deterministically recreate one tenant projection."""
+        """Discard and deterministically recreate one tenant projection.
+
+        Projections used for budget admission (for example `model-usage`) must
+        be rebuilt under an external maintenance lock or inside one transaction
+        that swaps the rebuilt data atomically. The generic reset-then-catch-up
+        flow is deterministic, but it can otherwise expose an empty view
+        between transactions.
+        """
         await self._repository.reset(context, projection_name)
         return await self.catch_up(context, projection_name)
 

@@ -192,6 +192,10 @@ def test_work_state_machine_rejects_invalid_edges() -> None:
         )
         is WorkStatus.RETRY_WAIT
     )
+    with pytest.raises(ValueError, match="invalid"):
+        next_status(WorkStatus.REQUESTED, DomainEventType.WORK_HEARTBEAT)
+    with pytest.raises(ValueError, match="invalid"):
+        next_status(WorkStatus.RETRY_WAIT, DomainEventType.WORK_HEARTBEAT)
 
 
 @pytest.mark.parametrize(
@@ -1253,6 +1257,18 @@ def test_operations_are_tenant_authorized_bounded_and_approval_scoped() -> None:
         asyncio.run(
             operations.reconcile(
                 principal(Role.PLATFORM_ADMIN),
+                TENANT_A,
+                at=NOW,
+                limit=1,
+            )
+        )
+    with pytest.raises(
+        OperationDeniedError,
+        match="tenant administrator or platform administrator permission required",
+    ):
+        asyncio.run(
+            operations.reconcile(
+                principal(Role.OPERATOR),
                 TENANT_A,
                 at=NOW,
                 limit=1,

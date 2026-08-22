@@ -256,8 +256,11 @@ def next_status(current: WorkStatus | None, event_type: DomainEventType) -> Work
             DomainEventType.WORK_DEAD_LETTERED,
         ): WorkStatus.DEAD_LETTER,
     }
+    if event_type is DomainEventType.WORK_HEARTBEAT:
+        if current not in {WorkStatus.CLAIMED, WorkStatus.RUNNING}:
+            raise ValueError(f"{event_type} is invalid from {current}")
+        return current
     if event_type in {
-        DomainEventType.WORK_HEARTBEAT,
         DomainEventType.WORK_CANCEL_REQUESTED,
         DomainEventType.WORK_RECONCILED,
     }:
