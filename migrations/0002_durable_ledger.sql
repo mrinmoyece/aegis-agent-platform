@@ -5,11 +5,15 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'aegis_app') THEN
         CREATE ROLE aegis_app NOLOGIN NOINHERIT NOBYPASSRLS;
     END IF;
+    -- Normalize attributes for pre-existing aegis_app (ensures no BYPASSRLS/LOGIN)
+    ALTER ROLE aegis_app NOLOGIN NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
     IF NOT EXISTS (
         SELECT 1 FROM pg_roles WHERE rolname = 'aegis_maintenance'
     ) THEN
         CREATE ROLE aegis_maintenance NOLOGIN NOINHERIT BYPASSRLS;
     END IF;
+    -- Normalize attributes for pre-existing aegis_maintenance (ensures no LOGIN)
+    ALTER ROLE aegis_maintenance NOLOGIN NOINHERIT BYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
 END;
 $$;
 
