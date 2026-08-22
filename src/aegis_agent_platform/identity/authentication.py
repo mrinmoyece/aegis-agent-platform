@@ -469,6 +469,14 @@ class InMemoryIdentityDirectory:
         return record.to_principal()
 
 
+class AuthenticationPort(Protocol):
+    """Structural port satisfied by any callable that authenticates a bearer token."""
+
+    def authenticate(self, authorization_header: str | None) -> Principal:
+        """Raise AuthenticationError on failure; return Principal on success."""
+        ...
+
+
 class AuthenticationService:
     """Authenticate bearer credentials without accepting caller identity headers."""
 
