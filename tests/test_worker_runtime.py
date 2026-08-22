@@ -386,6 +386,18 @@ class FakeOutbox:
         del context, lease_owner, lease_expires_at, retry_at
         self.failed.append((message_id, error_code))
 
+    async def mark_outbox_dead_lettered(
+        self,
+        context: TenantContext,
+        message_id: UUID,
+        *,
+        lease_owner: str,
+        lease_expires_at: datetime,
+        error_code: str,
+    ) -> None:
+        del context, lease_owner, lease_expires_at
+        self.failed.append((message_id, error_code))
+
 
 def outbox_claim() -> ClaimedOutboxMessage:
     return ClaimedOutboxMessage(

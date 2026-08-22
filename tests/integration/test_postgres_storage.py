@@ -37,6 +37,7 @@ from aegis_agent_platform.domain import (
     TokenUsage,
     WorkLease,
 )
+from aegis_agent_platform.domain.events import thaw_json
 from aegis_agent_platform.event_store import (
     ConcurrencyError,
     FencingError,
@@ -193,7 +194,7 @@ def seed_gateway_work(lease: WorkLease) -> None:
                 request_event.event_type,
                 request_event.schema_version,
                 request_event.occurred_at,
-                Jsonb(request_event.payload),
+                Jsonb(thaw_json(request_event.payload)),
                 request_event.correlation_id,
                 request_event.idempotency_key or f"seed-{lease.work_id}",
             ),

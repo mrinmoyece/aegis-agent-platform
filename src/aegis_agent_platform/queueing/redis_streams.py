@@ -91,6 +91,22 @@ class RedisStreamQueue:
     ) -> tuple[QueueDelivery, ...]:
         await self.ensure_group()
         _validate_consumer_read(consumer, count, block_milliseconds)
+        if block_milliseconds > 0:
+            # A socket timeout that fires before Redis returns the XREADGROUP
+            # response will raise a transport error instead of returning an
+            # empty result.  Validate that the client is configured to tolerate
+            # the full blocking interval.
+            socket_timeout = self._client.connection_pool.connection_kwargs.get(
+                "socket_timeout"
+            )
+            if socket_timeout is not None and block_milliseconds >= (
+                socket_timeout * 1000
+            ):
+                raise ValueError(
+                    f"block_milliseconds ({block_milliseconds} ms) must be less than "
+                    f"the Redis socket timeout ({int(socket_timeout * 1000)} ms); "
+                    "increase socket_timeout or reduce block_milliseconds"
+                )
         try:
             if block_milliseconds > 0:
                 rows = await self._client.xreadgroup(

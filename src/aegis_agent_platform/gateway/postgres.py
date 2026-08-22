@@ -130,6 +130,32 @@ class PostgresGatewayRepository(GatewayRepository):
 
         async def mutation(connection: psycopg.AsyncConnection[Any]) -> None:
             await _lock_budget(connection, request.tenant_id)
+            # Fail closed if the model-usage projection is under a rebuild
+            # maintenance lock.  The projection is empty between reset() and
+            # catch_up(), so admission would observe zero historical usage and
+            # could over-admit during that window.
+            lock_key_row = await (
+                await connection.execute(
+                    """
+                    SELECT pg_try_advisory_lock(
+                        hashtext('aegis:rebuild:model-usage:' || %s)::bigint
+                    ) AS got
+                    """,
+                    (request.tenant_id,),
+                )
+            ).fetchone()
+            if lock_key_row is None or not lock_key_row[0]:
+                raise BudgetDeniedError("model_usage_projection_under_maintenance")
+            # We acquired the lock only to confirm no rebuild is in progress —
+            # release it immediately so it does not interfere with the rebuilder.
+            await connection.execute(
+                """
+                SELECT pg_advisory_unlock(
+                    hashtext('aegis:rebuild:model-usage:' || %s)::bigint
+                )
+                """,
+                (request.tenant_id,),
+            )
             configured = await _quota_limits(connection, request.tenant_id)
             if configured != quotas:
                 raise BudgetDeniedError("policy_quota_projection_mismatch")

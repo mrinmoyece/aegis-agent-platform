@@ -1583,8 +1583,9 @@ def test_metrics_and_gateway_operations_are_bounded_and_authorized() -> None:
         )
 
 
-def test_catalog_view_applies_policy_environment_residency_and_retention_filters(
-) -> None:
+def test_catalog_view_applies_policy_environment_residency_and_retention_filters() -> (
+    None
+):
     from security_helpers import binding, principal
 
     repository = InMemoryGatewayRepository((lease(),))

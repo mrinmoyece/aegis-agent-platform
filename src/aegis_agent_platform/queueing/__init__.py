@@ -215,6 +215,22 @@ class OutboxRepository(Protocol):
         """Release or dead-letter a failed publication."""
         ...
 
+    async def mark_outbox_dead_lettered(
+        self,
+        context: TenantContext,
+        message_id: UUID,
+        *,
+        lease_owner: str,
+        lease_expires_at: datetime,
+        error_code: str,
+    ) -> None:
+        """Immediately move a message to dead-letter without further retries.
+
+        Use for ``PermanentQueueError`` — the envelope is invalid and will
+        never become publishable regardless of attempt count.
+        """
+        ...
+
 
 __all__ = [
     "Lease",

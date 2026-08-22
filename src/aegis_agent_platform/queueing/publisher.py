@@ -136,7 +136,15 @@ class OutboxPublisher:
             except PermanentQueueError:
                 failed += 1
                 self._telemetry.failed(retryable=False)
-                await self._mark_failed(context, claim, now, "invalid_envelope")
+                # Permanently invalid envelopes must not cycle back through
+                # pending — dead-letter immediately without consulting attempt_count.
+                await self._repository.mark_outbox_dead_lettered(
+                    context,
+                    claim.message.message_id,
+                    lease_owner=claim.lease_owner,
+                    lease_expires_at=claim.lease_expires_at,
+                    error_code="invalid_envelope",
+                )
             else:
                 published += 1
                 self._telemetry.published()

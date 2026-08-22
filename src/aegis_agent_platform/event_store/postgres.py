@@ -730,6 +730,43 @@ class PostgresEventStore:
             ),
         )
 
+    async def mark_outbox_dead_lettered(
+        self,
+        context: TenantContext,
+        message_id: UUID,
+        *,
+        lease_owner: str,
+        lease_expires_at: datetime,
+        error_code: str,
+    ) -> None:
+        """Immediately quarantine a permanently invalid envelope.
+
+        Unlike ``mark_outbox_failed``, this method sets ``status =
+        'dead_letter'`` unconditionally — the attempt count does not matter.
+        Use for ``PermanentQueueError`` where retrying can never succeed.
+        """
+        if not error_code or len(error_code) > 128:
+            raise ValueError("bounded error_code is required")
+        await self._update_outbox_state(
+            context,
+            """
+            UPDATE outbox_messages
+            SET status = 'dead_letter',
+                last_error_code = %s,
+                lease_owner = NULL, lease_expires_at = NULL
+            WHERE tenant_id = %s AND message_id = %s
+              AND status = 'leased' AND lease_owner = %s
+              AND lease_expires_at = %s
+            """,
+            (
+                error_code,
+                str(context.tenant_id),
+                message_id,
+                lease_owner,
+                lease_expires_at,
+            ),
+        )
+
     async def _update_outbox_state(
         self,
         context: TenantContext,
@@ -869,6 +906,44 @@ class PostgresProjectionRepository:
                     """,
                     (str(context.tenant_id), projection_name),
                 )
+        except psycopg.Error as error:
+            raise classify_storage_error(error) from error
+
+    async def begin_rebuild(
+        self, context: TenantContext, projection_name: str
+    ) -> None:
+        """Acquire a session-level advisory lock that blocks concurrent admission.
+
+        Budget admission in ``PostgresGatewayRepository.reserve()`` uses
+        ``pg_try_advisory_lock`` with the same key and fails closed when this
+        lock is held.  The lock is automatically released when the database
+        session ends, so a crashed worker cannot permanently block admission.
+        """
+        try:
+            await self._connection.execute(
+                """
+                SELECT pg_advisory_lock(
+                    hashtext('aegis:rebuild:' || %s || ':' || %s)::bigint
+                )
+                """,
+                (projection_name, str(context.tenant_id)),
+            )
+        except psycopg.Error as error:
+            raise classify_storage_error(error) from error
+
+    async def end_rebuild(
+        self, context: TenantContext, projection_name: str
+    ) -> None:
+        """Release the advisory lock acquired by ``begin_rebuild``."""
+        try:
+            await self._connection.execute(
+                """
+                SELECT pg_advisory_unlock(
+                    hashtext('aegis:rebuild:' || %s || ':' || %s)::bigint
+                )
+                """,
+                (projection_name, str(context.tenant_id)),
+            )
         except psycopg.Error as error:
             raise classify_storage_error(error) from error
 
