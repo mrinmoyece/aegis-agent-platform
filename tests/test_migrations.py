@@ -72,8 +72,7 @@ def test_ledger_schema_is_append_only_tenant_scoped_and_indexed() -> None:
         in schema
     )
     assert (
-        "insert into tenants (tenant_id, display_name, enabled, created_at)"
-        in schema
+        "insert into tenants (tenant_id, display_name, enabled, created_at)" in schema
     )
     adapter = (
         (ROOT / "src" / "aegis_agent_platform" / "event_store" / "postgres.py")

@@ -137,8 +137,7 @@ class PostgresIdentityDirectory(IdentityDirectory):
             tenant_id=tenant_id,
             kind=kind,
             role_bindings=tuple(
-                _role_binding_from_row(tenant_id, row)
-                for row in bindings
+                _role_binding_from_row(tenant_id, row) for row in bindings
             ),
             user_id=UserId(identity[3]) if identity[3] is not None else None,
             service_identity=(
@@ -312,9 +311,7 @@ def _set_tenant(connection: psycopg.Connection[Any], context: TenantContext) -> 
     )
 
 
-def _role_binding_from_row(
-    tenant_id: TenantId, row: tuple[object, ...]
-) -> RoleBinding:
+def _role_binding_from_row(tenant_id: TenantId, row: tuple[object, ...]) -> RoleBinding:
     role = cast(str, row[0])
     assigned_by_raw = row[1]
     assigned_by_kind = row[2]
