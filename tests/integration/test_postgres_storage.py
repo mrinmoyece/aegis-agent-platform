@@ -117,6 +117,7 @@ def gateway_pricing() -> PricingVersion:
 def gateway_route(run_id: UUID) -> tuple[ModelRequest, WorkLease, RouteDecision]:
     model = ModelIdentity("mock", "safe-model")
     pricing = gateway_pricing()
+    now = datetime.now(UTC)
     request = ModelRequest(
         request_id=UUID(f"00000000-0000-4000-8000-{run_id.int % 10**12:012d}"),
         tenant_id=str(TENANT_A.tenant_id),
@@ -135,9 +136,9 @@ def gateway_route(run_id: UUID) -> tuple[ModelRequest, WorkLease, RouteDecision]
         generation=1,
         owner="integration-worker",
         attempt=1,
-        acquired_at=datetime(2026, 1, 1, tzinfo=UTC),
-        heartbeat_at=datetime(2026, 1, 1, tzinfo=UTC),
-        expires_at=datetime(2026, 1, 1, tzinfo=UTC) + timedelta(minutes=5),
+        acquired_at=now,
+        heartbeat_at=now,
+        expires_at=now + timedelta(minutes=5),
     )
     entry = ModelCatalogEntry(
         identity=model,
