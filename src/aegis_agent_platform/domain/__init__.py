@@ -29,10 +29,10 @@ __all__ = [
     "FailureClass",
     "JsonValue",
     "TraceContext",
-    "require_aware_datetime",
     "WorkLease",
     "WorkRequest",
     "WorkStatus",
     "WorkTransition",
     "next_status",
+    "require_aware_datetime",
 ]

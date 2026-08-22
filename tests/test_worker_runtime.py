@@ -27,6 +27,7 @@ from aegis_agent_platform.event_store import (
     OutboxMessage,
 )
 from aegis_agent_platform.identity import (
+    PLATFORM_TENANT_ID,
     Principal,
     PrincipalKind,
     Role,
@@ -358,9 +359,10 @@ class FakeOutbox:
         message_id: UUID,
         *,
         lease_owner: str,
+        lease_expires_at: datetime,
         published_at: datetime,
     ) -> None:
-        del context, lease_owner, published_at
+        del context, lease_owner, lease_expires_at, published_at
         self.published.append(message_id)
 
     async def mark_outbox_failed(
@@ -369,10 +371,11 @@ class FakeOutbox:
         message_id: UUID,
         *,
         lease_owner: str,
+        lease_expires_at: datetime,
         retry_at: datetime,
         error_code: str,
     ) -> None:
-        del context, lease_owner, retry_at
+        del context, lease_owner, lease_expires_at, retry_at
         self.failed.append((message_id, error_code))
 
 
@@ -1055,15 +1058,18 @@ class FakeOperationsRepository:
 
 
 def principal(role: Role) -> Principal:
+    tenant_id = (
+        PLATFORM_TENANT_ID if role is Role.PLATFORM_ADMIN else TenantId("tenant-a")
+    )
     return Principal(
         subject="subject",
         issuer="https://issuer.test",
-        tenant_id=TenantId("tenant-a"),
+        tenant_id=tenant_id,
         kind=PrincipalKind.USER,
         user_id=UserId("user-a"),
         role_bindings=(
             RoleBinding(
-                tenant_id=TenantId("tenant-a"),
+                tenant_id=tenant_id,
                 role=role,
                 assigned_by=UserId("admin"),
                 assigned_at=NOW - timedelta(days=1),
@@ -1134,19 +1140,20 @@ def test_operations_are_tenant_authorized_bounded_and_approval_scoped() -> None:
         )
         == 1
     )
-    assert asyncio.run(
-        operations.reconcile(
-            principal(Role.PLATFORM_ADMIN),
-            TENANT_A,
-            at=NOW,
-            limit=1,
+    with pytest.raises(OperationDeniedError):
+        asyncio.run(
+            operations.reconcile(
+                principal(Role.PLATFORM_ADMIN),
+                TENANT_A,
+                at=NOW,
+                limit=1,
+            )
         )
-    ) == (uid(1),)
 
     assert rows[0]["status"] == "running"
     assert repository.cancelled == [uid(2)]
     assert repository.requeued == [uid(1)]
-    assert metrics.snapshot()["reconciliation_success"] == 2.0
+    assert metrics.snapshot()["reconciliation_success"] == 1.0
     with pytest.raises(OperationDeniedError):
         asyncio.run(
             operations.work_status(
