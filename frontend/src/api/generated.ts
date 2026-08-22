@@ -1,10 +1,10 @@
 /* eslint-disable */
 /**
  * Generated from contracts/operator-api.openapi.json.
- * Do not edit by hand. Source SHA-256: 026c8c3bb5b24d2741b522f922f6e4a154a1abafddb907975812c4e89f82230c
+ * Do not edit by hand. Source SHA-256: 5f3efda350deb8aeb90a0bf33ccd09c3de743c1fe2f10d834be5868e061a0f3d
  */
 
-export const OPERATOR_API_CONTRACT_SHA256 = '026c8c3bb5b24d2741b522f922f6e4a154a1abafddb907975812c4e89f82230c' as const; // gitleaks:allow
+export const OPERATOR_API_CONTRACT_SHA256 = '5f3efda350deb8aeb90a0bf33ccd09c3de743c1fe2f10d834be5868e061a0f3d' as const; // gitleaks:allow
 
 export type DataAuthority = "event_fact" | "derived_state" | "model_claim" | "operator_decision" | "unknown";
 export type OperatorSeverity = "info" | "warning" | "critical";

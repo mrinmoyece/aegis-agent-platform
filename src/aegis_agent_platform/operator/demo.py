@@ -322,6 +322,10 @@ class DemoOperatorCommands:
 
     def __init__(self) -> None:
         self._results: dict[str, ApprovalDecisionResult] = {}
+        self._fingerprints: dict[str, str] = {}
+        # Track current approval version for optimistic concurrency checks.
+        self._current_approval_version: str = "approval-v3"
+        self._approval_terminal: bool = False
 
     async def decide_approval(
         self,
@@ -338,6 +342,15 @@ class DemoOperatorCommands:
             raise PermissionError("operator tenant mismatch")
         duplicate = self._results.get(command.idempotency_key)
         if duplicate is not None:
+            # Verify the duplicate request is for the same command; a different
+            # command reusing the same key is an idempotency conflict.
+            fingerprint = sha256(
+                f"{command.approval_id}:{command.plan_digest}:"
+                f"{command.policy_digest}:{command.decision}:"
+                f"{command.rationale_code}".encode()
+            ).hexdigest()
+            if fingerprint != self._fingerprints.get(command.idempotency_key):
+                raise ValueError("idempotency_conflict: command fingerprint mismatch")
             return ApprovalDecisionResult(
                 duplicate.approval_id,
                 duplicate.status,
@@ -353,17 +366,30 @@ class DemoOperatorCommands:
             or command.policy_digest != DEMO_POLICY_DIGEST
         ):
             raise ValueError("approval scope digest is stale")
-        if command.expected_version != "approval-v3":
+        if self._approval_terminal:
             raise RuntimeError("approval version conflict")
+        if command.expected_version != self._current_approval_version:
+            raise RuntimeError("approval version conflict")
+        new_version = "approval-v4"
         result = ApprovalDecisionResult(
             command.approval_id,
             "decision_recorded",
             "pending",
-            "approval-v4",
+            new_version,
             False,
             at,
         )
+        fingerprint = sha256(
+            f"{command.approval_id}:{command.plan_digest}:"
+            f"{command.policy_digest}:{command.decision}:"
+            f"{command.rationale_code}".encode()
+        ).hexdigest()
         self._results[command.idempotency_key] = result
+        self._fingerprints[command.idempotency_key] = fingerprint
+        # Advance the version and mark the approval as terminal so no further
+        # decisions with a stale version can be recorded.
+        self._current_approval_version = new_version
+        self._approval_terminal = True
         return result
 
 

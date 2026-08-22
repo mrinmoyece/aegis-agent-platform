@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -71,6 +72,15 @@ class OperatorItem:
             _bounded_text(self.citation, "citation")
         if len(self.metadata) > 32:
             raise ValueError("operator item metadata is outside the bound")
+        for meta_key, meta_val in self.metadata.items():
+            if not isinstance(meta_key, str) or not meta_key or len(meta_key) > 128:
+                raise ValueError("operator item metadata key exceeds length bound")
+            if isinstance(meta_val, str) and len(meta_val) > MAX_OPERATOR_STRING:
+                raise ValueError("operator item metadata string value exceeds bound")
+            if isinstance(meta_val, float) and not math.isfinite(meta_val):
+                raise ValueError(
+                    "operator item metadata must not contain non-finite float"
+                )
         object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
 
     def to_dict(self) -> dict[str, JsonValue]:

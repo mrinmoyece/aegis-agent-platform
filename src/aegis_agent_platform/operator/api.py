@@ -74,6 +74,7 @@ class OperatorBffApp:
         allowed_origins: frozenset[str],
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         production_ready: bool = False,
+        live_exchange_configured: bool = False,
     ) -> None:
         if not allowed_origins or any(
             not origin.startswith("https://") and origin != "http://127.0.0.1:4173"
@@ -91,6 +92,7 @@ class OperatorBffApp:
         self._allowed_origins = allowed_origins
         self._clock = clock
         self._production_ready = production_ready
+        self._live_exchange_configured = live_exchange_configured
 
     async def __call__(
         self,
@@ -125,7 +127,7 @@ class OperatorBffApp:
                         "pkce": True,
                         "state": True,
                         "nonce": True,
-                        "live_exchange_configured": self._production_ready,
+                        "live_exchange_configured": self._live_exchange_configured,
                     },
                 },
                 request_id=request_id,
@@ -193,11 +195,20 @@ class OperatorBffApp:
             )
             return
         if method == "GET" and len(segments) == 5 and segments[4] == "snapshot":
+            # The snapshot is an aggregate surface: it includes audit, approval, and
+            # other surface-specific data. Require both TENANT_READ and AUDIT_READ so
+            # that roles such as APPROVER (which lacks audit-read) cannot see it.
             if not await self._authorized(
                 principal,
                 tenant_id,
                 Permission.TENANT_READ,
                 "operator.snapshot",
+                request_id,
+            ) or not await self._authorized(
+                principal,
+                tenant_id,
+                Permission.AUDIT_READ,
+                "operator.snapshot.audit",
                 request_id,
             ):
                 await _respond(
@@ -430,6 +441,21 @@ class OperatorBffApp:
                 raise KeyError("mutation headers are required")
             if body.get("approval_id") != approval_id:
                 raise ValueError("approval route and body differ")
+            allowed_approval_keys = frozenset(
+                {
+                    "approval_id",
+                    "plan_digest",
+                    "policy_digest",
+                    "decision",
+                    "rationale_code",
+                    "comment",
+                }
+            )
+            unknown = set(body) - allowed_approval_keys
+            if unknown:
+                raise ValueError(
+                    f"unknown approval request properties: {sorted(unknown)}"
+                )
             command = ApprovalDecisionCommand(
                 approval_id,
                 _required_string(body, "plan_digest"),

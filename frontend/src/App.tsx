@@ -11,6 +11,7 @@ import { ApprovalDialog } from './components/ApprovalDialog';
 import { OperatorItemView, StatusBadge } from './components/OperatorItemView';
 import { DemoOperatorDataSource, type OperatorDataSource } from './demo/api';
 import { recordTelemetry } from './telemetry';
+import { TenantEventPoller } from './updates/poller';
 
 const views = [
   ['health', 'Health & SLOs'],
@@ -46,6 +47,7 @@ export function App({ source = new DemoOperatorDataSource() }: AppProps) {
   const [announcement, setAnnouncement] = useState('');
   const [online, setOnline] = useState(navigator.onLine);
   const mainRef = useRef<HTMLElement>(null);
+  const pollerRef = useRef<TenantEventPoller | null>(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -82,6 +84,27 @@ export function App({ source = new DemoOperatorDataSource() }: AppProps) {
         throw new Error('tenant_mismatch');
       }
       setSnapshot(nextSnapshot);
+      // Start bounded event polling so the workspace stays live.
+      const poller = new TenantEventPoller(
+        (tenantId, cursor, signal) => source.loadEvents(tenantId, cursor, signal),
+        (events) => {
+          setSnapshot((prev) => {
+            if (prev === null) return prev;
+            const incoming = new Map(events.map((e) => [e.id, e]));
+            const updated: OperatorSnapshot = { ...prev, sections: {} as typeof prev.sections };
+            for (const [section, items] of Object.entries(prev.sections)) {
+              (updated.sections as Record<string, readonly OperatorItem[]>)[section] = (
+                items as OperatorItem[]
+              ).map((item) => incoming.get(item.id) ?? item);
+            }
+            return updated;
+          });
+        },
+        (_state) => undefined,
+      );
+      pollerRef.current?.stop();
+      pollerRef.current = poller;
+      poller.start(nextSession.tenant_id);
       setAnnouncement('Synthetic operator session started.');
     } catch {
       setSession(null);
@@ -101,6 +124,8 @@ export function App({ source = new DemoOperatorDataSource() }: AppProps) {
   }
 
   function clearTenantSession(): void {
+    pollerRef.current?.stop();
+    pollerRef.current = null;
     setSnapshot(null);
     setSession(null);
     setApproval(null);

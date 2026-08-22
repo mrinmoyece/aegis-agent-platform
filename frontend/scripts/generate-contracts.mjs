@@ -29,6 +29,33 @@ const decision = union(
 );
 const digest = createHash('sha256').update(source).digest('hex');
 
+// Verify that the hard-coded interface shapes still match the OpenAPI schema.
+// If a property is added or removed, the generator fails loudly rather than
+// silently producing stale TypeScript shapes.
+assertSchemaFields('OperatorConfig', schemas.OperatorConfig, [
+  'schema_version', 'production_ready', 'auth_mode', 'demo', 'server_time', 'oidc_boundary',
+]);
+assertSchemaFields('SessionBootstrap', schemas.SessionBootstrap, [
+  'schema_version', 'actor_id', 'tenant_id', 'roles', 'permissions',
+  'csrf_token', 'server_time', 'production_ready', 'demo', 'stale',
+]);
+assertSchemaFields('OperatorItem', schemas.OperatorItem, [
+  'id', 'kind', 'title', 'summary', 'status', 'authority',
+  'occurred_at', 'severity', 'stale', 'citation', 'metadata',
+]);
+assertSchemaFields('OperatorSnapshot', schemas.OperatorSnapshot, [
+  'schema_version', 'tenant_id', 'generated_at', 'source_cursor', 'stale', 'demo', 'sections',
+]);
+assertSchemaFields('OperatorEventPage', schemas.OperatorEventPage, [
+  'events', 'next_cursor', 'server_time', 'stale',
+]);
+assertSchemaFields('ApprovalDecisionRequest', schemas.ApprovalDecisionRequest, [
+  'approval_id', 'plan_digest', 'policy_digest', 'decision', 'rationale_code', 'comment',
+]);
+assertSchemaFields('ApprovalDecisionResponse', schemas.ApprovalDecisionResponse, [
+  'approval_id', 'status', 'verification', 'version', 'duplicate', 'server_time',
+]);
+
 const generated = `/* eslint-disable */
 /**
  * Generated from contracts/operator-api.openapi.json.
@@ -154,4 +181,24 @@ function union(schema, name) {
     throw new Error(`${name} must define a string enum`);
   }
   return schema.enum.map((value) => JSON.stringify(value)).join(' | ');
+}
+
+function assertSchemaFields(schemaName, schema, expectedFields) {
+  const properties = Object.keys(schema?.properties ?? {});
+  const missing = expectedFields.filter((f) => !properties.includes(f));
+  const extra = properties.filter(
+    (f) => !expectedFields.includes(f) && (schema.required ?? []).includes(f),
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `${schemaName}: OpenAPI schema is missing expected fields: ${missing.join(', ')}. ` +
+      `Update the hard-coded interface in generate-contracts.mjs to match.`,
+    );
+  }
+  if (extra.length > 0) {
+    throw new Error(
+      `${schemaName}: OpenAPI schema has new required fields not in the hard-coded interface: ` +
+      `${extra.join(', ')}. Update the interface in generate-contracts.mjs.`,
+    );
+  }
 }

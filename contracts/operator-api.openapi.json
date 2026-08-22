@@ -631,7 +631,7 @@
               "string",
               "null"
             ],
-            "maxLength": 2048
+            "pattern": "^[0-9]{1,10}$"
           },
           "server_time": {
             "type": "string",

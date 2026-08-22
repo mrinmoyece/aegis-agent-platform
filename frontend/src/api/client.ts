@@ -195,7 +195,19 @@ export class OperatorApiClient {
             false,
           );
         }
-        const parsed = schema.safeParse(JSON.parse(text) as unknown);
+        let json: unknown;
+        try {
+          json = JSON.parse(text);
+        } catch {
+          throw new ApiError(
+            'invalid_response',
+            'response_not_json',
+            response.status,
+            response.headers.get('x-request-id'),
+            false,
+          );
+        }
+        const parsed = schema.safeParse(json);
         if (!parsed.success) {
           throw new ApiError(
             'invalid_response',

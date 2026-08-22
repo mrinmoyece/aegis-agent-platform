@@ -40,7 +40,18 @@ export function ApprovalDialog({
   const expectedVersion = String(metadata.version ?? '');
   const expectedPhrase = decision === 'grant' ? 'APPROVE' : 'DENY';
   const expiresAt = String(metadata.expires_at ?? '');
-  const remaining = Math.max(0, Date.parse(expiresAt) - Date.parse(serverTime));
+  const expiresAtMs = Date.parse(expiresAt);
+  const [remaining, setRemaining] = useState(() =>
+    Number.isFinite(expiresAtMs) ? Math.max(0, expiresAtMs - Date.now()) : 0,
+  );
+
+  useEffect(() => {
+    if (!Number.isFinite(expiresAtMs) || remaining <= 0) return;
+    const id = window.setInterval(() => {
+      setRemaining(Math.max(0, expiresAtMs - Date.now()));
+    }, 1_000);
+    return () => window.clearInterval(id);
+  }, [expiresAtMs, remaining]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
