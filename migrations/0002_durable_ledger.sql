@@ -332,11 +332,14 @@ CREATE OR REPLACE FUNCTION lookup_identity_by_subject(
 )
 LANGUAGE sql
 SECURITY DEFINER
-SET search_path = public, pg_catalog
+-- Restrict the search path to pg_catalog so no user-owned object in public
+-- can shadow a built-in operator or function and execute with BYPASSRLS
+-- privileges.  All application tables are referenced with their full schema.
+SET search_path = pg_catalog
 STABLE
 AS $$
     SELECT identity_id, tenant_id, identity_kind, user_id, service_identity, enabled
-    FROM   identities
+    FROM   public.identities
     WHERE  issuer   = p_issuer
       AND  subject  = p_subject
     LIMIT  1;

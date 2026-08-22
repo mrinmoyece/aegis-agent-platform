@@ -561,7 +561,12 @@ def _cursor_parameter(scope: AsgiMessage) -> int:
         return 0
     if len(values) != 1 or not values[0].isdigit():
         raise ValueError("cursor must be one non-negative integer")
-    return int(values[0])
+    cursor = int(values[0])
+    # PostgreSQL bigint cannot exceed 2^63-1; reject oversized cursors here so
+    # they return invalid_cursor rather than a permanent storage error.
+    if cursor > 9_223_372_036_854_775_807:
+        raise ValueError("cursor exceeds maximum database cursor value")
+    return cursor
 
 
 def _matching_header(item: object, name: bytes) -> str | None:

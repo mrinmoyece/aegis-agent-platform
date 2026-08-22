@@ -203,9 +203,11 @@ class EventEnvelope:
         audit_reference = value.get("audit_reference")
         return cls(
             event_id=UUID(str(value["event_id"])),
-            tenant_id=str(value["tenant_id"]),
-            aggregate_id=str(value["aggregate_id"]),
-            event_type=str(value["event_type"]),
+            tenant_id=_require_nonempty_string(value["tenant_id"], "tenant_id"),
+            aggregate_id=_require_nonempty_string(
+                value["aggregate_id"], "aggregate_id"
+            ),
+            event_type=_require_nonempty_string(value["event_type"], "event_type"),
             schema_version=int(str(value["schema_version"])),
             occurred_at=datetime.fromisoformat(str(value["occurred_at"])),
             payload=cast(Mapping[str, JsonValue], payload),
@@ -289,3 +291,16 @@ def _optional_uuid(value: object) -> UUID | None:
 
 def _optional_string(value: object) -> str | None:
     return str(value) if value is not None else None
+
+
+def _require_nonempty_string(value: object, field: str) -> str:
+    """Reject non-string and empty/whitespace-only values in authoritative history.
+
+    ``str(None)`` produces ``"None"`` which passes a strip-check; an explicit
+    isinstance guard is the only reliable way to catch null/non-string fields.
+    """
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(
+            f"{field} must be a non-empty string, got {type(value).__name__!r}"
+        )
+    return value
