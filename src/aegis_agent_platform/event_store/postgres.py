@@ -909,9 +909,7 @@ class PostgresProjectionRepository:
         except psycopg.Error as error:
             raise classify_storage_error(error) from error
 
-    async def begin_rebuild(
-        self, context: TenantContext, projection_name: str
-    ) -> None:
+    async def begin_rebuild(self, context: TenantContext, projection_name: str) -> None:
         """Acquire a session-level advisory lock that blocks concurrent admission.
 
         Budget admission in ``PostgresGatewayRepository.reserve()`` uses
@@ -931,9 +929,7 @@ class PostgresProjectionRepository:
         except psycopg.Error as error:
             raise classify_storage_error(error) from error
 
-    async def end_rebuild(
-        self, context: TenantContext, projection_name: str
-    ) -> None:
+    async def end_rebuild(self, context: TenantContext, projection_name: str) -> None:
         """Release the advisory lock acquired by ``begin_rebuild``."""
         try:
             await self._connection.execute(

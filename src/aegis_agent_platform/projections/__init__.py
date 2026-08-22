@@ -47,9 +47,7 @@ class ProjectionRepository(Protocol):
         """Delete one tenant's disposable view and checkpoint."""
         ...
 
-    async def begin_rebuild(
-        self, context: TenantContext, projection_name: str
-    ) -> None:
+    async def begin_rebuild(self, context: TenantContext, projection_name: str) -> None:
         """Acquire an exclusive maintenance lock before reset+catch-up.
 
         For budget-admission projections (e.g. ``model-usage``) the
@@ -59,9 +57,7 @@ class ProjectionRepository(Protocol):
         """
         ...
 
-    async def end_rebuild(
-        self, context: TenantContext, projection_name: str
-    ) -> None:
+    async def end_rebuild(self, context: TenantContext, projection_name: str) -> None:
         """Release the maintenance lock acquired by ``begin_rebuild``."""
         ...
 

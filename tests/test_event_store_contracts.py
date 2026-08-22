@@ -141,14 +141,10 @@ class FakeProjectionRepository:
         self.applied.clear()
         self.reset_count += 1
 
-    async def begin_rebuild(
-        self, context: TenantContext, projection_name: str
-    ) -> None:
+    async def begin_rebuild(self, context: TenantContext, projection_name: str) -> None:
         del context, projection_name
 
-    async def end_rebuild(
-        self, context: TenantContext, projection_name: str
-    ) -> None:
+    async def end_rebuild(self, context: TenantContext, projection_name: str) -> None:
         del context, projection_name
 
 

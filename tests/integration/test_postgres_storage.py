@@ -176,6 +176,15 @@ def event(
 def seed_gateway_work(lease: WorkLease) -> None:
     request_event = event(str(lease.work_id), tenant_id=str(TENANT_A.tenant_id))
     with admin_connection() as connection:
+        # event_stream_heads must exist before events (FK constraint)
+        connection.execute(
+            """
+            INSERT INTO event_stream_heads (tenant_id, aggregate_id, current_version)
+            VALUES (%s, %s, 1)
+            ON CONFLICT (tenant_id, aggregate_id) DO NOTHING
+            """,
+            (request_event.tenant_id, request_event.aggregate_id),
+        )
         connection.execute(
             """
             INSERT INTO events (
@@ -198,14 +207,6 @@ def seed_gateway_work(lease: WorkLease) -> None:
                 request_event.correlation_id,
                 request_event.idempotency_key or f"seed-{lease.work_id}",
             ),
-        )
-        connection.execute(
-            """
-            INSERT INTO event_stream_heads (tenant_id, aggregate_id, current_version)
-            VALUES (%s, %s, 1)
-            ON CONFLICT (tenant_id, aggregate_id) DO NOTHING
-            """,
-            (request_event.tenant_id, request_event.aggregate_id),
         )
         connection.execute(
             """
