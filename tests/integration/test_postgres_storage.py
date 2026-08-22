@@ -799,8 +799,9 @@ def test_postgres_gateway_repository_rolls_back_failed_projection_mutation() -> 
     asyncio.run(scenario())
 
 
-def test_postgres_gateway_repository_rebuilds_model_usage_projection_under_rls(
-) -> None:
+def test_postgres_gateway_repository_rebuilds_model_usage_projection_under_rls() -> (
+    None
+):
     async def scenario() -> None:
         connection = await app_connection()
         try:
