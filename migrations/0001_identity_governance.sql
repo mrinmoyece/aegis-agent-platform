@@ -48,7 +48,8 @@ CREATE TABLE role_bindings (
     revoked_at timestamptz,
     FOREIGN KEY (identity_id, tenant_id)
         REFERENCES identities (identity_id, tenant_id),
-    CHECK (expires_at IS NULL OR expires_at > assigned_at)
+    CHECK (expires_at IS NULL OR expires_at > assigned_at),
+    CHECK (role <> 'platform_admin' OR tenant_id = 'platform')
 );
 
 CREATE INDEX role_bindings_tenant_identity_idx

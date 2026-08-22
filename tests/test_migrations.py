@@ -5,6 +5,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+from scripts.check_migrations import _validate_migration_names
+
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "migrations" / "0001_identity_governance.sql"
 LEDGER_MIGRATION = ROOT / "migrations" / "0002_durable_ledger.sql"
@@ -17,6 +20,7 @@ def test_identity_governance_schema_has_tenant_constraints_and_indexes() -> None
     assert "identities_tenant_idx" in schema
     assert "role_bindings_tenant_identity_idx" in schema
     assert "security_audit_events_tenant_sequence_idx" in schema
+    assert "check (role <> 'platform_admin' or tenant_id = 'platform')" in schema
 
 
 def test_tenant_tables_have_forced_row_level_security() -> None:
@@ -88,3 +92,12 @@ def test_destructive_migration_guard_rejects_optional_truncate_syntax() -> None:
     assert pattern.search("TRUNCATE events;".lower())
     assert pattern.search("TRUNCATE TABLE events;".lower())
     assert not pattern.search("REVOKE TRUNCATE ON events;".lower())
+
+
+def test_migration_name_validation_requires_pattern_and_contiguous_sequence() -> None:
+    with pytest.raises(SystemExit, match=r"NNNN_description\.sql"):
+        _validate_migration_names([Path("001_bad-name.sql")])
+    with pytest.raises(SystemExit, match="contiguous"):
+        _validate_migration_names(
+            [Path("0001_first.sql"), Path("0003_third.sql")]
+        )

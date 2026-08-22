@@ -91,9 +91,10 @@ After startup:
 The imported Keycloak realm has no users and self-registration disabled, so it
 demonstrates the expected configuration shape (issuer, JWKS URL, audience) for
 `RemoteJwksProvider` rather than a ready-to-use login flow. Calling `/v1/me`
-without a bearer token returns `401 missing_token`; obtaining a real token
-against this realm and wiring it through `RemoteJwksProvider` is a deployment
-exercise, not something the fast local checks assume works. PostgreSQL initializes both forward migrations. Production composition must
+on the module-level demo application returns `503 authentication_not_configured`;
+obtaining a real token and wiring an authentication service through
+`RemoteJwksProvider` is a deployment exercise, not something the fast local
+checks assume works. PostgreSQL initializes both forward migrations. Production composition must
 explicitly inject the PostgreSQL repositories and event store; the module-level
 demo application remains fail-closed and does not invent development identities.
 

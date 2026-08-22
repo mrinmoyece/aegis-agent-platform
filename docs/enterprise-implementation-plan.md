@@ -82,9 +82,9 @@ Each slice is intended to be a reviewable PR with one primary acceptance gate.
 Layer 2 implements the EP-01 verification/principal core and the EP-02
 application authorization model, tenant-scoped repository contracts, SQL
 schema, RLS policies, and negative application tests. The live Keycloak
-rotation/revocation drill, PostgreSQL-backed adapters, separate database roles,
-and database-level cross-tenant denial suite remain required before the full
-EP-01/EP-02 operational exit gate can be claimed.
+rotation/revocation drill still remains before the full EP-01/EP-02 operational
+exit gate can be claimed. PostgreSQL-backed adapters, separate database roles,
+and the database-level cross-tenant denial suite are implemented in this layer.
 
 ### Implementation
 

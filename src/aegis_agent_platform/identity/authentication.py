@@ -8,6 +8,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from threading import Lock
 from typing import Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -113,13 +114,24 @@ class RemoteJwksProvider:
         self._timeout_seconds = timeout_seconds
         self._cache_ttl_seconds = cache_ttl_seconds
         self._monotonic = monotonic
-        self._cache: dict[str, tuple[VerificationKey, float]] = {}
+        self._lock = Lock()
+        self._cached_keys: dict[str, VerificationKey] = {}
+        self._document_expires_at = 0.0
 
     def get_key(self, key_id: str) -> VerificationKey:
-        cached = self._cache.get(key_id)
         now = self._monotonic()
-        if cached is not None and now < cached[1]:
-            return cached[0]
+        with self._lock:
+            if now >= self._document_expires_at:
+                self._refresh(now)
+            key = self._cached_keys.get(key_id)
+            if key is not None:
+                return key
+        raise AuthenticationError(
+            AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
+            "signing key was not found",
+        )
+
+    def _refresh(self, now: float) -> None:
         request = Request(  # noqa: S310 - URL scheme is constrained above
             self._jwks_url,
             headers={"Accept": "application/json"},
@@ -140,20 +152,13 @@ class RemoteJwksProvider:
                 AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
                 "JWKS document is invalid",
             )
+        refreshed_keys: dict[str, VerificationKey] = {}
         for raw_key in document["keys"]:
             key = _parse_rsa_jwk(raw_key)
             if key is not None:
-                self._cache[key.key_id] = (
-                    key,
-                    now + self._cache_ttl_seconds,
-                )
-        try:
-            return self._cache[key_id][0]
-        except KeyError as error:
-            raise AuthenticationError(
-                AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
-                "signing key was not found",
-            ) from error
+                refreshed_keys[key.key_id] = key
+        self._cached_keys = refreshed_keys
+        self._document_expires_at = now + self._cache_ttl_seconds
 
 
 def _parse_rsa_jwk(raw_key: object) -> VerificationKey | None:
@@ -164,9 +169,15 @@ def _parse_rsa_jwk(raw_key: object) -> VerificationKey | None:
         return None
     if raw_key["kty"] != "RSA":
         return None
-    modulus = int.from_bytes(jwt.utils.base64url_decode(raw_key["n"]))
-    exponent = int.from_bytes(jwt.utils.base64url_decode(raw_key["e"]))
-    public_key = rsa.RSAPublicNumbers(exponent, modulus).public_key()
+    try:
+        modulus = int.from_bytes(jwt.utils.base64url_decode(raw_key["n"]), "big")
+        exponent = int.from_bytes(jwt.utils.base64url_decode(raw_key["e"]), "big")
+        public_key = rsa.RSAPublicNumbers(exponent, modulus).public_key()
+    except (TypeError, ValueError) as error:
+        raise AuthenticationError(
+            AuthenticationErrorCode.SIGNING_KEY_UNAVAILABLE,
+            "JWKS key material is invalid",
+        ) from error
     pem = public_key.public_bytes(
         serialization.Encoding.PEM,
         serialization.PublicFormat.SubjectPublicKeyInfo,

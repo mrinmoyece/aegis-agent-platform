@@ -44,7 +44,7 @@ Status meanings:
 | Live Keycloak network round-trip and key-rotation drills | Planned | Layer 2, deployment-dependent |
 | Cross-tenant, expired-token, revoked-role, and quota/policy negative-test suite | Implemented | `tests/test_identity_security.py`, `tests/test_policy_security.py`, `tests/test_audit_secrets.py`, `tests/test_api.py` |
 | EP-01 OIDC key-rotation and emergency-revocation drill | Planned | EP-01 operational exit evidence |
-| EP-02 durable Postgres RLS enforcement proven against a live database | Planned | EP-02 database exit evidence |
+| EP-02 durable Postgres RLS enforcement proven against a live database | Implemented | `tests/integration/test_postgres_storage.py` forced-RLS and append-only coverage |
 | Durable Postgres-backed identity/tenant/policy/audit adapters | Implemented | `persistence.postgres`, live RLS/audit tests |
 | Vault-backed secret broker with rotation | Planned | Layer 5 |
 | Quota usage accounting projection | Implemented | Rebuildable usage view; runtime emission planned |

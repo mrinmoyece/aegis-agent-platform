@@ -165,10 +165,22 @@ def test_policy_and_quota_violations_deny_by_default(
             Decimal("0"),
         ),
         lambda: QuotaLimits(-1, Decimal("0"), 0, Decimal("0"), 0),
+        lambda: QuotaLimits(0, Decimal("NaN"), 0, Decimal("0"), 0),
+        lambda: PolicyRequest(
+            TENANT_ID,
+            "model",
+            "tool",
+            "connector",
+            "environment",
+            RiskLevel.LOW,
+            0,
+            Decimal("Infinity"),
+        ),
+        lambda: QuotaUsage(0, Decimal("NaN"), 0),
     ],
 )
 def test_invalid_policy_inputs_are_rejected(
     constructor: Callable[[], object],
 ) -> None:
-    with pytest.raises(ValueError, match=r"negative|required"):
+    with pytest.raises(ValueError, match=r"finite|negative|required"):
         constructor()

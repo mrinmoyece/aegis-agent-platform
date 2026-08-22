@@ -28,10 +28,10 @@ automated negative-test suite: `tests/test_identity_security.py`,
    JWT, and verify it with `JwtVerifier` against a `StaticJwksProvider`.
 2. Mutate the token's audience, issuer, `exp`, or `kid` header one at a time
    and confirm the specific `AuthenticationErrorCode` returned for each case.
-3. Register the same subject under two different tenants in
-   `InMemoryIdentityDirectory`, then call `AuthorizationService.decide` with
-   the wrong `tenant_id` and confirm `cross_tenant_access_denied` is returned
-   before any permission is even considered.
+3. Resolve one principal through `InMemoryIdentityDirectory`, then call
+   `AuthorizationService.decide` with a different target `tenant_id` and confirm
+   `cross_tenant_access_denied` is returned before any permission is even
+   considered.
 4. Give a `RoleBinding` a past `expires_at` or a `revoked_at`, call
    `is_active` with a time after it, and confirm the authorization decision
    changes from allow to deny.
@@ -49,7 +49,7 @@ automated negative-test suite: `tests/test_identity_security.py`,
 
 | Layer | Lab | Failure injection and evidence |
 | --- | --- | --- |
-| 2 | Live-database and live-Keycloak drill | Run the row-level-security policies and the append-only trigger against a running Postgres instance, and exercise `RemoteJwksProvider` against a real Keycloak realm with rotated keys — both are currently only asserted statically or against mocked transports |
+| 2 | Live-Keycloak drill | Exercise `RemoteJwksProvider` against a real Keycloak realm with rotated keys; the PostgreSQL forced-RLS and append-only trigger coverage already runs live in `tests/integration/test_postgres_storage.py` |
 | 3 | Durable investigation | Crash after each event append; replay identical incident state |
 | 3 | Schema evolution | Replay old checkout fixtures through additive upcasters |
 | 4 | Lease recovery | Pause a worker past expiry; prove stale fence rejection |

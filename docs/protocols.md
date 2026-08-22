@@ -8,8 +8,8 @@ tenancy contracts into a real vertical slice — see `architecture.md`'s
 "Identity, tenancy, and governance boundary" section. Memory storage, MCP
 clients/servers, and A2A endpoints remain unimplemented. PostgreSQL with
 pgvector is present in the local Compose scaffold and now also initializes the
-identity/governance schema; the durable event store and memory retrieval
-integration remain planned.
+identity/governance schema; the durable event store now ships as
+`PostgresEventStore`, while memory retrieval integration remains planned.
 
 ## Three-tier agent memory
 

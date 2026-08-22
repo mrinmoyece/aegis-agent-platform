@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from threading import Lock
 from time import monotonic
 from typing import Any, ClassVar, Protocol
@@ -115,6 +115,11 @@ class NullStorageTelemetry:
         del lag_events
 
 
+def _observe_telemetry(callback: Callable[..., None], *args: object) -> None:
+    with suppress(Exception):
+        callback(*args)
+
+
 class PostgresEventStore:
     """Tenant-isolated append-only ledger using PostgreSQL transactions."""
 
@@ -148,12 +153,14 @@ class PostgresEventStore:
                     expected_version=expected_version,
                     outbox=outbox,
                 )
-            self._telemetry.append_completed(
-                len(events), self._monotonic() - started_at
+            _observe_telemetry(
+                self._telemetry.append_completed,
+                len(events),
+                self._monotonic() - started_at,
             )
             return version
         except ConcurrencyError:
-            self._telemetry.append_conflicted()
+            _observe_telemetry(self._telemetry.append_conflicted)
             raise
         except psycopg.Error as error:
             raise classify_storage_error(error) from error
@@ -636,6 +643,14 @@ class PostgresProjectionRepository:
                     (final_position, str(context.tenant_id), projection_name),
                 )
                 return final_position
+        except InvalidOperation as error:
+            raise PermanentStorageError(
+                "projection event payload is invalid"
+            ) from error
+        except ValueError as error:
+            raise PermanentStorageError(
+                "projection event payload is invalid"
+            ) from error
         except ConcurrencyError:
             raise
         except psycopg.Error as error:
@@ -727,7 +742,7 @@ class PostgresProjectionRepository:
             """,
             (
                 event.tenant_id,
-                UUID(_required_string(event.payload, "artifact_id")),
+                _required_uuid(event.payload, "artifact_id"),
                 event.aggregate_id,
                 _required_string(event.payload, "artifact_kind"),
                 _required_string(event.payload, "source_reference"),
@@ -750,7 +765,7 @@ class PostgresProjectionRepository:
                 """,
                 (
                     event.tenant_id,
-                    UUID(_required_string(event.payload, "approval_id")),
+                    _required_uuid(event.payload, "approval_id"),
                     event.aggregate_id,
                     _required_string(event.payload, "proposal_reference"),
                     event.occurred_at,
@@ -766,7 +781,7 @@ class PostgresProjectionRepository:
                 """,
                 (
                     event.tenant_id,
-                    UUID(_required_string(event.payload, "approval_id")),
+                    _required_uuid(event.payload, "approval_id"),
                 ),
             )
 
@@ -775,7 +790,7 @@ class PostgresProjectionRepository:
             return
         period = _required_string(event.payload, "period")
         tokens = _required_int(event.payload, "tokens")
-        cost = Decimal(_required_string(event.payload, "cost_usd"))
+        cost = _required_decimal(event.payload, "cost_usd")
         await self._connection.execute(
             """
             INSERT INTO usage_quota_projection (
@@ -1016,6 +1031,31 @@ def _required_int(payload: Mapping[str, JsonValue], field: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise PermanentStorageError(f"projection event requires non-negative {field}")
     return value
+
+
+def _required_uuid(payload: Mapping[str, JsonValue], field: str) -> UUID:
+    value = _required_string(payload, field)
+    try:
+        return UUID(value)
+    except ValueError as error:
+        raise PermanentStorageError(
+            f"projection event requires uuid {field}"
+        ) from error
+
+
+def _required_decimal(payload: Mapping[str, JsonValue], field: str) -> Decimal:
+    value = _required_string(payload, field)
+    try:
+        decimal_value = Decimal(value)
+    except InvalidOperation as error:
+        raise PermanentStorageError(
+            f"projection event requires finite non-negative {field}"
+        ) from error
+    if not decimal_value.is_finite() or decimal_value < 0:
+        raise PermanentStorageError(
+            f"projection event requires finite non-negative {field}"
+        )
+    return decimal_value
 
 
 __all__ = [

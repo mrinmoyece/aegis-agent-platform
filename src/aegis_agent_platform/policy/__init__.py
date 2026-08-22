@@ -11,6 +11,13 @@ from aegis_agent_platform.identity import Role, TenantId
 from aegis_agent_platform.tenancy import TenantContext
 
 
+def _require_finite_non_negative_decimal(value: Decimal, name: str) -> None:
+    if not value.is_finite():
+        raise ValueError(f"{name} must be finite")
+    if value < 0:
+        raise ValueError(f"{name} cannot be negative")
+
+
 class Decision(StrEnum):
     """Possible governance outcomes before a side effect is attempted."""
 
@@ -46,8 +53,14 @@ class QuotaLimits:
         )
         if any(value < 0 for value in numeric):
             raise ValueError("quota integer limits cannot be negative")
-        if self.max_run_cost_usd < 0 or self.max_tenant_cost_usd_per_period < 0:
-            raise ValueError("quota cost limits cannot be negative")
+        _require_finite_non_negative_decimal(
+            self.max_run_cost_usd,
+            "max_run_cost_usd",
+        )
+        _require_finite_non_negative_decimal(
+            self.max_tenant_cost_usd_per_period,
+            "max_tenant_cost_usd_per_period",
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,8 +103,12 @@ class PolicyRequest:
         names = (self.model, self.tool, self.connector, self.environment)
         if any(not value for value in names):
             raise ValueError("policy request selectors are required")
-        if self.estimated_tokens < 0 or self.estimated_cost_usd < 0:
-            raise ValueError("estimated quota consumption cannot be negative")
+        if self.estimated_tokens < 0:
+            raise ValueError("estimated tokens cannot be negative")
+        _require_finite_non_negative_decimal(
+            self.estimated_cost_usd,
+            "estimated_cost_usd",
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,12 +120,12 @@ class QuotaUsage:
     active_runs: int
 
     def __post_init__(self) -> None:
-        if (
-            self.tenant_tokens_used < 0
-            or self.tenant_cost_usd < 0
-            or self.active_runs < 0
-        ):
+        if self.tenant_tokens_used < 0 or self.active_runs < 0:
             raise ValueError("quota usage cannot be negative")
+        _require_finite_non_negative_decimal(
+            self.tenant_cost_usd,
+            "tenant_cost_usd",
+        )
 
 
 @dataclass(frozen=True, slots=True)

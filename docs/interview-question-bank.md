@@ -74,9 +74,9 @@ or capability transfer.
 > `audit.py`, `secrets_boundary.py`, `migrations/0001_identity_governance.sql`),
 > proven by a committed automated negative-test suite
 > (`tests/test_identity_security.py`, `tests/test_policy_security.py`,
-> `tests/test_audit_secrets.py`, `tests/test_migrations.py`). Durable Postgres
-> wiring, live-Keycloak drills, and quota usage accounting remain planned —
-> see `limitations.md` and `roadmap.md` before claiming the full gate is met.
+> `tests/test_audit_secrets.py`, `tests/test_migrations.py`). Live-Keycloak
+> drills and runtime quota-usage emission remain planned — see
+> `limitations.md` and `roadmap.md` before claiming the full gate is met.
 
 ### Why does `AuthorizationService.decide` check tenant match before checking permission?
 
