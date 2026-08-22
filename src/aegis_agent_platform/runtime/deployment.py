@@ -47,7 +47,10 @@ from aegis_agent_platform.observability.health import (
     HealthStatus,
     ProbeResult,
 )
-from aegis_agent_platform.operations import PostgresSchemaVersionProbe
+from aegis_agent_platform.operations import (
+    PostgresSchemaVersionProbe,
+    SchemaCompatibilityWindow,
+)
 from aegis_agent_platform.persistence.postgres import (
     PostgresAuditStore,
     PostgresIdentityDirectory,
@@ -299,6 +302,10 @@ async def _run_outbox_publisher(settings: Settings, stop: asyncio.Event) -> None
     resolver = _writer_fences(settings)
     connection = await psycopg.AsyncConnection.connect(settings.database_url)
     connection_lock = postgres_connection_lock(connection)
+    schema_probe = PostgresSchemaVersionProbe(connection)
+    schema_window = SchemaCompatibilityWindow(
+        settings.schema_min_version, settings.schema_max_version
+    )
     redis_client = create_redis_client(settings)
     try:
         queue = RedisStreamQueue(redis_client)
@@ -322,6 +329,13 @@ async def _run_outbox_publisher(settings: Settings, stop: asyncio.Event) -> None
                 _READY_FILE.unlink(missing_ok=True)
                 await _wait(stop, 1.0)
                 continue
+            async with connection_lock:
+                schema_version = await schema_probe()
+                await connection.rollback()
+            if schema_version is None or not schema_window.accepts(schema_version):
+                _READY_FILE.unlink(missing_ok=True)
+                await _wait(stop, 1.0)
+                continue
             _READY_FILE.touch(mode=0o600)
             contexts = _tenant_contexts(resolver)
             now = datetime.now(UTC)
@@ -339,6 +353,10 @@ async def _run_reconciler(settings: Settings, stop: asyncio.Event) -> None:
     resolver = _writer_fences(settings)
     connection = await psycopg.AsyncConnection.connect(settings.database_url)
     connection_lock = postgres_connection_lock(connection)
+    schema_probe = PostgresSchemaVersionProbe(connection)
+    schema_window = SchemaCompatibilityWindow(
+        settings.schema_min_version, settings.schema_max_version
+    )
     try:
         event_store = PostgresEventStore(
             connection,
@@ -351,6 +369,13 @@ async def _run_reconciler(settings: Settings, stop: asyncio.Event) -> None:
                 connection_lock,
                 resolver,
             ):
+                _READY_FILE.unlink(missing_ok=True)
+                await _wait(stop, 5.0)
+                continue
+            async with connection_lock:
+                schema_version = await schema_probe()
+                await connection.rollback()
+            if schema_version is None or not schema_window.accepts(schema_version):
                 _READY_FILE.unlink(missing_ok=True)
                 await _wait(stop, 5.0)
                 continue

@@ -13,3 +13,14 @@ metadata:
   namespace: aegis-system
 spec:
   replicas: 1
+---
+# The base HPA has minReplicas: 3; patch it to 1 so the Deployment replica
+# count above is not immediately overridden by the autoscaler in development.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aegis-api
+  namespace: aegis-system
+spec:
+  minReplicas: 1
+  maxReplicas: 1

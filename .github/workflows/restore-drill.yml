@@ -6,6 +6,7 @@ on:
       - ".github/workflows/restore-drill.yml"
       - "migrations/**"
       - "scripts/restore_drill.sh"
+      - "scripts/restore_redrive.py"
       - "scripts/migrate.py"
       - "tests/test_production_foundations.py"
   push:

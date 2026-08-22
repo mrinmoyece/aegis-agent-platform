@@ -93,6 +93,13 @@ def main() -> int:
                 "versionInfo": platform.digest,
                 "downloadLocation": f"{args.image}@{platform.digest}",
                 "filesAnalyzed": False,
+                # licenseConcluded and copyrightText are mandatory SPDX 2.3
+                # Package fields; omitting them produces an invalid document.
+                # Use NOASSERTION for the index document because the actual
+                # licence and copyright information lives in each platform SBOM
+                # referenced via the external document relationship below.
+                "licenseConcluded": "NOASSERTION",
+                "copyrightText": "NOASSERTION",
                 "checksums": [
                     {
                         "algorithm": "SHA256",

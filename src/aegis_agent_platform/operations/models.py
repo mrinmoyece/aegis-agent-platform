@@ -31,8 +31,10 @@ class WriterFence:
     def __post_init__(self) -> None:
         if not self.home_region.strip():
             raise ValueError("home_region is required")
-        if self.generation < 1:
-            raise ValueError("writer generation must be positive")
+        # bool is a subclass of int; reject it explicitly so JSON credentials
+        # with `generation: true` cannot compare equal to generation 1.
+        if isinstance(self.generation, bool) or self.generation < 1:
+            raise ValueError("writer generation must be a positive integer")
 
     def permits(self, *, region: str, generation: int) -> bool:
         """Reject stale or non-home-region writers deterministically."""

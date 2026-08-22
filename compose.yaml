@@ -84,7 +84,6 @@ services:
     command:
       - >-
         python /opt/aegis/scripts/migrate.py
-        --adopt-existing
         --applied-by local-compose
         && python /opt/aegis/scripts/bootstrap_local_compose.py
     environment:
