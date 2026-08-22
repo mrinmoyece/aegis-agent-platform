@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 import psycopg
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tests"))
 DATABASE_URL = os.environ.get("AEGIS_TEST_DATABASE_URL")
 
 
@@ -27,6 +29,12 @@ def migrated_database() -> None:
             INSERT INTO tenants (tenant_id, display_name, enabled, created_at)
             VALUES
                 ('tenant-a', 'Tenant A', true, transaction_timestamp()),
-                ('tenant-b', 'Tenant B', true, transaction_timestamp())
+                ('tenant-b', 'Tenant B', true, transaction_timestamp()),
+                (
+                    'tenant-remediation',
+                    'Tenant Remediation',
+                    true,
+                    transaction_timestamp()
+                )
             """
         )

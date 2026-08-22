@@ -60,6 +60,16 @@
 | Unresolved contradiction | Typed contradiction and critique references | Preserve the conflict and block finalization |
 | Specialist projection loss/corruption | Projection/ledger version mismatch or missing rows | Rebuild under maintenance authority from the tenant event stream |
 | Stale specialist result after lease reclaim | Existing token/generation event-store fence | Reject the entire event/projection transaction |
+| Duplicate action request | Tenant effect claim or adapter idempotency conflict | Suppress an identical duplicate; stop on mismatched scope and never widen authority |
+| Action succeeds but outcome append is lost | In-flight requested attempt remains in replay | Reconcile target state before any redelivery retry |
+| Approval changes while work is queued | Current digest, expiry, role, quorum, or revocation check fails | Deny before action intent; require a new exact approval |
+| Stale action worker | PostgreSQL lease token/generation check or fenced append fails | Make no provider call and never append success |
+| Action timeout after provider acceptance | Ambiguous execution event | Reconcile by exact target fingerprint and stable idempotency key; escalate if unknown |
+| Adapter raises or returns malformed data | Adapter containment and strict result validation | Append classified failure/ambiguity within the active fence; keep supervisor alive |
+| Target precondition changed | Fresh target fingerprint or explicit condition mismatch | Record preflight failure; do not execute under stale approval |
+| Provider accepts action but postcondition fails | Fresh verification result is failure, partial, or unknown | Keep incident unresolved; invoke approved reversal only through a new durable intent |
+| Cancellation races action | Cancellation recheck before intent and fenced terminal append | Cancel before effect where possible; reconcile an already-requested attempt |
+| Projection loses Layer 8 rows | Ledger/projection mismatch | Rebuild forced-RLS read models under maintenance authority |
 
 Global event positions order commits but may contain numbers unused after a
 rolled-back PostgreSQL identity allocation. That is not corruption. A per-

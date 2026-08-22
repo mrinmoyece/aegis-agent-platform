@@ -76,9 +76,9 @@ telemetry interfaces. Historical Layer 1 fixtures replay. Live PostgreSQL tests
 cover rollback, concurrent races, duplicate delivery, outbox claim/dead-letter,
 RLS, immutable rows, audit redaction, replay, and projection rebuild.
 
-**Acceptance gate:** persistence and replay mechanics are done. No external effect
-path is implemented yet; later layers must consume
-`effect.intent_recorded.v1` before adding any effect. Layer 7 now supplies the
+**Acceptance gate:** persistence and replay mechanics are done. Layer 8 records
+typed action intent before every controlled effect and retains the generic
+`effect.intent_recorded.v1` compatibility path. Layer 7 supplies the
 incident-specific deterministic fold and typed artifact replay on top of this
 ledger. Redis workers are implemented separately in Layer 4.
 
@@ -89,8 +89,8 @@ workers, fair tenant scheduling, cancellation, retry/DLQ, and reconciliation.
 
 **Status:** the distributed execution substrate is implemented and live-tested.
 PostgreSQL remains authoritative; Redis Streams is shared at-least-once
-transport. Provider calls, connectors, coordinator/specialist reasoning, and
-remediation are intentionally deferred.
+transport. Higher layers now use these leases for provider calls, connectors,
+specialist reasoning, and controlled remediation.
 
 **Acceptance gate:** duplicate delivery, lease expiry/reclaim, stale writers,
 publisher restart windows, cancellation races, timeout/retry exhaustion, poison
@@ -157,23 +157,39 @@ output, prompt injection in evidence, cancellation, timeout/retry, provider
 budget denial, critic rejection, contradictions, projection rebuild, tenant
 isolation, and completion-order variance fail closed or reach the same explicit
 terminal state. Finalization requires a cited above-threshold hypothesis and an
-accepted critique. Remediation remains proposal-only.
+accepted critique. Layer 7 itself remains proposal-only; Layer 8 consumes that
+immutable proposal without allowing an agent to approve it.
 
-## Layer 8 — Approvals, tools, policy, and sandbox
+## Layer 8 — Approval-gated controlled remediation
 
-Add typed tool contracts, exact approvals, capability-scoped credentials, an
-incident proposal/approval workflow, and isolated execution with resource and
-network controls. Add controlled rollback/remediation adapters only after
-approval is durable.
+Add immutable provider-neutral plan/action/target contracts, exact policy-bound
+approvals, an authenticated tenant-scoped proposal/decision workflow, fenced
+intent-before-effect execution, stable idempotency, reconciliation, and explicit
+postcondition verification.
 
-**Acceptance gate:** prompt injection or hostile runbook/model content cannot
-bypass authorization; sandbox escape and egress tests fail closed; every effect
-is attributable to an approved intent; the checkout rollback cannot execute
-before valid approval.
+**Status:** implemented for a deterministic fake action and one fixed-shape
+Kubernetes deployment rollout-restart adapter. Policy defaults deny; approval
+binds immutable plan/action/policy digests, exact target, risk, requester,
+quorum, and expiry. Separation of duties, distinct approvers, role changes,
+revocation, stale fences, cancellation, ambiguous effects, reconciliation,
+duplicate delivery, adapter bugs, and verification failure are executable test
+cases. PostgreSQL forced-RLS projections are rebuildable and Redis remains
+transport only.
 
-## Layer 9 — Memory and retrieval
+**Acceptance gate:** hostile model/evidence content cannot create authority;
+current policy, approval, target, preconditions, and fence are rechecked before
+durable intent; every effect is attributable to that intent; ambiguous effects
+are reconciled before retry; fresh evidence, not adapter acceptance, determines
+verification. Exactly-once is not claimed.
 
-Add tenant-scoped short- and long-term memory, pgvector retrieval, provenance,
+General sandbox/code execution, arbitrary commands, capability credential
+brokering, broad autonomous remediation, production credentials, and live
+external verification remain deferred.
+
+## Layer 9 — Sandbox, memory, and retrieval
+
+Add policy-isolated general code execution plus tenant-scoped short- and
+long-term memory, pgvector retrieval, provenance,
 classification, retention, export, and deletion workflows. Index runbooks and
 past incident evidence without turning retrieved text into authority. Implement
 three explicit tiers: bounded working state/context, authoritative episodic event

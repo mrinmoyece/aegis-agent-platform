@@ -26,7 +26,7 @@ Status meanings:
 | Live connector environment certification | Planned | account/cluster scopes, egress, TLS, rotation, residency drills |
 | Verified connector webhooks and replay protection | Planned | no webhook routes in Layer 6 |
 | Checkout-failure incident investigation | Implemented | Fake-only Layer 7 workflow; no live diagnosis claim |
-| Approval-gated rollback and recovery verification | Planned | Layer 8; Layer 7 emits proposal and verification plan only |
+| Approval-gated controlled action and recovery verification | Implemented | Layer 8 fake workflow plus fixed-shape Kubernetes rollout restart; no live target claim |
 | Fixed incident specialist roles and typed artifacts | Implemented | `agents.artifacts`, role/output policy tests |
 | Ledger-only specialist communication | Implemented | `reasoning.artifact_recorded.v1`, replay fold |
 | Coordinator DAG, capability, budget, and timeout enforcement | Implemented | `agents.coordination`, `agents.service`, ADR 0014 |
@@ -59,7 +59,7 @@ Status meanings:
 | Deterministic incident state machine | Implemented | Pure Layer 7 event fold and corruption tests |
 | Intent-before-model-side-effect enforcement | Implemented | fenced model request/reservation before SDK call |
 | Transactional inbox/outbox | Implemented | deduplication, atomic append, claims, retry/DLQ |
-| Rebuildable projections/checkpoints | Implemented | run/artifact/approval/usage/tenant and specialist views |
+| Rebuildable projections/checkpoints | Implemented | run/artifact/approval/action/usage/tenant and specialist views |
 | Authorized ledger/timeline inspection | Implemented | tenant-scoped redacted read-only API |
 | Durable queue and fenced leases | Implemented | `queueing`, `runtime.postgres`, migration `0003`, live race tests |
 | Retry, timeout, dead-letter, and recovery policy | Implemented | `runtime.WorkerSupervisor`, deterministic tests |
@@ -73,14 +73,26 @@ Status meanings:
 | Provider retry/failover/rate/concurrency/circuit controls | Implemented | deterministic clocks/backoff and state tests |
 | Exactly-once provider billing | Planned | providers can bill ambiguous accepted calls; reconciliation required |
 | Encrypted durable prompt/response artifacts | Planned | Layer 7 privacy/memory work |
-| Tool schema registry and runtime policy | Planned | Layer 5 |
-| Human approval and break-glass audit | Planned | Layer 5 |
-| Isolated sandbox with egress policy and quotas | Planned | Layer 5 |
+| Provider-neutral remediation/action contracts and strict bounds | Implemented | `domain.remediation`, canonical digest and hostile-input tests |
+| Deny-by-default exact action policy | Implemented | allowlist, target, window, risk, blast-radius, quota, evidence, critic, and digest tests |
+| Authenticated exact-scope human approval | Implemented | SoD, distinct quorum, roles, expiry, revocation, concurrency, idempotency, immutable audit |
+| Break-glass approval | Planned | stronger authentication, notification, and retrospective review required |
+| Intent-before-action-side-effect enforcement | Implemented | current fence/policy/approval/target recheck and `action.execution_requested.v1` |
+| At-least-once effect idempotency and reconciliation | Implemented | tenant key, target fingerprint, effect claim, ambiguity, duplicate/conflict tests |
+| Explicit fresh-evidence postcondition verification | Implemented | success/failure/partial/unknown records; API acceptance is not recovery |
+| Deterministic fake controlled-action adapter and CLI | Implemented | seven fake-only scenarios; no network or credential |
+| Fixed-shape Kubernetes rollout-restart adapter | Implemented | official-client boundary tests; live cluster unverified |
+| Authorized bounded remediation APIs | Implemented | proposal/decision/revocation/status/cursor routes with redaction |
+| Forced-RLS remediation projections and immutable decisions | Implemented | migration `0007`, environment-gated PostgreSQL race/RLS/rebuild tests |
+| Remediation metrics/traces without sensitive content | Implemented | fixed operation/outcome labels; no prompt/evidence/tenant/target labels |
+| General tool schema registry and arbitrary tool execution | Planned | broad tool authority is not exposed by Layer 8 |
+| Isolated sandbox with egress policy and quotas | Planned | Layer 9; no general code execution exists |
 | Tenant-safe memory and retrieval provenance | Planned | Layer 6 |
 | Three-tier working/episodic/semantic memory | Planned | Layer 6, `docs/protocols.md` |
 | PII-safe compaction, retention, and deletion | Planned | Layer 6 |
 | Data retention, export, and erasure workflows | Planned | Layer 6 |
 | Deterministic specialist behavioral evaluations | Implemented | success, ambiguity, contradiction, budget, recovery; `make evals` |
+| Deterministic remediation behavioral evaluations | Implemented | approval success/denial/stale, ambiguity, verification/rollback, policy attack, crash recovery |
 | Versioned production evaluation datasets and baselines | Planned | Layer 10 |
 | Online quality, safety, latency, and cost signals | Planned | Layer 7 |
 | Model span/metric content redaction | Implemented | bounded catalog labels; no prompt/tenant/request labels |
