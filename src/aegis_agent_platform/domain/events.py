@@ -123,6 +123,38 @@ class DomainEventType(_StringConstant):
     REASONING_ARTIFACT_RECORDED: ClassVar[DomainEventType]
     COORDINATOR_DECISION_RECORDED: ClassVar[DomainEventType]
     INVESTIGATION_FINALIZED: ClassVar[DomainEventType]
+    REMEDIATION_PROPOSED: ClassVar[DomainEventType]
+    REMEDIATION_PLAN_REVISED: ClassVar[DomainEventType]
+    REMEDIATION_POLICY_EVALUATED: ClassVar[DomainEventType]
+    REMEDIATION_APPROVAL_REQUESTED: ClassVar[DomainEventType]
+    REMEDIATION_APPROVAL_GRANTED: ClassVar[DomainEventType]
+    REMEDIATION_APPROVAL_DENIED: ClassVar[DomainEventType]
+    REMEDIATION_APPROVAL_EXPIRED: ClassVar[DomainEventType]
+    REMEDIATION_APPROVAL_REVOKED: ClassVar[DomainEventType]
+    ACTION_DISPATCH_CLAIMED: ClassVar[DomainEventType]
+    ACTION_PREFLIGHT_REQUESTED: ClassVar[DomainEventType]
+    ACTION_PREFLIGHT_COMPLETED: ClassVar[DomainEventType]
+    ACTION_PREFLIGHT_FAILED: ClassVar[DomainEventType]
+    ACTION_DRY_RUN_REQUESTED: ClassVar[DomainEventType]
+    ACTION_DRY_RUN_COMPLETED: ClassVar[DomainEventType]
+    ACTION_DRY_RUN_FAILED: ClassVar[DomainEventType]
+    ACTION_EXECUTION_REQUESTED: ClassVar[DomainEventType]
+    ACTION_EXECUTION_STARTED: ClassVar[DomainEventType]
+    ACTION_EXECUTION_SUCCEEDED: ClassVar[DomainEventType]
+    ACTION_EXECUTION_FAILED: ClassVar[DomainEventType]
+    ACTION_EXECUTION_AMBIGUOUS: ClassVar[DomainEventType]
+    ACTION_RECONCILIATION_REQUESTED: ClassVar[DomainEventType]
+    ACTION_RECONCILIATION_COMPLETED: ClassVar[DomainEventType]
+    ACTION_ROLLBACK_REQUESTED: ClassVar[DomainEventType]
+    ACTION_ROLLBACK_COMPLETED: ClassVar[DomainEventType]
+    ACTION_ROLLBACK_FAILED: ClassVar[DomainEventType]
+    ACTION_COMPENSATION_REQUESTED: ClassVar[DomainEventType]
+    ACTION_COMPENSATION_COMPLETED: ClassVar[DomainEventType]
+    ACTION_COMPENSATION_FAILED: ClassVar[DomainEventType]
+    ACTION_CANCELLATION_REQUESTED: ClassVar[DomainEventType]
+    ACTION_CANCELLED: ClassVar[DomainEventType]
+    ACTION_VERIFICATION_REQUESTED: ClassVar[DomainEventType]
+    ACTION_VERIFICATION_COMPLETED: ClassVar[DomainEventType]
 
 
 DomainEventType.INVESTIGATION_REQUESTED = DomainEventType._define(
@@ -363,9 +395,7 @@ DomainEventType.ACTION_COMPENSATION_FAILED = DomainEventType._define(
 DomainEventType.ACTION_CANCELLATION_REQUESTED = DomainEventType._define(
     "action.cancellation_requested.v1"
 )
-DomainEventType.ACTION_CANCELLED = DomainEventType._define(
-    "action.cancelled.v1"
-)
+DomainEventType.ACTION_CANCELLED = DomainEventType._define("action.cancelled.v1")
 DomainEventType.ACTION_VERIFICATION_REQUESTED = DomainEventType._define(
     "action.verification_requested.v1"
 )

@@ -24,7 +24,9 @@ MAX_CONDITIONS_PER_ACTION = 16
 MAX_EVIDENCE_PER_PLAN = 64
 MAX_RATIONALE_BYTES = 4_096
 MAX_EVENT_REASON_BYTES = 1_024
-_IDENTIFIER_REST = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:/-")
+_IDENTIFIER_REST = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:/-"
+)
 _HEX_LOWER = frozenset("0123456789abcdef")
 
 
@@ -158,7 +160,7 @@ def _canonical_text(value: object) -> str:
     if value is False:
         return "false"
     if isinstance(value, str):
-        escaped = value.replace("\\", "\\\\").replace('"', '\"')
+        escaped = value.replace("\\", "\\\\").replace('"', '"')
         return f'"{escaped}"'
     if isinstance(value, int | float):
         return repr(value)
@@ -168,7 +170,11 @@ def _canonical_text(value: object) -> str:
         return f'"{value.isoformat()}"'
     if isinstance(value, Mapping):
         items = sorted((str(key), _canonical_text(item)) for key, item in value.items())
-        return "{" + ",".join(f'{_canonical_text(key)}:{item}' for key, item in items) + "}"
+        return (
+            "{"
+            + ",".join(f"{_canonical_text(key)}:{item}" for key, item in items)
+            + "}"
+        )
     if isinstance(value, Sequence) and not isinstance(value, str):
         return "[" + ",".join(_canonical_text(item) for item in value) + "]"
     raise ValueError(f"unsupported canonical value: {type(value).__name__}")
@@ -184,8 +190,12 @@ def _canonical_digest(value: Mapping[str, object]) -> str:
     ]
     for index, character in enumerate(text):
         code = ord(character) + index + 1
-        for slot, multiplier in enumerate((0x100000001B3, 0x9E3779B185EBCA87, 0xC2B2AE3D27D4EB4F, 0x165667B19E3779F9)):
-            parts[slot] = (parts[slot] ^ (code + slot * 17)) * multiplier & 0xFFFFFFFFFFFFFFFF
+        for slot, multiplier in enumerate(
+            (0x100000001B3, 0x9E3779B185EBCA87, 0xC2B2AE3D27D4EB4F, 0x165667B19E3779F9)
+        ):
+            parts[slot] = (
+                parts[slot] ^ (code + slot * 17)
+            ) * multiplier & 0xFFFFFFFFFFFFFFFF
             parts[slot] ^= parts[(slot - 1) % 4] >> ((slot + 1) * 7)
     return "".join(f"{part:016x}" for part in parts)
 

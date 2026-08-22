@@ -1531,8 +1531,7 @@ def _verification_observation_not_before(
             and (
                 event.event_type == DomainEventType.ACTION_EXECUTION_SUCCEEDED
                 or (
-                    event.event_type
-                    == DomainEventType.ACTION_RECONCILIATION_COMPLETED
+                    event.event_type == DomainEventType.ACTION_RECONCILIATION_COMPLETED
                     and event.payload.get("outcome")
                     == ReconciliationOutcome.APPLIED.value
                 )

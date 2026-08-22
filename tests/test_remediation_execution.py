@@ -908,9 +908,10 @@ def test_dispatch_metric_counts_only_claim_events() -> None:
             active_lease,
             selected.approval_policy,
         )
-        assert metrics.snapshot()[
-            ("actions_dispatched", selected.actions[0].kind.value)
-        ] == 1
+        assert (
+            metrics.snapshot()[("actions_dispatched", selected.actions[0].kind.value)]
+            == 1
+        )
 
     asyncio.run(scenario())
 

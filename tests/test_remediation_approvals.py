@@ -643,14 +643,17 @@ def test_concurrent_expired_grants_retry_without_leaking_concurrency_error() -> 
             ),
             return_exceptions=True,
         )
-        assert len(
-            [
-                result
-                for result in results
-                if isinstance(result, ApprovalDeniedError)
-                and str(result) == "approval_expired"
-            ]
-        ) == 2
+        assert (
+            len(
+                [
+                    result
+                    for result in results
+                    if isinstance(result, ApprovalDeniedError)
+                    and str(result) == "approval_expired"
+                ]
+            )
+            == 2
+        )
         assert not any(isinstance(result, ConcurrencyError) for result in results)
 
     asyncio.run(scenario())

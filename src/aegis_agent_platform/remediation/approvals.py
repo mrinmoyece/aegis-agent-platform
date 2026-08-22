@@ -690,9 +690,7 @@ def _matching_decision(
 
 def _actor_kind(principal: Principal) -> ActorKind:
     return (
-        ActorKind.SERVICE
-        if principal.kind is PrincipalKind.SERVICE
-        else ActorKind.USER
+        ActorKind.SERVICE if principal.kind is PrincipalKind.SERVICE else ActorKind.USER
     )
 
 
