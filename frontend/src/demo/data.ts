@@ -213,7 +213,7 @@ export const demoSnapshot: OperatorSnapshot = operatorSnapshotSchema.parse({
             target: 'deployment/checkout',
             risk: 'critical',
             blast_radius: 'one test namespace',
-            expires_at: '2026-08-13T09:00:00.000Z',
+            expires_at: '2099-12-31T23:59:59.000Z',
             quorum: '1/2',
             version: 'approval-v3',
             requester: 'svc-incident-coordinator',
