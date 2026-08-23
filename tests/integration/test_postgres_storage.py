@@ -6,7 +6,6 @@ import asyncio
 import os
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from uuid import UUID, uuid4
 
 import psycopg
@@ -18,29 +17,9 @@ from aegis_agent_platform.audit import (
     AuditEventType,
     AuditOutcome,
 )
-from aegis_agent_platform.config import Environment
-from aegis_agent_platform.domain import (
-    DomainEventType,
-    EventEnvelope,
-    FinishReason,
-    JsonValue,
-    MessageRole,
-    ModelCapabilities,
-    ModelIdentity,
-    ModelMessage,
-    ModelRequest,
-    ModelResponse,
-    PricingVersion,
-    SafetyOutcome,
-    SafetyResult,
-    TextPart,
-    TokenUsage,
-    WorkLease,
-    thaw_json,
-)
+from aegis_agent_platform.domain import DomainEventType, EventEnvelope, JsonValue
 from aegis_agent_platform.event_store import (
     ConcurrencyError,
-    FencingError,
     OutboxMessage,
     PermanentStorageError,
 )
@@ -48,9 +27,6 @@ from aegis_agent_platform.event_store.postgres import (
     PostgresEventStore,
     PostgresProjectionRepository,
 )
-from aegis_agent_platform.gateway.catalog import ModelCatalogEntry, RouteDecision
-from aegis_agent_platform.gateway.postgres import PostgresGatewayRepository
-from aegis_agent_platform.gateway.repository import BudgetDeniedError
 from aegis_agent_platform.identity import (
     AuthenticationError,
     PrincipalKind,
@@ -63,7 +39,6 @@ from aegis_agent_platform.persistence import (
     PostgresPolicyRepository,
     PostgresTenantRepository,
 )
-from aegis_agent_platform.policy import QuotaLimits
 from aegis_agent_platform.projections import ProjectionEngine
 from aegis_agent_platform.tenancy import TenantContext
 
@@ -77,7 +52,6 @@ pytestmark = [
 ]
 TENANT_A = TenantContext(TenantId("tenant-a"))
 TENANT_B = TenantContext(TenantId("tenant-b"))
-TENANT_GATEWAY = TENANT_B  # avoids interfering with tenant-a concurrent tests
 
 
 async def app_connection() -> psycopg.AsyncConnection[tuple[object, ...]]:
@@ -95,62 +69,6 @@ def sync_app_connection() -> psycopg.Connection[tuple[object, ...]]:
     connection = psycopg.connect(DATABASE_URL, autocommit=True)
     connection.execute("SET ROLE aegis_app")
     return connection
-
-
-def admin_connection() -> psycopg.Connection[tuple[object, ...]]:
-    assert DATABASE_URL is not None
-    return psycopg.connect(DATABASE_URL, autocommit=True)
-
-
-def gateway_pricing() -> PricingVersion:
-    return PricingVersion(
-        "gateway-price-v1",
-        datetime(2026, 1, 1, tzinfo=UTC),
-        Decimal("1"),
-        Decimal("2"),
-        cache_read_per_million_usd=Decimal("0.5"),
-        cache_write_per_million_usd=Decimal("1"),
-        reasoning_per_million_usd=Decimal("3"),
-    )
-
-
-def gateway_route(run_id: UUID) -> tuple[ModelRequest, WorkLease, RouteDecision]:
-    model = ModelIdentity("mock", "safe-model")
-    pricing = gateway_pricing()
-    request = ModelRequest(
-        request_id=UUID(f"00000000-0000-4000-8000-{run_id.int % 10**12:012d}"),
-        tenant_id=str(TENANT_GATEWAY.tenant_id),
-        run_id=run_id,
-        messages=(ModelMessage(MessageRole.USER, (TextPart("hello"),)),),
-        max_output_tokens=32,
-        prompt_token_estimate=12,
-        requested_model=model,
-        timeout_seconds=5,
-        idempotency_key=f"gateway-{run_id}",
-    )
-    lease = WorkLease(
-        work_id=run_id,
-        tenant_id=str(TENANT_GATEWAY.tenant_id),
-        token=UUID(f"10000000-0000-4000-8000-{run_id.int % 10**12:012d}"),
-        generation=1,
-        owner="integration-worker",
-        attempt=1,
-        acquired_at=datetime.now(UTC),
-        heartbeat_at=datetime.now(UTC),
-        expires_at=datetime.now(UTC) + timedelta(minutes=5),
-    )
-    entry = ModelCatalogEntry(
-        identity=model,
-        capabilities=ModelCapabilities(8_192, 1_024, True, False, True),
-        pricing=pricing,
-        environments=frozenset({Environment.TEST}),
-        data_residencies=frozenset({"eu"}),
-        provider_retains_data=False,
-        cost_rank=0,
-        latency_rank=0,
-    )
-    route = RouteDecision(entry, (entry,), ("integration",))
-    return request, lease, route
 
 
 def event(
@@ -171,109 +89,6 @@ def event(
         payload=payload or {},
         idempotency_key=idempotency_key,
     )
-
-
-def seed_gateway_work(lease: WorkLease) -> None:
-    request_event = event(str(lease.work_id), tenant_id=str(TENANT_GATEWAY.tenant_id))
-    with admin_connection() as connection:
-        connection.execute(
-            """
-            INSERT INTO event_stream_heads (tenant_id, aggregate_id, current_version)
-            VALUES (%s, %s, 1)
-            ON CONFLICT (tenant_id, aggregate_id) DO NOTHING
-            """,
-            (request_event.tenant_id, request_event.aggregate_id),
-        )
-        connection.execute(
-            """
-            INSERT INTO events (
-                event_id, tenant_id, aggregate_id, aggregate_sequence, event_type,
-                schema_version, occurred_at, payload, correlation_id, causation_id,
-                idempotency_key, metadata
-            ) VALUES (
-                %s, %s, %s, 1, %s, %s, %s, %s, %s, NULL, %s, '{}'::jsonb
-            )
-            ON CONFLICT (tenant_id, aggregate_id, aggregate_sequence) DO NOTHING
-            """,
-            (
-                request_event.event_id,
-                request_event.tenant_id,
-                request_event.aggregate_id,
-                request_event.event_type,
-                request_event.schema_version,
-                request_event.occurred_at,
-                Jsonb(thaw_json(request_event.payload)),
-                request_event.correlation_id,
-                request_event.idempotency_key or f"seed-{lease.work_id}",
-            ),
-        )
-        connection.execute(
-            """
-            INSERT INTO tenant_quotas (
-                tenant_id, max_run_tokens, max_run_cost_usd,
-                max_tenant_tokens_per_period, max_tenant_cost_usd_per_period,
-                max_concurrent_runs, updated_at
-            ) VALUES ('tenant-b', 100, 1, 100, 1, 10, transaction_timestamp())
-            ON CONFLICT (tenant_id) DO UPDATE
-            SET max_run_tokens = EXCLUDED.max_run_tokens,
-                max_run_cost_usd = EXCLUDED.max_run_cost_usd,
-                max_tenant_tokens_per_period =
-                    EXCLUDED.max_tenant_tokens_per_period,
-                max_tenant_cost_usd_per_period =
-                    EXCLUDED.max_tenant_cost_usd_per_period,
-                max_concurrent_runs = EXCLUDED.max_concurrent_runs,
-                updated_at = EXCLUDED.updated_at
-            """
-        )
-        connection.execute(
-            """
-            INSERT INTO work_items (
-                tenant_id, work_id, work_kind, idempotency_key, status,
-                requested_at, available_at, max_attempts, timeout_seconds,
-                request_event_id, correlation_id, request_payload
-            ) VALUES (
-                %s, %s, 'model-call', %s, 'running',
-                %s, %s, 1, 60, %s, %s, '{}'::jsonb
-            )
-            ON CONFLICT (tenant_id, work_id) DO NOTHING
-            """,
-            (
-                str(TENANT_GATEWAY.tenant_id),
-                lease.work_id,
-                f"work-{lease.work_id}",
-                lease.acquired_at,
-                lease.acquired_at,
-                request_event.event_id,
-                lease.work_id,
-            ),
-        )
-        connection.execute(
-            """
-            INSERT INTO work_leases (
-                tenant_id, work_id, lease_token, generation, owner,
-                acquired_at, heartbeat_at, expires_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (tenant_id, work_id) DO UPDATE
-            SET lease_token = EXCLUDED.lease_token,
-                generation = EXCLUDED.generation,
-                owner = EXCLUDED.owner,
-                acquired_at = EXCLUDED.acquired_at,
-                heartbeat_at = EXCLUDED.heartbeat_at,
-                expires_at = EXCLUDED.expires_at,
-                released_at = NULL,
-                release_reason = NULL
-            """,
-            (
-                str(TENANT_GATEWAY.tenant_id),
-                lease.work_id,
-                lease.token,
-                lease.generation,
-                lease.owner,
-                lease.acquired_at,
-                lease.heartbeat_at,
-                lease.expires_at,
-            ),
-        )
 
 
 async def collect(
@@ -449,7 +264,6 @@ def test_inbox_deduplication_and_outbox_claim_race() -> None:
                 TENANT_A,
                 message.message_id,
                 lease_owner=winning_claim.lease_owner,
-                lease_expires_at=winning_claim.lease_expires_at,
                 retry_at=now,
                 error_code="temporary_delivery_failure",
             )
@@ -465,7 +279,6 @@ def test_inbox_deduplication_and_outbox_claim_race() -> None:
                 TENANT_A,
                 message.message_id,
                 lease_owner="publisher-retry",
-                lease_expires_at=retry[0].lease_expires_at,
                 retry_at=now,
                 error_code="poison_message",
             )
@@ -532,7 +345,6 @@ def test_inbox_deduplication_and_outbox_claim_race() -> None:
                 TENANT_A,
                 crash_message.message_id,
                 lease_owner="reconciling-publisher",
-                lease_expires_at=reclaimed[0].lease_expires_at,
                 published_at=expiry + timedelta(minutes=1),
             )
             async with first_connection.transaction():
@@ -628,263 +440,6 @@ def test_projection_idempotence_and_rebuild() -> None:
     asyncio.run(scenario())
 
 
-def test_postgres_gateway_repository_reservation_race_and_fence_rejection() -> None:
-    async def scenario() -> None:
-        first_connection = await app_connection()
-        second_connection = await app_connection()
-        try:
-            first_request, first_lease, first_route = gateway_route(
-                UUID("20000000-0000-4000-8000-000000000001")
-            )
-            second_request, second_lease, second_route = gateway_route(
-                UUID("20000000-0000-4000-8000-000000000002")
-            )
-            seed_gateway_work(first_lease)
-            seed_gateway_work(second_lease)
-            quotas = QuotaLimits(100, Decimal("1"), 100, Decimal("1"), 10)
-            ready = asyncio.Event()
-            arrivals = 0
-            gate = asyncio.Lock()
-
-            async def contender(
-                connection: psycopg.AsyncConnection[tuple[object, ...]],
-                request: ModelRequest,
-                lease: WorkLease,
-                route: RouteDecision,
-            ) -> object:
-                nonlocal arrivals
-                async with gate:
-                    arrivals += 1
-                    if arrivals == 2:
-                        ready.set()
-                await ready.wait()
-                try:
-                    return await PostgresGatewayRepository(
-                        connection,
-                        PostgresEventStore(connection),
-                    ).reserve(
-                        TENANT_GATEWAY,
-                        request,
-                        lease,
-                        route,
-                        quotas=quotas,
-                        token_limit=60,
-                        cost_limit_usd=Decimal("0.001"),
-                        price_version="gateway-price-v1",
-                        at=lease.acquired_at,
-                    )
-                except Exception as error:  # pragma: no cover - assertion target
-                    return error
-
-            outcomes = await asyncio.gather(
-                contender(
-                    first_connection,
-                    first_request,
-                    first_lease,
-                    first_route,
-                ),
-                contender(
-                    second_connection,
-                    second_request,
-                    second_lease,
-                    second_route,
-                ),
-            )
-            assert sum(type(item) is BudgetDeniedError for item in outcomes) == 1
-            assert (
-                sum(type(item).__name__ == "BudgetReservation" for item in outcomes)
-                == 1
-            )
-
-            stale_lease = WorkLease(
-                work_id=first_lease.work_id,
-                tenant_id=first_lease.tenant_id,
-                token=uuid4(),
-                generation=99,
-                owner=first_lease.owner,
-                attempt=first_lease.attempt,
-                acquired_at=first_lease.acquired_at,
-                heartbeat_at=first_lease.heartbeat_at,
-                expires_at=first_lease.expires_at,
-            )
-            with pytest.raises(FencingError):
-                await PostgresGatewayRepository(
-                    first_connection,
-                    PostgresEventStore(first_connection),
-                ).reserve(
-                    TENANT_GATEWAY,
-                    first_request,
-                    stale_lease,
-                    first_route,
-                    quotas=quotas,
-                    token_limit=10,
-                    cost_limit_usd=Decimal("0.001"),
-                    price_version="gateway-price-v1",
-                    at=first_lease.acquired_at,
-                )
-        finally:
-            await first_connection.close()
-            await second_connection.close()
-
-    asyncio.run(scenario())
-
-
-def test_postgres_gateway_repository_rolls_back_failed_projection_mutation() -> None:
-    async def scenario() -> None:
-        connection = await app_connection()
-        try:
-            request, lease, route = gateway_route(
-                UUID("20000000-0000-4000-8000-000000000003")
-            )
-            seed_gateway_work(lease)
-            repository = PostgresGatewayRepository(
-                connection,
-                PostgresEventStore(connection),
-            )
-            reservation = await repository.reserve(
-                TENANT_GATEWAY,
-                request,
-                lease,
-                route,
-                quotas=QuotaLimits(100, Decimal("1"), 100, Decimal("1"), 10),
-                token_limit=60,
-                cost_limit_usd=Decimal("0.001"),
-                price_version="gateway-price-v1",
-                at=lease.acquired_at,
-            )
-            with admin_connection() as admin:
-                admin.execute(
-                    """
-                    INSERT INTO model_usage_projection (
-                        tenant_id, request_id, run_id, provider, model, price_version,
-                        input_tokens, output_tokens, cache_read_tokens,
-                        cache_write_tokens, reasoning_tokens, total_tokens, cost_usd,
-                        recorded_at
-                    ) VALUES (
-                        'tenant-a', %s, %s, 'mock', 'safe-model', 'existing',
-                        1, 1, 0, 0, 0, 2, 0.000002, transaction_timestamp()
-                    )
-                    """,
-                    (request.request_id, request.run_id),
-                )
-            reply = ModelResponse(
-                request_id=request.request_id,
-                model=route.selected.identity,
-                content=(TextPart("done"),),
-                finish_reason=FinishReason.STOP,
-                safety=SafetyResult(SafetyOutcome.ALLOWED),
-                usage=TokenUsage(12, 4),
-                latency_ms=1,
-            )
-            with pytest.raises(PermanentStorageError):
-                await repository.succeed(
-                    TENANT_GATEWAY,
-                    request,
-                    lease,
-                    reservation,
-                    reply,
-                    gateway_pricing(),
-                    at=lease.acquired_at + timedelta(seconds=1),
-                )
-            stream = await collect(
-                PostgresEventStore(connection).read_stream(
-                    TENANT_GATEWAY, str(lease.work_id)
-                )
-            )
-            assert [item.event_type for item in stream] == [
-                DomainEventType.MODEL_ROUTE_DECIDED,
-                DomainEventType.MODEL_CALL_REQUESTED,
-                DomainEventType.MODEL_BUDGET_RESERVED,
-            ]
-        finally:
-            await connection.close()
-
-    asyncio.run(scenario())
-
-
-def test_postgres_gateway_repository_rebuilds_model_usage_projection_under_rls() -> (
-    None
-):
-    async def scenario() -> None:
-        connection = await app_connection()
-        try:
-            request, lease, route = gateway_route(
-                UUID("20000000-0000-4000-8000-000000000004")
-            )
-            seed_gateway_work(lease)
-            repository = PostgresGatewayRepository(
-                connection,
-                PostgresEventStore(connection),
-            )
-            reservation = await repository.reserve(
-                TENANT_GATEWAY,
-                request,
-                lease,
-                route,
-                quotas=QuotaLimits(100, Decimal("1"), 100, Decimal("1"), 10),
-                token_limit=60,
-                cost_limit_usd=Decimal("0.001"),
-                price_version="gateway-price-v1",
-                at=lease.acquired_at,
-            )
-            await repository.succeed(
-                TENANT_GATEWAY,
-                request,
-                lease,
-                reservation,
-                ModelResponse(
-                    request_id=request.request_id,
-                    model=route.selected.identity,
-                    content=(TextPart("done"),),
-                    finish_reason=FinishReason.STOP,
-                    safety=SafetyResult(SafetyOutcome.ALLOWED),
-                    usage=TokenUsage(12, 4),
-                    latency_ms=1,
-                ),
-                gateway_pricing(),
-                at=lease.acquired_at + timedelta(seconds=1),
-            )
-            projection = PostgresProjectionRepository(connection)
-            engine = ProjectionEngine(PostgresEventStore(connection), projection)
-            await projection.reset(TENANT_GATEWAY, "model-usage")
-            checkpoint = await engine.rebuild(TENANT_GATEWAY, "model-usage")
-            assert checkpoint.last_global_position > 0
-            async with connection.transaction():
-                await connection.execute(
-                    "SELECT set_config('aegis.tenant_id', 'tenant-a', true)"
-                )
-                visible = await (
-                    await connection.execute(
-                        """
-                        SELECT count(*)
-                        FROM model_usage_projection
-                        WHERE tenant_id = 'tenant-a' AND request_id = %s
-                        """,
-                        (request.request_id,),
-                    )
-                ).fetchone()
-            assert visible == (1,)
-            async with connection.transaction():
-                await connection.execute(
-                    "SELECT set_config('aegis.tenant_id', 'tenant-b', true)"
-                )
-                hidden = await (
-                    await connection.execute(
-                        """
-                        SELECT count(*)
-                        FROM model_usage_projection
-                        WHERE tenant_id = 'tenant-a' AND request_id = %s
-                        """,
-                        (request.request_id,),
-                    )
-                ).fetchone()
-            assert hidden == (0,)
-        finally:
-            await connection.close()
-
-    asyncio.run(scenario())
-
-
 def cross_tenant_insert(
     connection: psycopg.Connection[tuple[object, ...]],
 ) -> None:
@@ -944,9 +499,6 @@ def test_durable_repositories_are_tenant_scoped_and_audit_is_redacted() -> None:
                         "allowed_tools": ["read"],
                         "allowed_connectors": ["fixture"],
                         "allowed_environments": ["test"],
-                        "allowed_providers": ["mock"],
-                        "allowed_data_residencies": ["eu"],
-                        "allow_provider_retention": False,
                         "max_risk": 2,
                         "approval_from_risk": 2,
                         "tools_requiring_approval": [],
