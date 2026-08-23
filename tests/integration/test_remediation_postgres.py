@@ -701,16 +701,11 @@ def test_postgres_projection_allows_shared_action_digest_across_plans() -> None:
                     ActionQuotaUsage(0, 0),
                     idempotency_key=f"shared-action:{selected_plan.plan_id}",
                 )
-        finally:
-            await connection.close()
-
-        maintenance = await psycopg.AsyncConnection.connect(
-            DATABASE_URL,
-            autocommit=True,
-        )
-        try:
-            await maintenance.execute("SET ROLE aegis_maintenance")
-            cursor = await maintenance.execute(
+            await connection.execute(
+                "SELECT set_config('aegis.tenant_id', %s, false)",
+                ("tenant-remediation",),
+            )
+            cursor = await connection.execute(
                 """
                 SELECT plan_id, action_digest
                 FROM remediation_action_projection
@@ -725,6 +720,6 @@ def test_postgres_projection_allows_shared_action_digest_across_plans() -> None:
                 (second_plan.plan_id, shared_action.digest),
             }
         finally:
-            await maintenance.close()
+            await connection.close()
 
     asyncio.run(scenario())
