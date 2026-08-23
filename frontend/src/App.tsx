@@ -91,7 +91,10 @@ export function App({ source = new DemoOperatorDataSource() }: AppProps) {
           setSnapshot((prev) => {
             if (prev === null) return prev;
             const incoming = new Map(events.map((e) => [e.id, e]));
-            const updated: OperatorSnapshot = { ...prev, sections: {} as typeof prev.sections };
+            const updated: OperatorSnapshot = {
+              ...prev,
+              sections: {} as typeof prev.sections,
+            };
             for (const [section, items] of Object.entries(prev.sections)) {
               (updated.sections as Record<string, readonly OperatorItem[]>)[section] = (
                 items as OperatorItem[]

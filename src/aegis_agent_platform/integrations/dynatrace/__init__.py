@@ -83,6 +83,8 @@ class DynatraceEvidenceReader(Protocol):
     ) -> Sequence[TelemetryEvidence]:
         """Collect normalized incident evidence for a bounded time window."""
         ...
+
+
 _SUPPORTED = (
     EvidenceKind.LOG,
     EvidenceKind.METRIC,

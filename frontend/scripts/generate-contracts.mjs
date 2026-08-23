@@ -33,27 +33,68 @@ const digest = createHash('sha256').update(source).digest('hex');
 // If a property is added or removed, the generator fails loudly rather than
 // silently producing stale TypeScript shapes.
 assertSchemaFields('OperatorConfig', schemas.OperatorConfig, [
-  'schema_version', 'production_ready', 'auth_mode', 'demo', 'server_time', 'oidc_boundary',
+  'schema_version',
+  'production_ready',
+  'auth_mode',
+  'demo',
+  'server_time',
+  'oidc_boundary',
 ]);
 assertSchemaFields('SessionBootstrap', schemas.SessionBootstrap, [
-  'schema_version', 'actor_id', 'tenant_id', 'roles', 'permissions',
-  'csrf_token', 'server_time', 'production_ready', 'demo', 'stale',
+  'schema_version',
+  'actor_id',
+  'tenant_id',
+  'roles',
+  'permissions',
+  'csrf_token',
+  'server_time',
+  'production_ready',
+  'demo',
+  'stale',
 ]);
 assertSchemaFields('OperatorItem', schemas.OperatorItem, [
-  'id', 'kind', 'title', 'summary', 'status', 'authority',
-  'occurred_at', 'severity', 'stale', 'citation', 'metadata',
+  'id',
+  'kind',
+  'title',
+  'summary',
+  'status',
+  'authority',
+  'occurred_at',
+  'severity',
+  'stale',
+  'citation',
+  'metadata',
 ]);
 assertSchemaFields('OperatorSnapshot', schemas.OperatorSnapshot, [
-  'schema_version', 'tenant_id', 'generated_at', 'source_cursor', 'stale', 'demo', 'sections',
+  'schema_version',
+  'tenant_id',
+  'generated_at',
+  'source_cursor',
+  'stale',
+  'demo',
+  'sections',
 ]);
 assertSchemaFields('OperatorEventPage', schemas.OperatorEventPage, [
-  'events', 'next_cursor', 'server_time', 'stale',
+  'events',
+  'next_cursor',
+  'server_time',
+  'stale',
 ]);
 assertSchemaFields('ApprovalDecisionRequest', schemas.ApprovalDecisionRequest, [
-  'approval_id', 'plan_digest', 'policy_digest', 'decision', 'rationale_code', 'comment',
+  'approval_id',
+  'plan_digest',
+  'policy_digest',
+  'decision',
+  'rationale_code',
+  'comment',
 ]);
 assertSchemaFields('ApprovalDecisionResponse', schemas.ApprovalDecisionResponse, [
-  'approval_id', 'status', 'verification', 'version', 'duplicate', 'server_time',
+  'approval_id',
+  'status',
+  'verification',
+  'version',
+  'duplicate',
+  'server_time',
 ]);
 
 const generated = `/* eslint-disable */
@@ -192,13 +233,13 @@ function assertSchemaFields(schemaName, schema, expectedFields) {
   if (missing.length > 0) {
     throw new Error(
       `${schemaName}: OpenAPI schema is missing expected fields: ${missing.join(', ')}. ` +
-      `Update the hard-coded interface in generate-contracts.mjs to match.`,
+        `Update the hard-coded interface in generate-contracts.mjs to match.`,
     );
   }
   if (extra.length > 0) {
     throw new Error(
       `${schemaName}: OpenAPI schema has new required fields not in the hard-coded interface: ` +
-      `${extra.join(', ')}. Update the interface in generate-contracts.mjs.`,
+        `${extra.join(', ')}. Update the interface in generate-contracts.mjs.`,
     );
   }
 }
