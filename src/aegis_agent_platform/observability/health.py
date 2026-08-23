@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
+
+_PROBE_TIMEOUT_SECONDS = 5.0
 
 
 class HealthStatus(StrEnum):
@@ -133,7 +136,12 @@ class HealthRegistry:
         previous = self._state.get(probe.component)
         if previous is not None and monotonic_time < previous.expires_at:
             return previous.result
-        observed = await probe.check()
+        try:
+            observed = await asyncio.wait_for(
+                probe.check(), timeout=_PROBE_TIMEOUT_SECONDS
+            )
+        except (TimeoutError, Exception):
+            observed = ProbeResult(HealthStatus.UNAVAILABLE, "probe_error")
         state = _ProbeState(observed, 0, 0, 0) if previous is None else previous
         is_success = observed.status is HealthStatus.HEALTHY
         state.consecutive_successes = (

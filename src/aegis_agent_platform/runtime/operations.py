@@ -48,7 +48,7 @@ class OperationsRepository(Protocol):
         *,
         status: WorkStatus | None = None,
         limit: int = 100,
-        cursor: datetime | None = None,
+        cursor: tuple[datetime, UUID] | None = None,
     ) -> tuple[Mapping[str, JsonValue], ...]: ...
 
     async def pending_status(
@@ -56,7 +56,7 @@ class OperationsRepository(Protocol):
         context: TenantContext,
         *,
         limit: int = 100,
-        cursor: datetime | None = None,
+        cursor: tuple[datetime, UUID] | None = None,
     ) -> tuple[Mapping[str, JsonValue], ...]: ...
 
     async def cancel_by_id(
@@ -117,7 +117,7 @@ class WorkerOperations:
         at: datetime,
         status: WorkStatus | None = None,
         limit: int = 100,
-        cursor: datetime | None = None,
+        cursor: tuple[datetime, UUID] | None = None,
     ) -> tuple[Mapping[str, JsonValue], ...]:
         self._require(principal, context, Permission.QUEUE_READ, at)
         return await self._repository.status(
@@ -134,7 +134,7 @@ class WorkerOperations:
         *,
         at: datetime,
         limit: int = 100,
-        cursor: datetime | None = None,
+        cursor: tuple[datetime, UUID] | None = None,
     ) -> tuple[Mapping[str, JsonValue], ...]:
         self._require(principal, context, Permission.QUEUE_READ, at)
         return await self._repository.pending_status(

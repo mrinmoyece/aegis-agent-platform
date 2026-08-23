@@ -28,7 +28,8 @@ from aegis_agent_platform.evidence.ports import RawEvidence
 from aegis_agent_platform.tenancy import TenantContext
 
 _SECRET = re.compile(
-    r"(?i)(authorization:\s*bearer\s+|api[_-]?key[\"'=:\s]+|token[\"'=:\s]+)"
+    r"(?i)(authorization:\s*bearer\s+|api[_-]?key[\"'=:\s]+|token[\"'=:\s]+"
+    r"|client[_-]?secret[\"'=:\s]+|access[_-]?key[\"'=:\s]+)"
     r"([A-Za-z0-9._~+/=-]{8,})"
 )
 _EMAIL = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)

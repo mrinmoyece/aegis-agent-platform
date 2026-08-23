@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -1240,12 +1240,11 @@ class PostgresWorkRepository:
         *,
         status: WorkStatus | None = None,
         limit: int = 100,
-        cursor: datetime | None = None,
+        cursor: tuple[datetime, UUID] | None = None,
     ) -> tuple[Mapping[str, JsonValue], ...]:
         """Return a bounded payload-free tenant status page."""
         if not 1 <= limit <= 200:
             raise ValueError("status limit must be between 1 and 200")
-        before = cursor or datetime.max.replace(tzinfo=UTC)
         try:
             async with _tenant_transaction(self._connection, self._lock, context):
                 query = """
@@ -1253,9 +1252,12 @@ class PostgresWorkRepository:
                         attempt_count, max_attempts, cancel_requested_at,
                         last_error_code
                     FROM work_items
-                    WHERE tenant_id = %s AND requested_at < %s
+                    WHERE tenant_id = %s
                 """
-                parameters: list[object] = [str(context.tenant_id), before]
+                parameters: list[object] = [str(context.tenant_id)]
+                if cursor is not None:
+                    query += " AND (requested_at, work_id) < (%s, %s)"
+                    parameters.extend([cursor[0], str(cursor[1])])
                 if status is not None:
                     query += " AND status = %s"
                     parameters.append(status.value)
@@ -1286,35 +1288,45 @@ class PostgresWorkRepository:
         context: TenantContext,
         *,
         limit: int = 100,
-        cursor: datetime | None = None,
+        cursor: tuple[datetime, UUID] | None = None,
     ) -> tuple[Mapping[str, JsonValue], ...]:
         """Return tenant-scoped pending state from PostgreSQL, never the global PEL."""
         if not 1 <= limit <= 200:
             raise ValueError("pending limit must be between 1 and 200")
-        before = cursor or datetime.max.replace(tzinfo=UTC)
+        cursor_params: tuple[object, ...] = (
+            (cursor[0], str(cursor[1])) if cursor else ()
+        )
+        _base_pending = """
+            SELECT w.work_id, w.work_kind, w.status, w.available_at,
+                w.attempt_count, w.max_attempts, l.owner,
+                l.heartbeat_at, l.expires_at
+            FROM work_items AS w
+            LEFT JOIN work_leases AS l
+              ON l.tenant_id = w.tenant_id
+             AND l.work_id = w.work_id
+             AND l.released_at IS NULL
+            WHERE w.tenant_id = %s
+              AND w.status IN (
+                  'requested', 'published', 'claimed',
+                  'running', 'retry_wait'
+              )
+        """
+        if cursor:
+            pending_query = (
+                _base_pending
+                + " AND (w.available_at, w.work_id) < (%s, %s)"
+                + " ORDER BY w.available_at DESC, w.work_id LIMIT %s"
+            )
+        else:
+            pending_query = (
+                _base_pending + " ORDER BY w.available_at DESC, w.work_id LIMIT %s"
+            )
         try:
             async with _tenant_transaction(self._connection, self._lock, context):
                 rows = await (
                     await self._connection.execute(
-                        """
-                        SELECT w.work_id, w.work_kind, w.status, w.available_at,
-                            w.attempt_count, w.max_attempts, l.owner,
-                            l.heartbeat_at, l.expires_at
-                        FROM work_items AS w
-                        LEFT JOIN work_leases AS l
-                          ON l.tenant_id = w.tenant_id
-                         AND l.work_id = w.work_id
-                         AND l.released_at IS NULL
-                        WHERE w.tenant_id = %s
-                          AND w.status IN (
-                              'requested', 'published', 'claimed',
-                              'running', 'retry_wait'
-                          )
-                          AND w.available_at < %s
-                        ORDER BY w.available_at DESC, w.work_id
-                        LIMIT %s
-                        """,
-                        (str(context.tenant_id), before, limit),
+                        pending_query,
+                        (str(context.tenant_id), *cursor_params, limit),
                     )
                 ).fetchall()
         except psycopg.Error as error:

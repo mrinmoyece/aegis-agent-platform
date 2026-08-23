@@ -176,9 +176,11 @@ def _load_events(path: Path) -> tuple[EventEnvelope, ...]:
         raise ValueError("event export must be a JSON array or newline-delimited JSON")
     if len(parsed) > 5_000:
         raise ValueError("event export exceeds the replay event bound")
-    return tuple(
-        EventEnvelope.from_mapping(item) for item in parsed if isinstance(item, dict)
-    )
+    if not all(isinstance(item, dict) for item in parsed):
+        raise ValueError(
+            "event export contains non-object entries; rejecting tampered export"
+        )
+    return tuple(EventEnvelope.from_mapping(item) for item in parsed)
 
 
 def _state_json(state: object) -> dict[str, object]:

@@ -275,6 +275,8 @@ class WorkerSupervisor:
             count=min(count, self._max_concurrency * 4),
             block_milliseconds=block_milliseconds,
         )
+        if self._draining:
+            return 0
         await self.run_batch(deliveries)
         return len(deliveries)
 
@@ -364,9 +366,9 @@ class WorkerSupervisor:
             ):
                 await self._queue.acknowledge(delivery)
             return
-        await self._state.start(tenant, delivery, lease, at=self._clock())
         cancellation = asyncio.Event()
         try:
+            await self._state.start(tenant, delivery, lease, at=self._clock())
             with self._tracer.span("work.execute"):
                 result = await self._execute_handler(
                     tenant,

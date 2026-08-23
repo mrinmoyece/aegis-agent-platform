@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Protocol
 from uuid import UUID
 
@@ -94,7 +95,11 @@ class EvidenceQuery:
         if any(not key or not value for key, value in self.selectors.items()):
             raise ValueError("query selectors cannot be empty")
         object.__setattr__(self, "kinds", kinds)
-        object.__setattr__(self, "selectors", dict(sorted(self.selectors.items())))
+        object.__setattr__(
+            self,
+            "selectors",
+            MappingProxyType(dict(sorted(self.selectors.items()))),
+        )
 
 
 @dataclass(frozen=True, slots=True)

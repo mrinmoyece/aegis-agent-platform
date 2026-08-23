@@ -1053,6 +1053,14 @@ def _fold_sandbox_event(
             or attestation.approval_scope_digest != state.approval_scope_digest
         ):
             raise SandboxReplayError("sandbox attestation scope is stale")
+        if attestation.image_digest != state.request.spec.image_digest:
+            raise SandboxReplayError("sandbox attestation image digest is invalid")
+        if attestation.input_digest != state.request.spec.input_snapshot.digest:
+            raise SandboxReplayError("sandbox attestation input digest is invalid")
+        if state.result is not None:
+            expected_result_digest = sandbox_result_digest(state.result)
+            if attestation.result_digest != expected_result_digest:
+                raise SandboxReplayError("sandbox attestation result digest is invalid")
         return replace(state, attestation=attestation)
     if event_type is DomainEventType.SANDBOX_RECONCILIATION_REQUESTED:
         phase = _payload_string(event, "phase")
@@ -1506,6 +1514,38 @@ def _boolean(value: JsonValue) -> bool:
     return value
 
 
+def sandbox_result_digest(result: SandboxResult) -> str:
+    """Compute a canonical digest of a completed sandbox result."""
+    return sha256(
+        json.dumps(
+            {
+                "artifacts": [
+                    {
+                        "digest": artifact.digest,
+                        "media_type": artifact.media_type,
+                        "quarantined": artifact.quarantined,
+                        "size_bytes": artifact.size_bytes,
+                    }
+                    for artifact in result.artifacts
+                ],
+                "completed_at": result.completed_at.isoformat(),
+                "error_code": result.error_code,
+                "exit_code": result.exit_code,
+                "outcome": result.outcome.value,
+                "started_at": result.started_at.isoformat(),
+                "stderr": {
+                    "digest": result.stderr.digest,
+                },
+                "stdout": {
+                    "digest": result.stdout.digest,
+                },
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+
+
 __all__ = [
     "MAX_ARCHIVE_EXPANSION_RATIO",
     "MAX_INPUT_BYTES",
@@ -1538,4 +1578,5 @@ __all__ = [
     "replay_sandbox",
     "sandbox_request_from_payload",
     "sandbox_request_to_payload",
+    "sandbox_result_digest",
 ]

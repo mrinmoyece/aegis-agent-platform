@@ -151,7 +151,12 @@ class ObservabilityOperations:
     ) -> SupportReport:
         """Export a bounded report only for explicitly privileged operators."""
         self._require(principal, context, Permission.SUPPORT_EXPORT, at)
-        events = await self._replay.load(context, ReplayQuery(aggregate_id))
+        query = ReplayQuery(aggregate_id)
+        events = await self._replay.load(context, query)
+        if len(events) >= query.max_events:
+            raise OverflowError(
+                "support report exceeds the replay limit; export would be truncated"
+            )
         report = self._replay.support_report(
             context,
             events,
