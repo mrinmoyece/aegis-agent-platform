@@ -723,6 +723,11 @@ def test_postgres_gateway_repository_reservation_race_and_fence_rejection() -> N
         finally:
             await first_connection.close()
             await second_connection.close()
+            # Clean up active reservations so subsequent tests start with 0 tokens.
+            with admin_connection() as admin:
+                admin.execute(
+                    "DELETE FROM model_budget_reservations WHERE tenant_id = 'tenant-a'"
+                )
 
     asyncio.run(scenario())
 
