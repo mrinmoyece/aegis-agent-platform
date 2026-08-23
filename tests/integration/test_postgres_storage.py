@@ -791,6 +791,7 @@ def test_postgres_gateway_repository_rolls_back_failed_projection_mutation() -> 
                 PostgresEventStore(connection).read_stream(TENANT_A, str(lease.work_id))
             )
             assert [item.event_type for item in stream] == [
+                DomainEventType.RUN_STARTED,
                 DomainEventType.MODEL_ROUTE_DECIDED,
                 DomainEventType.MODEL_CALL_REQUESTED,
                 DomainEventType.MODEL_BUDGET_RESERVED,
