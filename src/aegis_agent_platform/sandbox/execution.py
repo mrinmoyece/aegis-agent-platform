@@ -1990,6 +1990,8 @@ def _fenced_event(
         causation_id=request.linkage.remediation_action_id,
         idempotency_key=f"{request.idempotency_key}:{suffix}:{lease.generation}",
     )
+
+
 def _artifact_contract_violation(
     request: SandboxRequest,
     result: SandboxResult,

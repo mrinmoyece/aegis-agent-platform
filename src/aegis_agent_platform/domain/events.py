@@ -481,6 +481,7 @@ DomainEventType.SANDBOX_RECONCILIATION_REQUESTED = DomainEventType._define(
 )
 DomainEventType.SANDBOX_RECONCILED = DomainEventType._define("sandbox.reconciled.v1")
 
+
 @dataclass(frozen=True, slots=True)
 class ActorReference:
     """Provider-neutral reference to an authenticated actor."""
