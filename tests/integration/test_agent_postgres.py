@@ -176,6 +176,11 @@ def test_specialist_projection_fencing_rls_and_rebuild() -> None:
             )
             assert len(rebuilt_artifacts) == len(state.artifacts)
         finally:
+            await maintenance.execute(
+                "DELETE FROM outbox_messages WHERE tenant_id = %s"
+                " AND status = 'pending' AND destination = 'aegis.work'",
+                ("tenant-a",),
+            )
             await maintenance.close()
 
     asyncio.run(scenario())
