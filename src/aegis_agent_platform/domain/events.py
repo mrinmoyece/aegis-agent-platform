@@ -111,6 +111,75 @@ class DomainEventType(_StringConstant):
     CORRELATION_COMPLETED: ClassVar[DomainEventType]
     CORRELATION_FAILED: ClassVar[DomainEventType]
     SOURCE_CURSOR_ADVANCED: ClassVar[DomainEventType]
+    INVESTIGATION_PLAN_RECORDED: ClassVar[DomainEventType]
+    INVESTIGATION_CANCEL_REQUESTED: ClassVar[DomainEventType]
+    INVESTIGATION_BUDGET_EXHAUSTED: ClassVar[DomainEventType]
+    SPECIALIST_TASK_DISPATCH_REQUESTED: ClassVar[DomainEventType]
+    SPECIALIST_TASK_STARTED: ClassVar[DomainEventType]
+    SPECIALIST_TASK_SUCCEEDED: ClassVar[DomainEventType]
+    SPECIALIST_TASK_FAILED: ClassVar[DomainEventType]
+    SPECIALIST_TASK_TIMED_OUT: ClassVar[DomainEventType]
+    SPECIALIST_TASK_CANCELLED: ClassVar[DomainEventType]
+    REASONING_ARTIFACT_RECORDED: ClassVar[DomainEventType]
+    COORDINATOR_DECISION_RECORDED: ClassVar[DomainEventType]
+    INVESTIGATION_FINALIZED: ClassVar[DomainEventType]
+    REMEDIATION_PROPOSED: ClassVar[DomainEventType]
+    REMEDIATION_PLAN_REVISED: ClassVar[DomainEventType]
+    REMEDIATION_POLICY_EVALUATED: ClassVar[DomainEventType]
+    REMEDIATION_APPROVAL_REQUESTED: ClassVar[DomainEventType]
+    REMEDIATION_APPROVAL_GRANTED: ClassVar[DomainEventType]
+    REMEDIATION_APPROVAL_DENIED: ClassVar[DomainEventType]
+    REMEDIATION_APPROVAL_EXPIRED: ClassVar[DomainEventType]
+    REMEDIATION_APPROVAL_REVOKED: ClassVar[DomainEventType]
+    ACTION_DISPATCH_CLAIMED: ClassVar[DomainEventType]
+    ACTION_PREFLIGHT_REQUESTED: ClassVar[DomainEventType]
+    ACTION_PREFLIGHT_COMPLETED: ClassVar[DomainEventType]
+    ACTION_PREFLIGHT_FAILED: ClassVar[DomainEventType]
+    ACTION_DRY_RUN_REQUESTED: ClassVar[DomainEventType]
+    ACTION_DRY_RUN_COMPLETED: ClassVar[DomainEventType]
+    ACTION_DRY_RUN_FAILED: ClassVar[DomainEventType]
+    ACTION_EXECUTION_REQUESTED: ClassVar[DomainEventType]
+    ACTION_EXECUTION_STARTED: ClassVar[DomainEventType]
+    ACTION_EXECUTION_SUCCEEDED: ClassVar[DomainEventType]
+    ACTION_EXECUTION_FAILED: ClassVar[DomainEventType]
+    ACTION_EXECUTION_AMBIGUOUS: ClassVar[DomainEventType]
+    ACTION_RECONCILIATION_REQUESTED: ClassVar[DomainEventType]
+    ACTION_RECONCILIATION_COMPLETED: ClassVar[DomainEventType]
+    ACTION_ROLLBACK_REQUESTED: ClassVar[DomainEventType]
+    ACTION_ROLLBACK_COMPLETED: ClassVar[DomainEventType]
+    ACTION_ROLLBACK_FAILED: ClassVar[DomainEventType]
+    ACTION_COMPENSATION_REQUESTED: ClassVar[DomainEventType]
+    ACTION_COMPENSATION_COMPLETED: ClassVar[DomainEventType]
+    ACTION_COMPENSATION_FAILED: ClassVar[DomainEventType]
+    ACTION_CANCELLATION_REQUESTED: ClassVar[DomainEventType]
+    ACTION_CANCELLED: ClassVar[DomainEventType]
+    ACTION_VERIFICATION_REQUESTED: ClassVar[DomainEventType]
+    ACTION_VERIFICATION_COMPLETED: ClassVar[DomainEventType]
+    SANDBOX_REQUESTED: ClassVar[DomainEventType]
+    SANDBOX_POLICY_EVALUATED: ClassVar[DomainEventType]
+    SANDBOX_APPROVAL_BOUND: ClassVar[DomainEventType]
+    SANDBOX_EGRESS_DECIDED: ClassVar[DomainEventType]
+    SANDBOX_DISPATCH_CLAIMED: ClassVar[DomainEventType]
+    SANDBOX_PROVISIONING_REQUESTED: ClassVar[DomainEventType]
+    SANDBOX_PROVISIONED: ClassVar[DomainEventType]
+    SANDBOX_START_REQUESTED: ClassVar[DomainEventType]
+    SANDBOX_STARTED: ClassVar[DomainEventType]
+    SANDBOX_OUTPUT_CAPTURED: ClassVar[DomainEventType]
+    SANDBOX_ARTIFACT_CAPTURED: ClassVar[DomainEventType]
+    SANDBOX_COMPLETED: ClassVar[DomainEventType]
+    SANDBOX_FAILED: ClassVar[DomainEventType]
+    SANDBOX_TIMED_OUT: ClassVar[DomainEventType]
+    SANDBOX_OOM_KILLED: ClassVar[DomainEventType]
+    SANDBOX_POLICY_VIOLATION: ClassVar[DomainEventType]
+    SANDBOX_CANCELLATION_REQUESTED: ClassVar[DomainEventType]
+    SANDBOX_CANCELLED: ClassVar[DomainEventType]
+    SANDBOX_ATTESTED: ClassVar[DomainEventType]
+    SANDBOX_CLEANUP_REQUESTED: ClassVar[DomainEventType]
+    SANDBOX_CLEANUP_COMPLETED: ClassVar[DomainEventType]
+    SANDBOX_CLEANUP_FAILED: ClassVar[DomainEventType]
+    SANDBOX_QUARANTINED: ClassVar[DomainEventType]
+    SANDBOX_RECONCILIATION_REQUESTED: ClassVar[DomainEventType]
+    SANDBOX_RECONCILED: ClassVar[DomainEventType]
 
 
 DomainEventType.INVESTIGATION_REQUESTED = DomainEventType._define(
@@ -230,6 +299,187 @@ DomainEventType.CORRELATION_FAILED = DomainEventType._define(
 DomainEventType.SOURCE_CURSOR_ADVANCED = DomainEventType._define(
     "evidence.source_cursor_advanced.v1"
 )
+DomainEventType.INVESTIGATION_PLAN_RECORDED = DomainEventType._define(
+    "investigation.plan_recorded.v1"
+)
+DomainEventType.INVESTIGATION_CANCEL_REQUESTED = DomainEventType._define(
+    "investigation.cancel_requested.v1"
+)
+DomainEventType.INVESTIGATION_BUDGET_EXHAUSTED = DomainEventType._define(
+    "investigation.budget_exhausted.v1"
+)
+DomainEventType.SPECIALIST_TASK_DISPATCH_REQUESTED = DomainEventType._define(
+    "specialist.dispatch_requested.v1"
+)
+DomainEventType.SPECIALIST_TASK_STARTED = DomainEventType._define(
+    "specialist.started.v1"
+)
+DomainEventType.SPECIALIST_TASK_SUCCEEDED = DomainEventType._define(
+    "specialist.succeeded.v1"
+)
+DomainEventType.SPECIALIST_TASK_FAILED = DomainEventType._define("specialist.failed.v1")
+DomainEventType.SPECIALIST_TASK_TIMED_OUT = DomainEventType._define(
+    "specialist.timed_out.v1"
+)
+DomainEventType.SPECIALIST_TASK_CANCELLED = DomainEventType._define(
+    "specialist.cancelled.v1"
+)
+DomainEventType.REASONING_ARTIFACT_RECORDED = DomainEventType._define(
+    "reasoning.artifact_recorded.v1"
+)
+DomainEventType.COORDINATOR_DECISION_RECORDED = DomainEventType._define(
+    "coordinator.decision_recorded.v1"
+)
+DomainEventType.INVESTIGATION_FINALIZED = DomainEventType._define(
+    "investigation.finalized.v1"
+)
+DomainEventType.REMEDIATION_PROPOSED = DomainEventType._define(
+    "remediation.proposed.v1"
+)
+DomainEventType.REMEDIATION_PLAN_REVISED = DomainEventType._define(
+    "remediation.plan_revised.v1"
+)
+DomainEventType.REMEDIATION_POLICY_EVALUATED = DomainEventType._define(
+    "remediation.policy_evaluated.v1"
+)
+DomainEventType.REMEDIATION_APPROVAL_REQUESTED = DomainEventType._define(
+    "remediation.approval_requested.v1"
+)
+DomainEventType.REMEDIATION_APPROVAL_GRANTED = DomainEventType._define(
+    "remediation.approval_granted.v1"
+)
+DomainEventType.REMEDIATION_APPROVAL_DENIED = DomainEventType._define(
+    "remediation.approval_denied.v1"
+)
+DomainEventType.REMEDIATION_APPROVAL_EXPIRED = DomainEventType._define(
+    "remediation.approval_expired.v1"
+)
+DomainEventType.REMEDIATION_APPROVAL_REVOKED = DomainEventType._define(
+    "remediation.approval_revoked.v1"
+)
+DomainEventType.ACTION_DISPATCH_CLAIMED = DomainEventType._define(
+    "action.dispatch_claimed.v1"
+)
+DomainEventType.ACTION_PREFLIGHT_REQUESTED = DomainEventType._define(
+    "action.preflight_requested.v1"
+)
+DomainEventType.ACTION_PREFLIGHT_COMPLETED = DomainEventType._define(
+    "action.preflight_completed.v1"
+)
+DomainEventType.ACTION_PREFLIGHT_FAILED = DomainEventType._define(
+    "action.preflight_failed.v1"
+)
+DomainEventType.ACTION_DRY_RUN_REQUESTED = DomainEventType._define(
+    "action.dry_run_requested.v1"
+)
+DomainEventType.ACTION_DRY_RUN_COMPLETED = DomainEventType._define(
+    "action.dry_run_completed.v1"
+)
+DomainEventType.ACTION_DRY_RUN_FAILED = DomainEventType._define(
+    "action.dry_run_failed.v1"
+)
+DomainEventType.ACTION_EXECUTION_REQUESTED = DomainEventType._define(
+    "action.execution_requested.v1"
+)
+DomainEventType.ACTION_EXECUTION_STARTED = DomainEventType._define(
+    "action.execution_started.v1"
+)
+DomainEventType.ACTION_EXECUTION_SUCCEEDED = DomainEventType._define(
+    "action.execution_succeeded.v1"
+)
+DomainEventType.ACTION_EXECUTION_FAILED = DomainEventType._define(
+    "action.execution_failed.v1"
+)
+DomainEventType.ACTION_EXECUTION_AMBIGUOUS = DomainEventType._define(
+    "action.execution_ambiguous.v1"
+)
+DomainEventType.ACTION_RECONCILIATION_REQUESTED = DomainEventType._define(
+    "action.reconciliation_requested.v1"
+)
+DomainEventType.ACTION_RECONCILIATION_COMPLETED = DomainEventType._define(
+    "action.reconciliation_completed.v1"
+)
+DomainEventType.ACTION_ROLLBACK_REQUESTED = DomainEventType._define(
+    "action.rollback_requested.v1"
+)
+DomainEventType.ACTION_ROLLBACK_COMPLETED = DomainEventType._define(
+    "action.rollback_completed.v1"
+)
+DomainEventType.ACTION_ROLLBACK_FAILED = DomainEventType._define(
+    "action.rollback_failed.v1"
+)
+DomainEventType.ACTION_COMPENSATION_REQUESTED = DomainEventType._define(
+    "action.compensation_requested.v1"
+)
+DomainEventType.ACTION_COMPENSATION_COMPLETED = DomainEventType._define(
+    "action.compensation_completed.v1"
+)
+DomainEventType.ACTION_COMPENSATION_FAILED = DomainEventType._define(
+    "action.compensation_failed.v1"
+)
+DomainEventType.ACTION_CANCELLATION_REQUESTED = DomainEventType._define(
+    "action.cancellation_requested.v1"
+)
+DomainEventType.ACTION_CANCELLED = DomainEventType._define("action.cancelled.v1")
+DomainEventType.ACTION_VERIFICATION_REQUESTED = DomainEventType._define(
+    "action.verification_requested.v1"
+)
+DomainEventType.ACTION_VERIFICATION_COMPLETED = DomainEventType._define(
+    "action.verification_completed.v1"
+)
+DomainEventType.SANDBOX_REQUESTED = DomainEventType._define("sandbox.requested.v1")
+DomainEventType.SANDBOX_POLICY_EVALUATED = DomainEventType._define(
+    "sandbox.policy_evaluated.v1"
+)
+DomainEventType.SANDBOX_APPROVAL_BOUND = DomainEventType._define(
+    "sandbox.approval_bound.v1"
+)
+DomainEventType.SANDBOX_EGRESS_DECIDED = DomainEventType._define(
+    "sandbox.egress_decided.v1"
+)
+DomainEventType.SANDBOX_DISPATCH_CLAIMED = DomainEventType._define(
+    "sandbox.dispatch_claimed.v1"
+)
+DomainEventType.SANDBOX_PROVISIONING_REQUESTED = DomainEventType._define(
+    "sandbox.provisioning_requested.v1"
+)
+DomainEventType.SANDBOX_PROVISIONED = DomainEventType._define("sandbox.provisioned.v1")
+DomainEventType.SANDBOX_START_REQUESTED = DomainEventType._define(
+    "sandbox.start_requested.v1"
+)
+DomainEventType.SANDBOX_STARTED = DomainEventType._define("sandbox.started.v1")
+DomainEventType.SANDBOX_OUTPUT_CAPTURED = DomainEventType._define(
+    "sandbox.output_captured.v1"
+)
+DomainEventType.SANDBOX_ARTIFACT_CAPTURED = DomainEventType._define(
+    "sandbox.artifact_captured.v1"
+)
+DomainEventType.SANDBOX_COMPLETED = DomainEventType._define("sandbox.completed.v1")
+DomainEventType.SANDBOX_FAILED = DomainEventType._define("sandbox.failed.v1")
+DomainEventType.SANDBOX_TIMED_OUT = DomainEventType._define("sandbox.timed_out.v1")
+DomainEventType.SANDBOX_OOM_KILLED = DomainEventType._define("sandbox.oom_killed.v1")
+DomainEventType.SANDBOX_POLICY_VIOLATION = DomainEventType._define(
+    "sandbox.policy_violation.v1"
+)
+DomainEventType.SANDBOX_CANCELLATION_REQUESTED = DomainEventType._define(
+    "sandbox.cancellation_requested.v1"
+)
+DomainEventType.SANDBOX_CANCELLED = DomainEventType._define("sandbox.cancelled.v1")
+DomainEventType.SANDBOX_ATTESTED = DomainEventType._define("sandbox.attested.v1")
+DomainEventType.SANDBOX_CLEANUP_REQUESTED = DomainEventType._define(
+    "sandbox.cleanup_requested.v1"
+)
+DomainEventType.SANDBOX_CLEANUP_COMPLETED = DomainEventType._define(
+    "sandbox.cleanup_completed.v1"
+)
+DomainEventType.SANDBOX_CLEANUP_FAILED = DomainEventType._define(
+    "sandbox.cleanup_failed.v1"
+)
+DomainEventType.SANDBOX_QUARANTINED = DomainEventType._define("sandbox.quarantined.v1")
+DomainEventType.SANDBOX_RECONCILIATION_REQUESTED = DomainEventType._define(
+    "sandbox.reconciliation_requested.v1"
+)
+DomainEventType.SANDBOX_RECONCILED = DomainEventType._define("sandbox.reconciled.v1")
 
 
 @dataclass(frozen=True, slots=True)

@@ -8,10 +8,11 @@ import json
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 from urllib.parse import parse_qs
 from uuid import UUID, uuid4
 
+from aegis_agent_platform.agents.operations import AgentOperations
 from aegis_agent_platform.audit import (
     AuditEvent,
     AuditEventType,
@@ -29,6 +30,11 @@ from aegis_agent_platform.domain import (
     JsonValue,
     PaginationCursor,
     QueryWindow,
+    SandboxApprovalBinding,
+    SandboxPurpose,
+    SandboxRisk,
+    plan_from_payload,
+    sandbox_request_from_payload,
 )
 from aegis_agent_platform.domain.events import thaw_json
 from aegis_agent_platform.event_store import EventStore, TransientStorageError
@@ -50,6 +56,16 @@ from aegis_agent_platform.policy import (
     InMemoryPolicyRepository,
     PolicyRepository,
     TenantPolicy,
+)
+from aegis_agent_platform.remediation import (
+    ApprovalDecision,
+    ApprovalDeniedError,
+    RemediationIdempotencyConflictError,
+    RemediationOperations,
+)
+from aegis_agent_platform.sandbox import (
+    SandboxIdempotencyConflictError,
+    SandboxOperations,
 )
 from aegis_agent_platform.tenancy import (
     InMemoryTenantRepository,
@@ -91,6 +107,9 @@ class ControlPlaneApp:
         storage_ready: Callable[[], Awaitable[bool]] | None = None,
         gateway_operations: GatewayOperations | None = None,
         evidence_operations: EvidenceOperations | None = None,
+        agent_operations: AgentOperations | None = None,
+        remediation_operations: RemediationOperations | None = None,
+        sandbox_operations: SandboxOperations | None = None,
     ) -> None:
         self._authentication = authentication
         self._authorization = authorization or AuthorizationService()
@@ -102,6 +121,9 @@ class ControlPlaneApp:
         self._storage_ready = storage_ready
         self._gateway_operations = gateway_operations
         self._evidence_operations = evidence_operations
+        self._agent_operations = agent_operations
+        self._remediation_operations = remediation_operations
+        self._sandbox_operations = sandbox_operations
 
     async def __call__(
         self,
@@ -128,11 +150,28 @@ class ControlPlaneApp:
         correlation_id = uuid4()
         if method == "POST":
             post_segments = [segment for segment in path.split("/") if segment]
-            if not (
+            evidence_post = (
                 len(post_segments) == 5
                 and post_segments[:2] == ["v1", "tenants"]
                 and post_segments[3:] == ["evidence", "queries"]
-            ):
+            )
+            remediation_post = (
+                len(post_segments) == 4
+                and post_segments[:2] == ["v1", "tenants"]
+                and post_segments[3] == "remediations"
+            ) or (
+                len(post_segments) == 8
+                and post_segments[:2] == ["v1", "tenants"]
+                and post_segments[3] == "remediations"
+                and post_segments[5] == "approvals"
+                and post_segments[7] in {"decisions", "revocations"}
+            )
+            sandbox_post = (
+                len(post_segments) == 4
+                and post_segments[:2] == ["v1", "tenants"]
+                and post_segments[3] == "sandboxes"
+            )
+            if not evidence_post and not remediation_post and not sandbox_post:
                 await _respond(send, 405, {"error": {"code": "method_not_allowed"}})
                 return
         principal = await self._authenticate(scope, send, correlation_id)
@@ -171,6 +210,123 @@ class ControlPlaneApp:
                 tenant_id,
                 correlation_id=correlation_id,
                 view=segments[3],
+            )
+            return
+        if method == "POST" and len(segments) == 4 and segments[3] == "remediations":
+            await self._request_remediation(
+                send,
+                receive,
+                principal,
+                tenant_id,
+            )
+            return
+        if method == "POST" and len(segments) == 4 and segments[3] == "sandboxes":
+            await self._request_sandbox(
+                send,
+                receive,
+                principal,
+                tenant_id,
+            )
+            return
+        if method == "GET" and len(segments) == 4 and segments[3] == "sandboxes":
+            try:
+                sandbox_cursor = _uuid_cursor_parameter(
+                    scope,
+                    "after_sandbox_id",
+                )
+            except ValueError:
+                await _respond(send, 400, {"error": {"code": "invalid_cursor"}})
+                return
+            await self._get_sandboxes(
+                send,
+                principal,
+                tenant_id,
+                after_sandbox_id=sandbox_cursor,
+            )
+            return
+        if (
+            method == "GET"
+            and len(segments) == 5
+            and segments[3:] == ["sandboxes", "cleanup"]
+        ):
+            try:
+                cleanup_cursor = _uuid_cursor_parameter(
+                    scope,
+                    "after_sandbox_id",
+                )
+            except ValueError:
+                await _respond(send, 400, {"error": {"code": "invalid_cursor"}})
+                return
+            await self._get_sandbox_cleanup(
+                send,
+                principal,
+                tenant_id,
+                after_sandbox_id=cleanup_cursor,
+            )
+            return
+        if (
+            method == "GET"
+            and len(segments) == 6
+            and segments[3] == "sandboxes"
+            and segments[5] == "artifacts"
+        ):
+            try:
+                artifact_cursor = _cursor_parameter(scope)
+            except ValueError:
+                await _respond(send, 400, {"error": {"code": "invalid_cursor"}})
+                return
+            await self._get_sandbox_artifacts(
+                send,
+                principal,
+                tenant_id,
+                segments[4],
+                after_position=artifact_cursor,
+            )
+            return
+        if method == "GET" and len(segments) == 5 and segments[3] == "sandboxes":
+            await self._get_sandbox(
+                send,
+                principal,
+                tenant_id,
+                segments[4],
+            )
+            return
+        if method == "GET" and len(segments) == 4 and segments[3] == "remediations":
+            try:
+                remediation_cursor = _remediation_cursor_parameter(scope)
+            except ValueError:
+                await _respond(send, 400, {"error": {"code": "invalid_cursor"}})
+                return
+            await self._get_remediations(
+                send,
+                principal,
+                tenant_id,
+                after_plan_id=remediation_cursor,
+            )
+            return
+        if method == "GET" and len(segments) == 5 and segments[3] == "remediations":
+            await self._get_remediation(
+                send,
+                principal,
+                tenant_id,
+                segments[4],
+            )
+            return
+        if (
+            method == "POST"
+            and len(segments) == 8
+            and segments[3] == "remediations"
+            and segments[5] == "approvals"
+            and segments[7] in {"decisions", "revocations"}
+        ):
+            await self._decide_remediation(
+                send,
+                receive,
+                principal,
+                tenant_id,
+                plan_id=segments[4],
+                approval_id=segments[6],
+                revoke=segments[7] == "revocations",
             )
             return
         if (
@@ -217,6 +373,30 @@ class ControlPlaneApp:
                 tenant_id,
                 segments[5],
                 correlation_id=correlation_id,
+            )
+            return
+        if (
+            method == "GET"
+            and len(segments) in {5, 6}
+            and segments[3] == "investigations"
+        ):
+            view = "status" if len(segments) == 5 else segments[5]
+            if view not in {"status", "tasks", "artifacts"}:
+                await _respond(send, 404, {"status": "not-found"})
+                return
+            try:
+                investigation_cursor = _cursor_parameter(scope)
+            except ValueError:
+                await _respond(send, 400, {"error": {"code": "invalid_cursor"}})
+                return
+            await self._get_investigation_view(
+                send,
+                principal,
+                tenant_id,
+                segments[4],
+                view,
+                correlation_id=correlation_id,
+                cursor=investigation_cursor,
             )
             return
         if (
@@ -339,6 +519,465 @@ class ControlPlaneApp:
                 "status": "requested" if result.created else "duplicate",
             },
         )
+
+    async def _request_sandbox(
+        self,
+        send: Send,
+        receive: Receive,
+        principal: Principal,
+        tenant_id: TenantId,
+    ) -> None:
+        if self._sandbox_operations is None:
+            await _respond(
+                send,
+                503,
+                {"error": {"code": "sandbox_not_configured"}},
+            )
+            return
+        try:
+            body = await _request_json(receive)
+            request_value = body.get("request")
+            approval_value = body.get("approval")
+            if not isinstance(request_value, Mapping) or not isinstance(
+                approval_value,
+                Mapping,
+            ):
+                raise ValueError("request and approval are required")
+            sandbox_request = sandbox_request_from_payload(
+                cast(Mapping[str, JsonValue], request_value)
+            )
+            if sandbox_request.linkage.tenant_id != str(tenant_id):
+                raise PermissionError("sandbox_request_tenant_mismatch")
+            approval = _sandbox_approval_binding(
+                cast(Mapping[str, JsonValue], approval_value)
+            )
+            decision = await self._sandbox_operations.request(
+                principal,
+                TenantContext(tenant_id),
+                sandbox_request,
+                approval,
+            )
+        except SandboxIdempotencyConflictError:
+            await _respond(
+                send,
+                409,
+                {"error": {"code": "sandbox_idempotency_conflict"}},
+            )
+            return
+        except PermissionError as error:
+            await _respond(
+                send,
+                403,
+                {"error": {"code": "sandbox_denied", "reason": str(error)}},
+            )
+            return
+        except (KeyError, TypeError, ValueError):
+            await _respond(
+                send,
+                400,
+                {"error": {"code": "invalid_sandbox_request"}},
+            )
+            return
+        await _respond(
+            send,
+            202 if decision.result.created else 200,
+            {
+                "accepted": decision.result.created,
+                "policy_reasons": decision.policy.reasons,
+                "redacted": True,
+                "sandbox_id": str(decision.result.sandbox_id),
+                "spec_digest": decision.state.request.spec.digest,
+                "status": decision.state.status.value,
+            },
+        )
+
+    async def _get_sandboxes(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+        *,
+        after_sandbox_id: UUID | None,
+    ) -> None:
+        if self._sandbox_operations is None:
+            await _respond(
+                send,
+                503,
+                {"error": {"code": "sandbox_not_configured"}},
+            )
+            return
+        try:
+            rows, cursor = await self._sandbox_operations.page(
+                principal,
+                TenantContext(tenant_id),
+                at=datetime.now(UTC),
+                after_sandbox_id=after_sandbox_id,
+                limit=100,
+            )
+        except PermissionError:
+            await _respond(send, 403, {"error": {"code": "permission_denied"}})
+            return
+        await _respond(
+            send,
+            200,
+            {
+                "next_cursor": str(cursor) if cursor is not None else None,
+                "redacted": True,
+                "sandboxes": tuple(dict(row) for row in rows),
+            },
+        )
+
+    async def _get_sandbox(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+        sandbox_id: str,
+    ) -> None:
+        if self._sandbox_operations is None:
+            await _respond(
+                send,
+                503,
+                {"error": {"code": "sandbox_not_configured"}},
+            )
+            return
+        try:
+            result = await self._sandbox_operations.status(
+                principal,
+                TenantContext(tenant_id),
+                UUID(sandbox_id),
+                at=datetime.now(UTC),
+            )
+        except ValueError:
+            await _respond(
+                send,
+                400,
+                {"error": {"code": "invalid_sandbox_id"}},
+            )
+            return
+        except PermissionError:
+            await _respond(send, 403, {"error": {"code": "permission_denied"}})
+            return
+        if result is None:
+            await _respond(
+                send,
+                404,
+                {"error": {"code": "sandbox_not_found"}},
+            )
+            return
+        await _respond(send, 200, dict(result))
+
+    async def _get_sandbox_artifacts(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+        sandbox_id: str,
+        *,
+        after_position: int,
+    ) -> None:
+        if self._sandbox_operations is None:
+            await _respond(
+                send,
+                503,
+                {"error": {"code": "sandbox_not_configured"}},
+            )
+            return
+        try:
+            rows, cursor = await self._sandbox_operations.artifacts(
+                principal,
+                TenantContext(tenant_id),
+                UUID(sandbox_id),
+                at=datetime.now(UTC),
+                after_position=after_position,
+                limit=100,
+            )
+        except ValueError:
+            await _respond(
+                send,
+                400,
+                {"error": {"code": "invalid_sandbox_id"}},
+            )
+            return
+        except PermissionError:
+            await _respond(send, 403, {"error": {"code": "permission_denied"}})
+            return
+        await _respond(
+            send,
+            200,
+            {
+                "artifacts": tuple(dict(row) for row in rows),
+                "next_cursor": cursor,
+                "redacted": True,
+            },
+        )
+
+    async def _get_sandbox_cleanup(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+        *,
+        after_sandbox_id: UUID | None,
+    ) -> None:
+        if self._sandbox_operations is None:
+            await _respond(
+                send,
+                503,
+                {"error": {"code": "sandbox_not_configured"}},
+            )
+            return
+        try:
+            rows, cursor = await self._sandbox_operations.cleanup_queue(
+                principal,
+                TenantContext(tenant_id),
+                at=datetime.now(UTC),
+                after_sandbox_id=after_sandbox_id,
+                limit=100,
+            )
+        except PermissionError:
+            await _respond(send, 403, {"error": {"code": "permission_denied"}})
+            return
+        await _respond(
+            send,
+            200,
+            {
+                "cleanup": tuple(dict(row) for row in rows),
+                "next_cursor": str(cursor) if cursor is not None else None,
+                "redacted": True,
+            },
+        )
+
+    async def _request_remediation(
+        self,
+        send: Send,
+        receive: Receive,
+        principal: Principal,
+        tenant_id: TenantId,
+    ) -> None:
+        if self._remediation_operations is None:
+            await _respond(
+                send,
+                503,
+                {"error": {"code": "remediation_not_configured"}},
+            )
+            return
+        try:
+            body = await _request_json(receive)
+            plan_value = body.get("plan")
+            idempotency_key = body.get("idempotency_key")
+            if not isinstance(plan_value, Mapping) or not isinstance(
+                idempotency_key, str
+            ):
+                raise ValueError("plan and idempotency key are required")
+            plan = plan_from_payload(cast(Mapping[str, JsonValue], plan_value))
+            decision = await self._remediation_operations.propose(
+                principal,
+                TenantContext(tenant_id),
+                plan,
+                idempotency_key=idempotency_key,
+            )
+        except RemediationIdempotencyConflictError:
+            await _respond(
+                send,
+                409,
+                {"error": {"code": "remediation_idempotency_conflict"}},
+            )
+            return
+        except ApprovalDeniedError:
+            await _respond(
+                send,
+                403,
+                {"error": {"code": "remediation_proposal_denied"}},
+            )
+            return
+        except PermissionError:
+            await _respond(
+                send,
+                403,
+                {"error": {"code": "remediation_policy_not_configured"}},
+            )
+            return
+        except (KeyError, TypeError, ValueError):
+            await _respond(
+                send,
+                400,
+                {"error": {"code": "invalid_remediation_plan"}},
+            )
+            return
+        await _respond(
+            send,
+            202 if decision.result.created else 200,
+            {
+                "accepted": decision.result.created,
+                "plan_id": str(decision.state.plan.plan_id),
+                "plan_digest": decision.state.plan.digest,
+                "policy_digest": decision.state.plan.approval_policy.digest,
+                "redacted": True,
+            },
+        )
+
+    async def _decide_remediation(
+        self,
+        send: Send,
+        receive: Receive,
+        principal: Principal,
+        tenant_id: TenantId,
+        *,
+        plan_id: str,
+        approval_id: str,
+        revoke: bool,
+    ) -> None:
+        if self._remediation_operations is None:
+            await _respond(
+                send,
+                503,
+                {"error": {"code": "remediation_not_configured"}},
+            )
+            return
+        try:
+            parsed_plan_id = UUID(plan_id)
+            parsed_approval_id = UUID(approval_id)
+            body = await _request_json(receive)
+            rationale_code = body.get("rationale_code")
+            if not isinstance(rationale_code, str):
+                raise ValueError("rationale code is required")
+            if revoke:
+                revocation_id = body.get("revocation_id")
+                if not isinstance(revocation_id, str):
+                    raise ValueError("revocation id is required")
+                result = await self._remediation_operations.revoke(
+                    principal,
+                    TenantContext(tenant_id),
+                    parsed_plan_id,
+                    parsed_approval_id,
+                    revocation_id=UUID(revocation_id),
+                    rationale_code=rationale_code,
+                )
+            else:
+                decision_id = body.get("decision_id")
+                decision_value = body.get("decision")
+                comment = body.get("comment")
+                if (
+                    not isinstance(decision_id, str)
+                    or not isinstance(decision_value, str)
+                    or not isinstance(comment, str)
+                ):
+                    raise ValueError("approval decision fields are required")
+                result = await self._remediation_operations.decide(
+                    principal,
+                    TenantContext(tenant_id),
+                    parsed_plan_id,
+                    parsed_approval_id,
+                    ApprovalDecision(decision_value),
+                    decision_id=UUID(decision_id),
+                    rationale_code=rationale_code,
+                    comment=comment,
+                )
+        except ApprovalDeniedError:
+            await _respond(
+                send,
+                403,
+                {"error": {"code": "remediation_approval_denied"}},
+            )
+            return
+        except RemediationIdempotencyConflictError:
+            await _respond(
+                send,
+                409,
+                {"error": {"code": "approval_idempotency_conflict"}},
+            )
+            return
+        except PermissionError:
+            await _respond(
+                send,
+                403,
+                {"error": {"code": "remediation_policy_not_configured"}},
+            )
+            return
+        except (KeyError, TypeError, ValueError):
+            await _respond(
+                send,
+                400,
+                {"error": {"code": "invalid_approval_decision"}},
+            )
+            return
+        await _respond(send, 200, dict(result))
+
+    async def _get_remediations(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+        *,
+        after_plan_id: UUID | None,
+    ) -> None:
+        if self._remediation_operations is None:
+            await _respond(
+                send,
+                503,
+                {"error": {"code": "remediation_not_configured"}},
+            )
+            return
+        try:
+            rows, cursor = await self._remediation_operations.page(
+                principal,
+                TenantContext(tenant_id),
+                at=datetime.now(UTC),
+                after_plan_id=after_plan_id,
+                limit=100,
+            )
+        except PermissionError:
+            await _respond(send, 403, {"error": {"code": "permission_denied"}})
+            return
+        await _respond(
+            send,
+            200,
+            {
+                "remediations": rows,
+                "next_cursor": str(cursor) if cursor is not None else None,
+            },
+        )
+
+    async def _get_remediation(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+        plan_id: str,
+    ) -> None:
+        if self._remediation_operations is None:
+            await _respond(
+                send,
+                503,
+                {"error": {"code": "remediation_not_configured"}},
+            )
+            return
+        try:
+            result = await self._remediation_operations.status(
+                principal,
+                TenantContext(tenant_id),
+                UUID(plan_id),
+                at=datetime.now(UTC),
+            )
+        except ValueError:
+            await _respond(
+                send,
+                400,
+                {"error": {"code": "invalid_remediation_id"}},
+            )
+            return
+        except PermissionError:
+            await _respond(send, 403, {"error": {"code": "permission_denied"}})
+            return
+        if result is None:
+            await _respond(
+                send,
+                404,
+                {"error": {"code": "remediation_not_found"}},
+            )
+            return
+        await _respond(send, 200, dict(result))
 
     async def _get_evidence_view(
         self,
@@ -482,6 +1121,82 @@ class ControlPlaneApp:
             ),
         )
 
+    async def _get_investigation_view(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+        run_id: str,
+        view: str,
+        *,
+        correlation_id: UUID,
+        cursor: int,
+    ) -> None:
+        if not await self._authorize(
+            send,
+            principal,
+            tenant_id,
+            Permission.INVESTIGATION_READ,
+            correlation_id=correlation_id,
+            resource=f"tenant/{tenant_id}/investigations/{view}",
+        ):
+            return
+        if self._agent_operations is None:
+            await _respond(
+                send,
+                503,
+                {"error": {"code": "investigation_not_configured"}},
+            )
+            return
+        try:
+            identifier = UUID(run_id)
+        except ValueError:
+            await _respond(send, 400, {"error": {"code": "invalid_run_id"}})
+            return
+        context = TenantContext(tenant_id)
+        at = datetime.now(UTC)
+        if view == "status":
+            result = await self._agent_operations.status(
+                principal,
+                context,
+                identifier,
+                at=at,
+            )
+            await _respond(
+                send,
+                200 if result is not None else 404,
+                (
+                    dict(result)
+                    if result is not None
+                    else {"error": {"code": "investigation_not_found"}}
+                ),
+            )
+            return
+        if view == "tasks":
+            items, task_cursor = await self._agent_operations.tasks(
+                principal,
+                context,
+                identifier,
+                at=at,
+                after_ordinal=cursor - 1,
+                limit=100,
+            )
+            next_cursor = task_cursor + 1 if task_cursor is not None else None
+        else:
+            items, next_cursor = await self._agent_operations.artifacts(
+                principal,
+                context,
+                identifier,
+                at=at,
+                after_position=cursor,
+                limit=100,
+            )
+        await _respond(
+            send,
+            200,
+            {view: items, "next_cursor": next_cursor},
+        )
+
     async def _readiness(self, send: Send) -> None:
         try:
             Settings.from_env()
@@ -509,6 +1224,13 @@ class ControlPlaneApp:
                     if self._storage_ready is not None
                     else ["configuration"]
                 ),
+                "capabilities": {
+                    "remediation": (
+                        "configured"
+                        if self._remediation_operations is not None
+                        else "disabled"
+                    )
+                },
             },
         )
 
@@ -894,6 +1616,78 @@ def _cursor_parameter(scope: AsgiMessage) -> int:
     if len(values) != 1 or not values[0].isdigit():
         raise ValueError("cursor must be one non-negative integer")
     return int(values[0])
+
+
+def _uuid_cursor_parameter(
+    scope: AsgiMessage,
+    name: str,
+) -> UUID | None:
+    raw_query = scope.get("query_string", b"")
+    if not isinstance(raw_query, bytes):
+        raise ValueError("query string must be bytes")
+    try:
+        parameters = parse_qs(
+            raw_query.decode("ascii"),
+            keep_blank_values=True,
+        )
+    except UnicodeDecodeError as error:
+        raise ValueError("query string must be ASCII") from error
+    values = parameters.get(name)
+    if values is None:
+        return None
+    if len(values) != 1 or not values[0]:
+        raise ValueError("UUID cursor must occur once")
+    return UUID(values[0])
+
+
+def _remediation_cursor_parameter(scope: AsgiMessage) -> UUID | None:
+    raw_query = scope.get("query_string", b"")
+    if not isinstance(raw_query, bytes):
+        raise ValueError("query string must be bytes")
+    try:
+        parameters = parse_qs(
+            raw_query.decode("ascii"),
+            keep_blank_values=True,
+        )
+    except UnicodeDecodeError as error:
+        raise ValueError("query string must be ASCII") from error
+    values = parameters.get("after_plan_id")
+    if values is None:
+        return None
+    if len(values) != 1 or not values[0]:
+        raise ValueError("remediation cursor must occur once")
+    return UUID(values[0])
+
+
+def _sandbox_approval_binding(
+    value: Mapping[str, JsonValue],
+) -> SandboxApprovalBinding:
+    approver_values = value["approver_ids"]
+    if not isinstance(approver_values, (list, tuple)) or any(
+        not isinstance(item, str) for item in approver_values
+    ):
+        raise ValueError("sandbox approver identifiers are invalid")
+    schema_version = value.get("schema_version", 1)
+    if not isinstance(schema_version, int) or isinstance(schema_version, bool):
+        raise ValueError("sandbox approval schema is invalid")
+    risk = value["risk"]
+    if not isinstance(risk, int) or isinstance(risk, bool):
+        raise ValueError("sandbox approval risk is invalid")
+    return SandboxApprovalBinding(
+        approval_id=UUID(str(value["approval_id"])),
+        plan_id=UUID(str(value["plan_id"])),
+        action_id=UUID(str(value["action_id"])),
+        plan_digest=str(value["plan_digest"]),
+        action_digest=str(value["action_digest"]),
+        policy_digest=str(value["policy_digest"]),
+        spec_digest=str(value["spec_digest"]),
+        purpose=SandboxPurpose(str(value["purpose"])),
+        risk=SandboxRisk(risk),
+        approver_ids=tuple(cast(str, item) for item in approver_values),
+        issued_at=datetime.fromisoformat(str(value["issued_at"])),
+        expires_at=datetime.fromisoformat(str(value["expires_at"])),
+        schema_version=schema_version,
+    )
 
 
 def _evidence_cursor_parameter(

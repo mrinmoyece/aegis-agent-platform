@@ -14,9 +14,19 @@ ALLOWED_DOMAIN_IMPORT_ROOTS = {
     "decimal",
     "datetime",
     "enum",
+    # Pure-computation stdlib modules used in domain validation logic.
+    # These perform no I/O, clock reads, or random generation.
+    "hashlib",
+    "ipaddress",
+    "json",
     "math",
+    "pathlib",
+    "posixpath",
+    "re",
     "types",
     "typing",
+    "unicodedata",
+    "urllib",
     "uuid",
 }
 PROHIBITED_DOMAIN_CALLS = {

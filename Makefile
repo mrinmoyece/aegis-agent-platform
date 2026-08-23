@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install format format-check lint type test postgres-test integration-test docs-check manifest-check migration-check check compose-config container-check
+.PHONY: help install format format-check lint type test evals postgres-test integration-test docs-check manifest-check migration-check check compose-config container-check
 
 PYTHON ?= python3
 
@@ -20,10 +20,13 @@ lint: ## Run static lint checks
 	$(PYTHON) -m ruff check src tests scripts
 
 type: ## Run strict type checks
-	$(PYTHON) -m mypy
+	PYTHONPATH=src $(PYTHON) -m mypy
 
 test: ## Run deterministic unit tests with coverage
 	PYTHONPATH=src:tests:$$PYTHONPATH $(PYTHON) -m pytest --cov --cov-report=term-missing
+
+evals: ## Run deterministic behavioral evaluations without live providers
+	PYTHONPATH=src $(PYTHON) -m pytest tests/test_gateway_eval.py tests/test_agent_evals.py tests/test_remediation_evals.py tests/test_sandbox_evals.py
 
 postgres-test: ## Run live PostgreSQL integration tests (requires AEGIS_TEST_DATABASE_URL)
 	PYTHONPATH=src:tests:$$PYTHONPATH $(PYTHON) -m pytest tests/integration
@@ -40,7 +43,7 @@ manifest-check: ## Validate repository configuration manifests
 migration-check: ## Validate ordered SQL migrations and tenant controls
 	$(PYTHON) scripts/check_migrations.py
 
-check: format-check lint type test docs-check manifest-check migration-check ## Run all fast local checks
+check: format-check lint type test evals docs-check manifest-check migration-check ## Run all fast local checks
 
 compose-config: ## Render and validate the local Compose configuration
 	docker compose --env-file .env.example config --quiet

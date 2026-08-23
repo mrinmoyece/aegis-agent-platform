@@ -108,18 +108,65 @@ success.
    allowlists. Verify least-privilege source permissions, TLS/private egress, and
    residency before re-enabling.
 
+## Approval, action ambiguity, or verification incident
+
+1. Stop new action claims for the tenant. Do not revoke a lease by editing Redis
+   or a projection; PostgreSQL work/ledger state remains authoritative.
+2. Inspect only bounded proposal/status pages: plan/action/policy digests, exact
+   target fingerprint, risk, quorum, expiry/revocation, attempt, lease
+   generation, idempotency digest, outcome class, and verification status. Do
+   not copy comments, credentials, raw evidence, prompts, or provider bodies.
+3. If approval is stale, expired, revoked, cross-tenant, forged, lacks current
+   role/quorum, or no longer matches policy/target, append no action intent.
+   Create a new immutable revision and request new approval.
+4. If an execution intent has no terminal outcome, reconcile target state with
+   the same tenant idempotency key and fingerprint before any retry. Never
+   generate a new key to hide ambiguity or claim exactly once.
+5. If reconciliation is conflicting or unknown, stop automatic retries and
+   escalate. Preserve the ambiguity in the ledger.
+6. If adapter acceptance succeeded but verification is failure, partial, or
+   unknown, keep the incident unresolved. A rollback/compensation requires its
+   own durable proposal/approval/intent and fresh verification.
+7. A stale lease holder must not act or append success. Investigate any fencing
+   rejection as expected containment first; repair only through current durable
+   work ownership.
+
+## Sandbox lifecycle, quarantine, or cleanup incident
+
+1. Stop new sandbox claims for the tenant and inspect bounded redacted status.
+   PostgreSQL events and the current lease are authoritative; Redis, pod phase,
+   logs, and projections are not.
+2. Confirm request, policy decision, exact approval binding, dispatch,
+   provisioning intent, start intent, terminal result, and cleanup intent order.
+   A backend call without its preceding durable intent is an integrity incident.
+3. For a provisioning gap, observe the stable backend name and spec digest before
+   create/retry. For a cleanup gap, observe absence/presence before delete/retry.
+   Record reconciliation and never invent success or claim exactly once.
+4. For timeout, OOM, cancellation, output limit, or backend failure, preserve the
+   explicit terminal event and drive cleanup under the current fence. Do not let
+   a stale worker terminate or append.
+5. For artifact quarantine, inspect only tenant, sandbox/artifact ID, digest,
+   media type, size, scanner reason, and provenance. Never open raw bytes on an
+   operator workstation or treat output as instructions.
+6. Redrive cleanup within the declared attempt bound. Exhaustion remains
+   quarantined and requires escalation; do not delete a provider object without
+   durable intent or edit cleanup projections.
+7. If readiness reports verified controls that are not deployed (admission,
+   runtime class, PID, default-deny networking, artifact driver), disable the
+   backend and treat it as a security incident.
+
 ## Integrity or RLS incident
 
 Stop writers if an aggregate sequence gap, event mutation, or cross-tenant row is
 observed. Preserve database logs and transaction IDs, verify the application is
 not using a bypass-RLS role, and escalate as a security incident. Restore from a
-tested backup only after identifying the bad boundary; backup/restore drills are
-still Layer 8 work.
+tested backup only after identifying the bad boundary; production backup/restore
+drills remain Layer 11 work.
 
 ## Rollback policy
 
-Migrations `0002_durable_ledger.sql`, `0003_distributed_worker_runtime.sql`,
-`0004_model_gateway.sql`, and `0005_evidence_connectors.sql` are forward-only.
+Migrations `0002_durable_ledger.sql` through
+`0008_hardened_sandbox_execution.sql` are forward-only.
 They create authoritative
 facts and security roles; automated downgrade would destroy evidence or weaken
 isolation. Roll forward with an additive corrective migration. Disaster restore

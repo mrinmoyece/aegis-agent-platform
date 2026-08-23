@@ -25,13 +25,13 @@ Status meanings:
 | Deterministic evidence timeline and conflict preservation | Implemented | `evidence.correlation`; no causal inference or specialist reasoning |
 | Live connector environment certification | Planned | account/cluster scopes, egress, TLS, rotation, residency drills |
 | Verified connector webhooks and replay protection | Planned | no webhook routes in Layer 6 |
-| Checkout-failure incident investigation | Planned | Layers 3–7 |
-| Approval-gated rollback and recovery verification | Planned | Layers 5–7 |
-| Fixed incident specialist roles and typed artifacts | Scaffolded | `agents` |
-| Ledger-only specialist communication | Scaffolded | `ArtifactLedger` port |
-| Coordinator DAG, capability, budget, and timeout enforcement | Planned | Layers 3–4 |
-| Deterministic evidence correlation and conflict representation | Implemented | Layer 6 evidence bundles; coordinator aggregation remains planned |
-| Recursive spawning and peer chat prohibited | Scaffolded | `AGENTS.md`, ADR 0008 |
+| Checkout-failure incident investigation | Implemented | Fake-only Layer 7 workflow; no live diagnosis claim |
+| Approval-gated controlled action and recovery verification | Implemented | Layer 8 fake workflow plus fixed-shape Kubernetes rollout restart; no live target claim |
+| Fixed incident specialist roles and typed artifacts | Implemented | `agents.artifacts`, role/output policy tests |
+| Ledger-only specialist communication | Implemented | `reasoning.artifact_recorded.v1`, replay fold |
+| Coordinator DAG, capability, budget, and timeout enforcement | Implemented | `agents.coordination`, `agents.service`, ADR 0014 |
+| Deterministic evidence correlation and conflict representation | Implemented | Layer 6 bundles plus Layer 7 hypothesis/contradiction/critic artifacts |
+| Recursive spawning and peer chat prohibited | Implemented | Fixed DAG/runtime boundary; no spawning/chat interface |
 | Staff-level curriculum index | Implemented | `docs/curriculum.md` |
 | Canonical 15/30/60-minute demo scripts | Implemented | `docs/demo-script.md` |
 | Staff interview question bank with answer outlines | Implemented | `docs/interview-question-bank.md` |
@@ -56,10 +56,10 @@ Status meanings:
 | Quota usage accounting projection | Implemented | Model usage events plus rebuildable versioned-cost view |
 | Append-only event store | Implemented | `PostgresEventStore`, migration `0002`, live race/immutability tests |
 | Additive event compatibility | Implemented | additive defaults and legacy fixture replay |
-| Deterministic incident state machine | Planned | Specialist runtime; generic run-status projection exists |
+| Deterministic incident state machine | Implemented | Pure Layer 7 event fold and corruption tests |
 | Intent-before-model-side-effect enforcement | Implemented | fenced model request/reservation before SDK call |
 | Transactional inbox/outbox | Implemented | deduplication, atomic append, claims, retry/DLQ |
-| Rebuildable projections/checkpoints | Implemented | run/artifact/approval/usage/tenant views |
+| Rebuildable projections/checkpoints | Implemented | run/artifact/approval/action/usage/tenant and specialist views |
 | Authorized ledger/timeline inspection | Implemented | tenant-scoped redacted read-only API |
 | Durable queue and fenced leases | Implemented | `queueing`, `runtime.postgres`, migration `0003`, live race tests |
 | Retry, timeout, dead-letter, and recovery policy | Implemented | `runtime.WorkerSupervisor`, deterministic tests |
@@ -73,16 +73,38 @@ Status meanings:
 | Provider retry/failover/rate/concurrency/circuit controls | Implemented | deterministic clocks/backoff and state tests |
 | Exactly-once provider billing | Planned | providers can bill ambiguous accepted calls; reconciliation required |
 | Encrypted durable prompt/response artifacts | Planned | Layer 7 privacy/memory work |
-| Tool schema registry and runtime policy | Planned | Layer 5 |
-| Human approval and break-glass audit | Planned | Layer 5 |
-| Isolated sandbox with egress policy and quotas | Planned | Layer 5 |
+| Provider-neutral remediation/action contracts and strict bounds | Implemented | `domain.remediation`, canonical digest and hostile-input tests |
+| Deny-by-default exact action policy | Implemented | allowlist, target, window, risk, blast-radius, quota, evidence, critic, and digest tests |
+| Authenticated exact-scope human approval | Implemented | SoD, distinct quorum, roles, expiry, revocation, concurrency, idempotency, immutable audit |
+| Break-glass approval | Planned | stronger authentication, notification, and retrospective review required |
+| Intent-before-action-side-effect enforcement | Implemented | current fence/policy/approval/target recheck and `action.execution_requested.v1` |
+| At-least-once effect idempotency and reconciliation | Implemented | tenant key, target fingerprint, effect claim, ambiguity, duplicate/conflict tests |
+| Explicit fresh-evidence postcondition verification | Implemented | success/failure/partial/unknown records; API acceptance is not recovery |
+| Deterministic fake controlled-action adapter and CLI | Implemented | seven fake-only scenarios; no network or credential |
+| Fixed-shape Kubernetes rollout-restart adapter | Implemented | official-client boundary tests; live cluster unverified |
+| Authorized bounded remediation APIs | Implemented | proposal/decision/revocation/status/cursor routes with redaction |
+| Forced-RLS remediation projections and immutable decisions | Implemented | migration `0007`, environment-gated PostgreSQL race/RLS/rebuild tests |
+| Remediation metrics/traces without sensitive content | Implemented | fixed operation/outcome labels; no prompt/evidence/tenant/target labels |
+| General tool schema registry and arbitrary tool execution | Planned | broad tool authority is not exposed by Layer 8 |
+| Immutable provider-neutral sandbox contracts and strict validation | Implemented | `domain.sandbox`; argv-only, digest-pinned image, canonical path/env/network/resource contracts |
+| Isolated sandbox with egress policy and quotas | Implemented | `sandbox`, migration `0008`, deterministic fake; production enforcement readiness remains false until verified |
+| Intent-before-sandbox lifecycle effects and reconciliation | Implemented | fenced provision/start/terminate/cleanup events, stable names, observe-before-create, ambiguity tests |
+| Safe content-addressed workspace and artifacts | Implemented | atomic ZIP/TAR extraction, traversal/link/device/bomb denial, scanner/redactor/quarantine hooks |
+| Hardened Kubernetes sandbox Job adapter | Implemented | official client boundary and locked-down suspended manifest; no live cluster certification |
+| Production sandbox admission/runtime/network verification | Planned | cluster policy, runtime class, PID limit, default-deny network and egress proxy deployment evidence |
+| Authenticated bounded sandbox APIs and fake CLI/evals | Implemented | request/status/artifact/cleanup cursor routes and deterministic scenarios |
 | Tenant-safe memory and retrieval provenance | Planned | Layer 6 |
 | Three-tier working/episodic/semantic memory | Planned | Layer 6, `docs/protocols.md` |
 | PII-safe compaction, retention, and deletion | Planned | Layer 6 |
 | Data retention, export, and erasure workflows | Planned | Layer 6 |
-| Offline evaluation datasets and baselines | Planned | Layer 7 |
+| Deterministic specialist behavioral evaluations | Implemented | success, ambiguity, contradiction, budget, recovery; `make evals` |
+| Deterministic remediation behavioral evaluations | Implemented | approval success/denial/stale, ambiguity, verification/rollback, policy attack, crash recovery |
+| Versioned production evaluation datasets and baselines | Planned | Layer 10 |
 | Online quality, safety, latency, and cost signals | Planned | Layer 7 |
 | Model span/metric content redaction | Implemented | bounded catalog labels; no prompt/tenant/request labels |
+| Specialist span/metric content redaction | Implemented | fixed operation/role labels; no evidence/prompt/tenant/run labels |
+| Authorized investigation status/task/artifact APIs | Implemented | tenant authorization, redacted cursor pages |
+| Tenant-RLS specialist projections and rebuild | Implemented | migration `0006`, live PostgreSQL test |
 | End-to-end trace/event correlation | Planned | Layer 8 |
 | SLOs, alerts, runbooks, backup, and restore evidence | Planned | Layer 8 |
 | HA deployment and capacity evidence | Planned | Layer 8 |

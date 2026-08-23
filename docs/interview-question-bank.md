@@ -41,11 +41,12 @@ delivery, durable outcomes, and reconciliation for ambiguous completion.
 the task. Time alone does not revoke authority. Authoritative writes reject the
 older monotonic fence.
 
-### What happens if the worker crashes after rollback succeeds?
+### What happens if the worker crashes after a controlled action succeeds?
 
 **Answer outline:** replay finds a committed intent without a completion.
 Reconcile using the idempotency key and target state; do not blindly infer
-failure or issue an unkeyed second rollback.
+failure or issue an unkeyed second action. Layer 8 redelivery detects the
+in-flight attempt and reconciles before retry.
 
 ## Security and tenancy
 
@@ -55,17 +56,75 @@ failure or issue an unkeyed second rollback.
 a selected tenant. Bind principal, tenant, action, and resource explicitly and
 enforce again at persistence and tool boundaries.
 
-### How do you stop prompt injection from executing rollback?
+### How do you stop prompt injection from executing remediation?
 
 **Answer outline:** treat all content as untrusted. The model cannot grant
-capabilities. A typed proposal passes runtime policy, exact scoped approval,
-intent persistence, controlled tool validation, and sandbox/egress controls.
+capabilities. A typed immutable proposal passes deny-by-default runtime policy,
+exact human approval, current-fence checks, intent persistence, fixed-shape
+adapter validation, reconciliation, and explicit verification. Layer 8 exposes
+no arbitrary production command or model-selected credential. Layer 9 analysis
+uses a separate exact-approval sandbox boundary and cannot mutate production.
+
+### Why is a Kubernetes Job manifest not proof of sandbox isolation?
+
+**Answer outline:** workload security context is only one layer. Admission must
+reject weakening mutations; the runtime class/node boundary must isolate the
+kernel; PID and resource controllers must enforce limits; network policy and an
+egress/DNS boundary must prevent metadata/private-network/rebinding attacks; and
+content/artifact drivers must preserve tenant scope. Layer 9 therefore generates
+a locked-down suspended Job but reports readiness false until those environment
+controls are independently verified.
+
+### How does sandbox redelivery avoid duplicate or orphaned workloads?
+
+**Answer outline:** it does not claim exactly once. A stable tenant/sandbox name
+and spec digest form the provider identity. The current fenced worker commits
+provision/cleanup intent, observes before create/delete retry, records explicit
+reconciliation, and continues only for a matching scope. Unknown or conflicting
+state remains ambiguous or quarantined. Redis acknowledgement is irrelevant to
+the authoritative decision.
+
+### Why reject shell strings even when execution is isolated?
+
+**Answer outline:** isolation reduces impact but does not make command
+construction safe. Provider-neutral contracts preserve argv token boundaries;
+canonical validation rejects shell families, interpolation/control operators,
+control characters, and policy-escaping Unicode. No adapter may use
+`shell=True`, `eval`, or a host subprocess fallback.
 
 ### How can specialists communicate safely?
 
 **Answer outline:** only through typed tenant/incident-scoped artifacts committed
 to the ledger. No direct chat, recursive spawning, hidden scratchpad authority,
 or capability transfer.
+
+### How does Layer 7 prevent parallel completion order from changing the answer?
+
+**Answer outline:** the coordinator alone declares the immutable acyclic graph.
+Readiness is a pure function of ledger-folded task states. Ready nodes sort by
+declared ordinal and ID; completed task results sort again by ordinal and
+artifact kind/ID before one fenced append. No specialist writes shared state or
+talks to peers. Replay rejects premature dispatch, duplicate identity, and
+unreachable provenance, so wall-clock completion cannot become authority.
+
+### When must the coordinator abstain instead of finalizing?
+
+**Answer outline:** finalization requires a durable selected hypothesis with
+valid immutable citations, confidence at or above the plan threshold, and at
+least one accepted critique with no unsupported claims or unresolved
+contradictions. Missing evidence, contradictory evidence, critic rejection, or
+low confidence produces an explicit abstain/escalate artifact retaining
+unresolved questions. A fluent model response cannot override this runtime gate.
+
+### Why is a remediation recommendation not permission to remediate?
+
+**Answer outline:** Layer 7's artifact constructor requires `proposal_only=true`
+and binds the recommendation to an upstream hypothesis. Layer 8 is a separate
+boundary: authenticated humans authorize the exact tenant, immutable
+plan/action/policy digests, target, risk, quorum, and expiry. The executor
+rechecks that scope and its PostgreSQL fence before intent, invokes only a
+controlled idempotent adapter, reconciles ambiguity, and records fresh
+verification. Agents cannot approve their own proposals.
 
 ## Identity and tenancy deep dive
 

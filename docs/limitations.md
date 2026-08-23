@@ -6,13 +6,16 @@
   default and have only mocked/hermetic verification. No external account,
   cluster, private endpoint, certificate chain, permission set, quota, or SLA is
   certified by this repository.
-- GitHub/Dynatrace webhook intake, Kubernetes watches, incident-management, and
-  remediation adapters do not exist.
-- Agent roles, artifacts, and plans are types only. There is no specialist
-  scheduler, deterministic aggregation, critic enforcement, approval workflow,
-  or specialist execution. Model invocation and model-call budgets are
-  implemented independently of that future orchestration.
-- Sandbox, tools, memory, and evaluation packages are boundaries only.
+- GitHub/Dynatrace webhook intake, Kubernetes watches, and incident-management
+  writers do not exist. The only write adapter is fixed-shape Kubernetes
+  deployment rollout restart and it is not certified against a live cluster.
+- Fixed agent roles, typed artifacts, deterministic DAG scheduling, critic gates,
+  and fake specialist execution are implemented. Agents cannot approve actions
+  or create dynamic peers.
+- Exact-scope human approval, fenced controlled effects, reconciliation,
+  post-action verification, and bounded Layer 9 analysis sandbox execution are
+  implemented. Arbitrary tools, memory, and production evaluation packages
+  remain planned. Layers 7–9 include deterministic behavioral regression evals.
 - Runtime spans and bounded metric instruments exist, but no production
   collector dashboards, alert rules, or SLO evidence are claimed.
 - Three-tier memory is a documented design only. No pgvector retrieval,
@@ -83,6 +86,111 @@
   external capability probes, dashboards/alerts, and credential rotation drills
   remain gaps.
 
+## Current Layer 7 implementation (governed specialist DAG)
+
+- One immutable bounded investigation plan declares ten canonical checkout tasks
+  across eight fixed roles. Code-defined capability and artifact-transition
+  policies deny undeclared authority; specialists cannot spawn agents or peer
+  chat.
+- The pure fold rebuilds run/task/artifact state only from additive ledger events
+  and rejects sequence gaps, duplicate IDs/keys, cycles, premature dispatch,
+  invalid role transitions, unavailable provenance, critic bypass, and corrupt
+  linkage.
+- The coordinator records dispatch/start intent before execution, uses the
+  existing work lease and event-store fence for every result, reserves global
+  token capacity deterministically, and contains timeout, cancellation, provider,
+  malformed-output, and implementation failures.
+- Typed redacted artifacts include evidence assessment, primary/alternative
+  hypothesis, contradiction/critique, causal/timeline references, proposal-only
+  remediation, verification plan, coordinator decision, and final assessment.
+  Finalization requires a cited above-threshold hypothesis and accepted critic;
+  otherwise the result abstains or escalates.
+- PostgreSQL run/task/artifact projections use forced RLS, expected versions,
+  indexes, and maintenance-only rebuild. Authorized APIs expose only bounded
+  redacted status, task, and artifact cursor pages. Metrics/spans have fixed
+  names and role labels without prompt, evidence, tenant, run, or secret content.
+- `python -m aegis_agent_platform.agents` and `make evals` use deterministic fake
+  providers/connectors only. They prove success, ambiguity/abstention,
+  contradiction/critic rejection, budget exhaustion, and crash recovery without
+  live network or credentials.
+- These controls do not prove that a model's semantic conclusion is correct.
+  Layer 8 supplies the separate human approval and execution boundary. There is
+  no live connector/model/action verification, memory/RAG, operator UI,
+  MCP/A2A adapter, broad autonomous remediation, production deployment, HA,
+  backup/restore, or operational SLO evidence.
+
+## Current Layer 8 implementation (approval-gated remediation)
+
+- Immutable provider-neutral plans bind versioned actions, exact target
+  fingerprints, risk/blast radius, conditions, retry/reconciliation policy,
+  rollback references, evidence, policy snapshots, and canonical digests.
+- Policy defaults deny and evaluates tenant/action/target allowlists,
+  maintenance windows, risk/blast thresholds, quotas, evidence, critic status,
+  and the current plan digest. Plan or policy changes invalidate approval.
+- Authenticated tenant-scoped decisions enforce role permissions, separation of
+  duties, distinct quorum, expiry, revocation, optimistic concurrency,
+  idempotency, and immutable audit. Raw operator comments persist only as a
+  redacted marker.
+- The executor rechecks current authorization, policy, approval, target,
+  cancellation, preconditions, and PostgreSQL fence immediately before durable
+  effect intent. Effects are at-least-once with a stable tenant idempotency key,
+  explicit ambiguous outcomes, reconciliation-before-retry, duplicate
+  suppression, conflicts, and operator escalation. Exactly-once is not claimed.
+- Fresh evidence is compared with explicit postconditions and records success,
+  failure, partial, or unknown. Provider acceptance is not recovery.
+- Migration `0007_remediation_approvals.sql` supplies forced-RLS rebuildable
+  projections, immutable decision records, quotas, and effect claims.
+  Authenticated APIs expose bounded redacted cursor pages and readiness reports
+  configured capability without secrets.
+- `python -m aegis_agent_platform.remediation` and Layer 8 evals use only a
+  deterministic fake. The official Kubernetes adapter accepts no arbitrary
+  patch, command, shell input, code, or credential and is tested with a fake
+  official client.
+- Unrestricted interactive sandboxing, capability credential brokering,
+  arbitrary or destructive actions, live external verification, memory/RAG,
+  operator UI, MCP/A2A, production Kubernetes deployment, HA/DR, multi-region,
+  and broad autonomous remediation remain deferred.
+
+## Current Layer 9 implementation (hardened ephemeral sandbox)
+
+- Immutable contracts bind tenant/run/task/remediation/approval, approved
+  purpose, canonical spec/policy digests, digest-pinned image, argv, workspace,
+  content-addressed inputs/mounts, secret references, environment, egress,
+  resources, isolation, outputs, retries, cleanup, result, and attestation.
+- Validation rejects shell construction, unsafe Unicode/control characters,
+  traversal/device/host paths, sockets/namespaces, privilege/capabilities,
+  mutable images, secret literals, oversized/conflicting inputs, unsafe archives,
+  special/private egress, and weakened runtime controls. No host process, shell,
+  Docker socket, `eval`, or unrestricted exec path exists.
+- The sandbox fold covers request through cleanup/reconciliation and rejects
+  corrupt transitions. PostgreSQL is authoritative; every external lifecycle
+  operation requires durable intent and the current fence. Redis is delivery
+  only and exactly-once execution is not claimed.
+- Tenant policy defaults deny and binds exact images, commands, purposes, mounts,
+  output types, secrets, egress, limits, risks, lifetime, concurrency, and
+  budgets. PostgreSQL rechecks the current granted Layer 8 approval. A changed
+  policy, spec, purpose, or risk invalidates the approval.
+- Safe ZIP/TAR extraction and artifact scanner/redactor/quarantine hooks are
+  implemented. These hooks do not constitute a certified malware engine or
+  production object store.
+- The deterministic fake never runs code. The Kubernetes adapter generates a
+  suspended, digest-pinned, non-root Job with a read-only root, dropped
+  capabilities, no privilege escalation, RuntimeDefault seccomp, no service
+  account token/host namespaces, explicit resources/deadline, and ephemeral
+  storage. It carries hashed lease-fence annotations and observes Job absence
+  before cleanup completion. It is tested only through a fake official client.
+- Production admission policy, authoritative PostgreSQL fence validation,
+  runtime class, PID enforcement, node hardening, default-deny networking, egress
+  proxy/DNS rebinding defense, CSI content
+  driver, artifact collector, scanner, secret broker, copy-on-write staging,
+  image signature/SBOM enforcement, and remote attestation are not deployed or
+  certified. Readiness must remain false without those controls.
+- APIs expose only authenticated bounded redacted request/status/artifact/
+  cleanup views. There is no attach, interactive exec, log streaming, raw
+  artifact download, or production mutation endpoint.
+- Memory/RAG, operator UI, MCP/A2A, live external verification, HA/DR,
+  multi-region, and broad autonomous production mutation remain deferred.
+
 ## Current Layer 2 implementation (identity, tenancy, and governance)
 
 - JWT signature/issuer/audience/expiry/algorithm verification, deny-by-default
@@ -123,14 +231,14 @@
   projections, replay, durable Layer 2 repositories, forced RLS, immutable
   event/audit rows, and authorized ledger inspection are implemented and tested.
 - The fast 90% coverage suite excludes live-database adapter lines; a separate
-  six-test PostgreSQL 16 suite executes migrations and those adapters in CI.
+  eleven-test PostgreSQL/Redis suite executes migrations and those adapters.
 - Global positions provide ordering, not a no-gap promise after rolled-back
   identity allocations. Aggregate sequence is gapless.
-- The outbox remains delivery state only. Layer 4 publishes it to Redis, but
-  live connectors, agent execution, approval, and external remediation effect
-  adapters do not exist. Layer 5 model calls use their own durable fenced path.
-- Exactly-once effects are not claimed. Intent/result contracts and idempotency
-  keys exist, but later adapters must implement idempotency or reconciliation.
+- The outbox remains delivery state only. Layer 4 publishes it to Redis; higher
+  layers now use fenced paths for model calls, connectors, agents, and controlled
+  remediation.
+- Exactly-once effects are not claimed. Layer 8 implements tenant-scoped
+  idempotency and reconciliation for its bounded controlled action port.
 - Projections cover generic run status, artifacts, approvals, usage, and tenant
   listings. They do not imply the incident-specific state machine exists.
 - Backup/restore, retention, partitioning, high availability, maintenance-role
@@ -159,13 +267,13 @@
   releases expired PostgreSQL leases; a deployment must continuously run both
   publisher and reconciliation loops. There is no tested Redis Sentinel/Cluster,
   PostgreSQL failover, multi-region ordering, or HA claim.
-- No external side effect is implemented. The intent/result protocol represents
-  the crash window, but downstream adapters must use target idempotency keys or
-  reconcile target state; Aegis does not claim exactly-once effects.
+- Layer 4 itself performs no external provider effect. Layer 8 adds one bounded
+  controlled-action port with target idempotency and reconciliation; Aegis does
+  not claim exactly-once effects.
 
 ## Claims deliberately not made
 
-Aegis does not currently diagnose checkout failures, protect production data,
+Aegis does not currently diagnose live checkout failures, protect production data,
 guarantee exactly-once effects or provider billing, provide a secure code
 sandbox, satisfy a
 compliance framework, meet an SLO, or support multi-region recovery. Live local

@@ -1,4 +1,4 @@
-"""Read-only Kubernetes evidence adapter over the official Python client."""
+"""Kubernetes evidence and controlled-action adapters over the official client."""
 
 from __future__ import annotations
 
@@ -31,7 +31,12 @@ from aegis_agent_platform.evidence import (
 from aegis_agent_platform.integrations._pagination import decode_cursor, encode_cursor
 from aegis_agent_platform.integrations.config import KubernetesConnectorConfig
 from aegis_agent_platform.integrations.kubernetes.official import (
+    KubernetesArtifactCollector,
+    KubernetesSandboxControls,
+    OfficialKubernetesActionAdapter,
     OfficialKubernetesClient,
+    OfficialKubernetesSandboxBackend,
+    kubernetes_sandbox_workload,
 )
 from aegis_agent_platform.tenancy import TenantContext
 
@@ -396,4 +401,13 @@ def _container_images(
     return tuple(sorted(images)), tuple(sorted(digests))
 
 
-__all__ = ["KubernetesAdapter", "KubernetesClient", "OfficialKubernetesClient"]
+__all__ = [
+    "KubernetesAdapter",
+    "KubernetesArtifactCollector",
+    "KubernetesClient",
+    "KubernetesSandboxControls",
+    "OfficialKubernetesActionAdapter",
+    "OfficialKubernetesClient",
+    "OfficialKubernetesSandboxBackend",
+    "kubernetes_sandbox_workload",
+]

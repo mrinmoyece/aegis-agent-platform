@@ -46,6 +46,42 @@
 | Source cursor race | Fenced compare-and-advance fails | Preserve the winner; stale generation cannot overwrite progress |
 | Runbook trust/schema failure | Digest/signature/front-matter validation | Reject or quarantine; never execute retrieved instructions |
 | Correlation tie or contradiction | Ambiguous or source-conflict link | Preserve every candidate/conflict; do not fabricate causality |
+| Investigation DAG cycle, unknown dependency, or excessive depth/fan-out | Plan validation error before request | Reject the plan; no work or projection is created |
+| Specialist dispatch before dependency completion | Replay corruption error | Stop replay/supervision; never infer readiness from task completion messages |
+| Duplicate event, idempotency key, assignment, or artifact ID | Replay/append uniqueness rejection | Preserve the first committed identity and investigate producer corruption |
+| Specialist requests undeclared capability or artifact transition | Deny-by-default role-policy error | Record invalid output/failure within retry bounds; never broaden authority |
+| Unknown or mismatched evidence citation | Artifact-policy rejection | Reject the claim; require a new cited artifact rather than repairing silently |
+| Hostile evidence/model output contains instructions | Bounded untrusted-data context plus strict structured decoder | Treat as data, enforce runtime policy/citations, and fail malformed output |
+| Specialist/model implementation raises | Coordinator exception boundary | Append classified failure, retry within assignment bound, keep supervisor alive |
+| Specialist timeout | Runtime `wait_for` and durable timed-out task event | Release reservation, retry within bound, then fail explicitly |
+| Investigation token budget cannot reserve a ready node | Deterministic global reservation check | Append `investigation.budget_exhausted.v1`; make no model call |
+| Parallel specialists complete in a different order | Stable assignment ordinal and artifact-kind/ID ordering | Append/fold the same deterministic order |
+| Unsupported or low-confidence hypothesis | Critic/finalization gate | Abstain or escalate with unresolved questions; emit no success-shaped conclusion |
+| Unresolved contradiction | Typed contradiction and critique references | Preserve the conflict and block finalization |
+| Specialist projection loss/corruption | Projection/ledger version mismatch or missing rows | Rebuild under maintenance authority from the tenant event stream |
+| Stale specialist result after lease reclaim | Existing token/generation event-store fence | Reject the entire event/projection transaction |
+| Duplicate action request | Tenant effect claim or adapter idempotency conflict | Suppress an identical duplicate; stop on mismatched scope and never widen authority |
+| Action succeeds but outcome append is lost | In-flight requested attempt remains in replay | Reconcile target state before any redelivery retry |
+| Approval changes while work is queued | Current digest, expiry, role, quorum, or revocation check fails | Deny before action intent; require a new exact approval |
+| Stale action worker | PostgreSQL lease token/generation check or fenced append fails | Make no provider call and never append success |
+| Action timeout after provider acceptance | Ambiguous execution event | Reconcile by exact target fingerprint and stable idempotency key; escalate if unknown |
+| Adapter raises or returns malformed data | Adapter containment and strict result validation | Append classified failure/ambiguity within the active fence; keep supervisor alive |
+| Target precondition changed | Fresh target fingerprint or explicit condition mismatch | Record preflight failure; do not execute under stale approval |
+| Provider accepts action but postcondition fails | Fresh verification result is failure, partial, or unknown | Keep incident unresolved; invoke approved reversal only through a new durable intent |
+| Cancellation races action | Cancellation recheck before intent and fenced terminal append | Cancel before effect where possible; reconcile an already-requested attempt |
+| Projection loses Layer 8 rows | Ledger/projection mismatch | Rebuild forced-RLS read models under maintenance authority |
+| Sandbox policy/spec/purpose/risk/approval changed while queued | Runtime digest or current approval recheck fails | Append no execution intent and require a newly reviewed exact scope |
+| Sandbox approval expires after lifecycle intent | New execution remains denied | Reconcile existing identity, terminate active work, and redrive cleanup under the current fence |
+| Output collection transport is transiently unavailable | Completed evidence could be lost by premature cleanup | Persist collection reconciliation, observe the stable workload, and retry within the approved bound before cleanup |
+| Sandbox worker fence is stale | PostgreSQL token/generation check fails before backend readiness/provision/start/result/cleanup | Make no backend call and append no stale outcome |
+| Crash before/after sandbox provision | Provisioning intent exists without a terminal observation | Observe stable backend name before create/retry; record reconciliation |
+| Ambiguous sandbox create/delete | Backend timeout/unavailable after request | Reconcile presence/spec digest or absence; never assume success or exactly once |
+| Mutable/privileged sandbox request | Canonical validation rejects image tag, shell/meta token, host path/socket/namespace, capability, or weakened isolation | Deny before durable work/backend access |
+| Sandbox timeout/OOM/output/file/resource limit | Runtime result or enforced deadline/limit event | Terminate, persist explicit terminal class, request cleanup, preserve bounded evidence |
+| Malicious archive or symlink/device | Pre-publication archive validator | Delete atomic staging, quarantine bounded metadata, publish no snapshot |
+| Artifact malware/secret scan | Scanner returns redact/quarantine | Store content-addressed redacted/quarantine reference; never treat output as instructions |
+| Sandbox cleanup repeatedly fails | Cleanup projection/attempt ceiling | Reconcile and redrive within bounds, then quarantine and escalate |
+| Sandbox projection loss | Ledger/projection version mismatch | Rebuild forced-RLS sandbox/artifact/claim/cleanup views; never edit authoritative state |
 
 Global event positions order commits but may contain numbers unused after a
 rolled-back PostgreSQL identity allocation. That is not corruption. A per-

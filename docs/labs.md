@@ -59,24 +59,94 @@ automated negative-test suite: `tests/test_identity_security.py`,
 6. Run `tests/test_worker_runtime.py` to inspect fairness, backoff, cancellation,
    worker-bug containment, authorization, and bounded telemetry.
 
+## Layer 7 lab: durable specialist investigation
+
+**Implemented.**
+
+1. Run `python -m aegis_agent_platform.agents --scenario success`; confirm the
+   final assessment is cited/redacted and remediation is proposal-only.
+2. Run the `ambiguity` and `contradiction` scenarios; confirm the critic blocks
+   finalization and the ledger preserves unresolved questions/contradictions.
+3. Run `budget_exhaustion`; confirm the terminal budget event appears without a
+   model/network call. Run `recovery`; confirm the change task has two attempts
+   but only one committed output.
+4. Run `make evals` to execute the CI-gated success, ambiguity, contradiction,
+   budget, and recovery behavior matrix.
+5. Run `tests/test_specialist_orchestration.py`; inspect cycle/role/citation/
+   replay/cancellation/stale-fence/malformed-output/timeout/projection tests.
+6. With a disposable `AEGIS_TEST_DATABASE_URL`, run
+   `tests/integration/test_agent_postgres.py` to prove forced RLS, fenced writes,
+   cursor pagination, and maintenance-role projection rebuild.
+
+This lab does not call a live connector/model, approve or execute remediation,
+verify a post-action recovery, or prove production deployment behavior. Layer 8
+provides those controls through a separate runtime.
+
+## Layer 8 lab: approval-gated controlled remediation
+
+**Implemented with deterministic fakes.**
+
+1. Run `python -m aegis_agent_platform.remediation --scenario approved-success`;
+   inspect exact plan/action/policy digests, two distinct approvals, durable
+   action intent, and fresh-evidence verification.
+2. Run `denied`, `expired`, and `policy-attack`; confirm no action intent or
+   adapter call is created.
+3. Run `ambiguous-reconciled`; confirm reconciliation precedes any retry and the
+   platform makes no exactly-once claim.
+4. Run `verification-failure` and `crash-recovery`; confirm provider acceptance
+   does not establish recovery and a lost outcome is reconciled before redelivery.
+5. Run `make evals` and the remediation unit suites to inspect SoD/quorum races,
+   stale digest/policy/role/revocation/fence, target substitution, cancellation,
+   timeout, adapter containment, duplicate delivery, rollback/compensation, and
+   hostile/oversized input tests.
+6. With a disposable `AEGIS_TEST_DATABASE_URL`, run
+   `tests/integration/test_remediation_postgres.py` for forced RLS, approval
+   races, immutable decisions, effect claims, stale fencing, and projection
+   rebuild.
+
+This lab uses no live action endpoint or credential. It does not prove
+production Kubernetes RBAC/identity, egress, API compatibility, read-after-write
+semantics, sandbox isolation, HA/DR, or operator escalation.
+
+## Layer 9 lab: hardened ephemeral sandbox
+
+**Implemented with deterministic fakes and a mocked official client.**
+
+1. Run the `approved-analysis`, `policy-denied`, and `prompt-injection` CLI
+   scenarios. Confirm exact approval/spec/policy binding and no backend call on
+   denial.
+2. Run `malicious-archive`; inspect traversal/link/device/bomb validation and
+   atomic publication tests in `tests/test_sandbox_workspace.py`.
+3. Run `timeout`, `oom`, and `cancellation`; confirm explicit terminal state,
+   cleanup intent, and no late result transition.
+4. Run `ambiguous-provisioning` and `cleanup-recovery`; confirm stable identity,
+   observe-before-create/delete, reconciliation events, and bounded recovery.
+5. Run `output-quarantine`; verify only bounded redacted digest/size/media
+   metadata is exposed.
+6. Inspect `tests/test_kubernetes_sandbox_adapter.py`; assert the suspended Job
+   security context and fail-closed readiness without verified external
+   controls.
+7. With disposable PostgreSQL/Redis URLs, run
+   `tests/integration/test_sandbox_postgres.py` for canonical Layer 7/8 linkage,
+   current approval, RLS, fencing, lifecycle persistence, and projection rebuild.
+
+This lab launches no untrusted process, contacts no cluster, and does not prove
+production admission/runtime/network isolation, malware scanning, secret
+brokering, image signing, or supply-chain policy.
+
 ## Planned labs by layer
 
 | Layer | Lab | Failure injection and evidence |
 | --- | --- | --- |
 | 2 | Live-database and live-Keycloak drill | Run the row-level-security policies and the append-only trigger against a running Postgres instance, and exercise `RemoteJwksProvider` against a real Keycloak realm with rotated keys — both are currently only asserted statically or against mocked transports |
-| 3 | Incident-specific durable investigation | Crash after each coordinator transition; replay identical incident state |
 | 3 | Schema evolution | Replay old checkout fixtures through additive upcasters |
 | 4 | Connector ambiguity | Rate-limit and truncate Dynatrace/GitHub responses; preserve provenance and partial status |
-| 4 | Deterministic parallelism | Randomize specialist completion order; obtain the same aggregate |
-| 5 | Approval binding | Replay approval against another proposal, tenant, and expiry; deny all |
-| 5 | Tool idempotency | Crash after accepted rollback; reconcile without duplicate effect |
-| 5 | Sandbox escape | Attempt filesystem, process, privilege, and egress violations |
 | 6 | Retrieval isolation | Poison a runbook and attempt cross-tenant vector retrieval |
-| 7 | Adversarial evaluation | Inject misleading deployment timing and unsupported causal claims |
-| 7 | Telemetry privacy | Send sensitive/high-cardinality content; prove redaction and rejection |
-| 8 | Capacity | Load hot and broad tenants while measuring queue lag and projection delay |
-| 8 | Regional failure | Lose a region and restore authoritative state within documented objectives |
-| 8 | Supply chain | Attempt unsigned promotion and dependency/action tampering |
+| 10 | Production adversarial evaluation | Add versioned datasets, semantic graders, and release baselines beyond the deterministic Layers 7–9 matrices |
+| 10 | Telemetry privacy | Send sensitive/high-cardinality content; prove collector/backend redaction and rejection |
+| 11 | Capacity | Load hot and broad tenants while measuring queue lag and projection delay |
+| 11 | Regional failure | Lose a region and restore authoritative state within documented objectives |
+| 11 | Supply chain | Attempt unsigned promotion and dependency/action tampering |
 
 Every future lab must state prerequisites, expected events, pass/fail assertions,
 cleanup, and the limitation it does not prove.

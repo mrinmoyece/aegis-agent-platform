@@ -1,4 +1,108 @@
-"""Untrusted execution isolation boundary.
+"""Policy-enforced isolated execution and content-addressed artifact boundary."""
 
-The eventual implementation must enforce isolation outside the agent process.
-"""
+from aegis_agent_platform.sandbox.egress import (
+    DenyAllEgressBroker,
+    EgressBroker,
+    EgressDecision,
+)
+from aegis_agent_platform.sandbox.execution import (
+    BackendReadiness,
+    CancellationSignal,
+    FakeSandboxBackend,
+    InputSnapshotVerifier,
+    ProvisionedSandbox,
+    SandboxApprovalAuthority,
+    SandboxBackend,
+    SandboxBackendError,
+    SandboxErrorClass,
+    SandboxObservation,
+    SandboxOrchestrator,
+    SandboxRequestDecision,
+    SandboxRequestService,
+    StaticInputSnapshotVerifier,
+    StaticSandboxApprovalAuthority,
+    fake_result,
+)
+from aegis_agent_platform.sandbox.operations import (
+    InMemorySandboxPolicyRepository,
+    SandboxOperations,
+    SandboxPolicyRepository,
+)
+from aegis_agent_platform.sandbox.policy import (
+    SandboxPolicy,
+    SandboxPolicyDecision,
+    SandboxPolicyEvaluator,
+    SandboxQuotaUsage,
+)
+from aegis_agent_platform.sandbox.postgres import (
+    PostgresSandboxApprovalAuthority,
+    PostgresSandboxRepository,
+)
+from aegis_agent_platform.sandbox.repository import (
+    InMemorySandboxRepository,
+    SandboxIdempotencyConflictError,
+    SandboxRepository,
+    SandboxRequestResult,
+)
+from aegis_agent_platform.sandbox.telemetry import SandboxMetrics, SandboxTracer
+from aegis_agent_platform.sandbox.workspace import (
+    AllowlistScanner,
+    ArchiveLimits,
+    ArchiveManifest,
+    ArchiveManifestEntry,
+    ArtifactRedactor,
+    ArtifactScanner,
+    InMemoryArtifactStore,
+    ScanDecision,
+    ScanOutcome,
+    StoredArtifact,
+    extract_archive_atomically,
+)
+
+__all__ = [
+    "AllowlistScanner",
+    "ArchiveLimits",
+    "ArchiveManifest",
+    "ArchiveManifestEntry",
+    "ArtifactRedactor",
+    "ArtifactScanner",
+    "BackendReadiness",
+    "CancellationSignal",
+    "DenyAllEgressBroker",
+    "EgressBroker",
+    "EgressDecision",
+    "FakeSandboxBackend",
+    "InMemoryArtifactStore",
+    "InMemorySandboxPolicyRepository",
+    "InMemorySandboxRepository",
+    "InputSnapshotVerifier",
+    "PostgresSandboxApprovalAuthority",
+    "PostgresSandboxRepository",
+    "ProvisionedSandbox",
+    "SandboxApprovalAuthority",
+    "SandboxBackend",
+    "SandboxBackendError",
+    "SandboxErrorClass",
+    "SandboxIdempotencyConflictError",
+    "SandboxMetrics",
+    "SandboxObservation",
+    "SandboxOperations",
+    "SandboxOrchestrator",
+    "SandboxPolicy",
+    "SandboxPolicyDecision",
+    "SandboxPolicyEvaluator",
+    "SandboxPolicyRepository",
+    "SandboxQuotaUsage",
+    "SandboxRepository",
+    "SandboxRequestDecision",
+    "SandboxRequestResult",
+    "SandboxRequestService",
+    "SandboxTracer",
+    "ScanDecision",
+    "ScanOutcome",
+    "StaticInputSnapshotVerifier",
+    "StaticSandboxApprovalAuthority",
+    "StoredArtifact",
+    "extract_archive_atomically",
+    "fake_result",
+]

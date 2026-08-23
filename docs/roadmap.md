@@ -76,11 +76,11 @@ telemetry interfaces. Historical Layer 1 fixtures replay. Live PostgreSQL tests
 cover rollback, concurrent races, duplicate delivery, outbox claim/dead-letter,
 RLS, immutable rows, audit redaction, replay, and projection rebuild.
 
-**Acceptance gate:** persistence and replay mechanics are done. No external effect
-path is implemented yet; later layers must consume
-`effect.intent_recorded.v1` before adding any effect. Deterministic incident state
-transitions, fixture-backed investigation behavior, and agent execution remain
-future work. Redis workers are implemented separately in Layer 4.
+**Acceptance gate:** persistence and replay mechanics are done. Layer 8 records
+typed action intent before every controlled effect and retains the generic
+`effect.intent_recorded.v1` compatibility path. Layer 7 supplies the
+incident-specific deterministic fold and typed artifact replay on top of this
+ledger. Redis workers are implemented separately in Layer 4.
 
 ## Layer 4 — Workers and leases
 
@@ -89,15 +89,15 @@ workers, fair tenant scheduling, cancellation, retry/DLQ, and reconciliation.
 
 **Status:** the distributed execution substrate is implemented and live-tested.
 PostgreSQL remains authoritative; Redis Streams is shared at-least-once
-transport. Provider calls, connectors, coordinator/specialist reasoning, and
-remediation are intentionally deferred.
+transport. Higher layers now use these leases for provider calls, connectors,
+specialist reasoning, and controlled remediation.
 
 **Acceptance gate:** duplicate delivery, lease expiry/reclaim, stale writers,
 publisher restart windows, cancellation races, timeout/retry exhaustion, poison
 messages, and DLQ operations have deterministic or live-service evidence.
 Provider controls and ambiguous-outcome recording are implemented separately in
-Layer 5. Connector fixtures and deterministic specialist aggregation remain
-future work and are not claimed by this worker layer.
+Layer 5. Connector fixtures are Layer 6 and deterministic specialist aggregation
+is Layer 7; neither changes the worker layer's at-least-once semantics.
 
 ## Layer 5 — Provider-neutral model gateway
 
@@ -136,31 +136,83 @@ explicit; ambiguity/conflict survives deterministic correlation; no vendor type,
 credential, unrestricted source content, or unbounded payload enters core
 contracts/events.
 
-## Layer 7 — Tools, policy, and sandbox
+## Layer 7 — Governed durable specialist DAG
 
-Add typed tool contracts, policy decisions, approvals, capability-scoped
-credentials, an incident proposal/approval workflow, and isolated execution with
-resource and network controls. Add controlled rollback/remediation adapters for
-the demo only after approval is durable.
+Implement the Incident Coordinator and fixed Telemetry, Change, Runtime,
+Knowledge, Critic, Remediation Planner, and Verification roles. Persist the
+bounded immutable plan, scheduling intent, typed reasoning artifacts, task
+outcomes, coordinator decision, and final assessment in the existing event
+ledger. Enforce code-defined capabilities, DAG bounds, citations, provenance,
+budgets, timeouts, cancellation, retries, fencing, deterministic ordering,
+critic review, confidence thresholds, and safe abstention.
 
-**Acceptance gate:** prompt injection or hostile runbook content cannot bypass
-authorization; sandbox escape and egress tests fail closed; every effect is
-attributable to an approved intent; the checkout rollback cannot execute before
-valid approval.
+**Status:** implemented in `agents`, migration
+`0006_specialist_orchestration.sql`, authorized investigation read APIs, the
+fake-only checkout CLI, deterministic unit/integration tests, and CI-gated
+behavioral evals.
 
-## Layer 8 — Memory and retrieval
+**Acceptance gate:** cycles, premature dispatch, duplicate events/artifacts,
+role escalation, unknown citations, stale workers, malformed/hostile model
+output, prompt injection in evidence, cancellation, timeout/retry, provider
+budget denial, critic rejection, contradictions, projection rebuild, tenant
+isolation, and completion-order variance fail closed or reach the same explicit
+terminal state. Finalization requires a cited above-threshold hypothesis and an
+accepted critique. Layer 7 itself remains proposal-only; Layer 8 consumes that
+immutable proposal without allowing an agent to approve it.
 
-Add tenant-scoped short- and long-term memory, pgvector retrieval, provenance,
-classification, retention, export, and deletion workflows. Index runbooks and
-past incident evidence without turning retrieved text into authority. Implement
-three explicit tiers: bounded working state/context, authoritative episodic event
-history, and derived semantic incident knowledge. Add PII controls,
-relevance/recency policy, and citation-preserving context compaction.
+## Layer 8 — Approval-gated controlled remediation
 
-**Acceptance gate:** adversarial cross-tenant retrieval tests pass; every
-retrieved item has provenance; deletion and retention behavior is auditable.
-Compaction tests preserve material evidence, uncertainty, conflict, approval
-state, and budgets, and semantic retrieval cannot cross tenants.
+Add immutable provider-neutral plan/action/target contracts, exact policy-bound
+approvals, an authenticated tenant-scoped proposal/decision workflow, fenced
+intent-before-effect execution, stable idempotency, reconciliation, and explicit
+postcondition verification.
+
+**Status:** implemented for a deterministic fake action and one fixed-shape
+Kubernetes deployment rollout-restart adapter. Policy defaults deny; approval
+binds immutable plan/action/policy digests, exact target, risk, requester,
+quorum, and expiry. Separation of duties, distinct approvers, role changes,
+revocation, stale fences, cancellation, ambiguous effects, reconciliation,
+duplicate delivery, adapter bugs, and verification failure are executable test
+cases. PostgreSQL forced-RLS projections are rebuildable and Redis remains
+transport only.
+
+**Acceptance gate:** hostile model/evidence content cannot create authority;
+current policy, approval, target, preconditions, and fence are rechecked before
+durable intent; every effect is attributable to that intent; ambiguous effects
+are reconciled before retry; fresh evidence, not adapter acceptance, determines
+verification. Exactly-once is not claimed.
+
+Arbitrary commands, capability credential brokering, broad autonomous
+remediation, production credentials, and live external verification remain
+deferred. Layer 9 adds a separate approval-bound analysis sandbox; it does not
+expand remediation authority.
+
+## Layer 9 — Hardened ephemeral sandbox execution
+
+Add policy-isolated, purpose-bounded execution for code/config analysis, tests,
+patch preparation, and evidence production. Bind every request to the exact
+tenant, Layer 7 task, Layer 8 plan/action/approval, immutable OCI image,
+content-addressed inputs, canonical spec/policy digests, resource ceilings,
+expected outputs, and cleanup policy. Persist request and each external lifecycle
+intent before using a provider-neutral backend. Default network to none and
+require an exact reviewed exception plus an enforceable broker boundary.
+
+**Status:** implemented in `domain.sandbox`, `sandbox`, migration
+`0008_hardened_sandbox_execution.sql`, authenticated redacted APIs, deterministic
+fake CLI/evals, safe archive/artifact handling, and an official-client Kubernetes
+Job adapter. The adapter fails readiness closed unless deployment-supplied
+admission, runtime, PID, artifact, and default-deny network controls are verified.
+
+**Acceptance gate:** malicious argv/environment/path/archive/image/mount inputs
+deny; policy/spec/purpose/risk changes invalidate approval; stale fences cannot call a
+backend; ambiguous create/delete reconcile before retry; limits, timeout, OOM,
+cancellation, quarantine, cleanup redrive, RLS, quota claims, and projection
+rebuild have deterministic or environment-gated evidence. Exactly-once execution
+and cluster-level isolation are not claimed.
+
+Memory/RAG, pgvector retrieval, PII-aware compaction, retention/export/deletion,
+and semantic knowledge are explicitly deferred to a later layer rather than
+being coupled to sandbox authority.
 
 ## Layer 9 — Evaluation and observability
 
@@ -168,6 +220,10 @@ Add versioned datasets, offline and online evaluation, release gates, traces,
 metrics, logs, cost accounting, and safe content handling. Score hypothesis
 evidence coverage, unsupported claims, remediation choice, approval compliance,
 and recovery verification on checkout-failure variants.
+
+Layer 7 includes only a bounded deterministic behavioral regression matrix; this
+layer adds production datasets, semantic quality measurement, and operational
+release gates.
 
 **Acceptance gate:** a reproducible evaluation blocks a known regression;
 event-to-trace correlation works; telemetry contains no disallowed content or

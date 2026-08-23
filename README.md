@@ -14,7 +14,7 @@ deployments, Kubernetes/runtime changes, and runbooks. This narrow story makes
 durability, evidence provenance, authorization, and safe effects testable end
 to end.
 
-> **Current status: Layer 6 — Evidence connectors and correlation.** Layers 1–4 add
+> **Current status: Layer 9 — Hardened ephemeral sandbox execution.** Layers 1–4 add
 > tenant-bound work events, a crash-reconcilable PostgreSQL outbox publisher,
 > Redis Streams consumer groups, inbox deduplication, PostgreSQL renewable
 > leases and fencing, fair bounded supervision, quota enforcement, cancellation,
@@ -23,9 +23,21 @@ to end.
 > capability/policy routing, versioned pricing, fenced budget accounting,
 > structured validation, and resilience controls. Layer 6 adds bounded
 > Dynatrace, GitHub, Kubernetes, and runbook adapters, immutable cited ingestion,
-> durable query intent, and deterministic timeline correlation. External
-> environments are unconfigured and unverified; specialist reasoning, memory,
-> remediation, and tested HA remain planned. See
+> durable query intent, and deterministic timeline correlation. Layer 7 adds a
+> fixed coordinator/specialist DAG, durable typed reasoning artifacts, critic
+> gates, deterministic replay/aggregation, fenced scheduling, and fake-only
+> checkout evaluations. Layer 8 adds immutable exact-scope remediation plans,
+> deny-by-default action policy, expiring separation-of-duties approvals, fenced
+> intent-before-effect execution, at-least-once reconciliation, explicit
+> postcondition verification, forced-RLS projections, and a bounded Kubernetes
+> rollout-restart adapter. Layer 9 adds immutable provider-neutral sandbox
+> contracts, strict command/path/archive validation, exact Layer 7/8 linkage,
+> current approval and policy rechecks, fenced intent-before-backend execution,
+> content-addressed artifacts, default-deny egress, bounded telemetry,
+> forced-RLS projections, deterministic fake scenarios, and a hardened suspended
+> Kubernetes Job adapter. External environments are unconfigured and unverified;
+> memory/RAG, operator UI, MCP/A2A, broad
+> autonomous remediation, production deployment, and tested HA remain planned. See
 > [Limitations and production gaps](docs/limitations.md) for the complete,
 > honest gap list.
 
@@ -51,12 +63,17 @@ to end.
    cancellation, DLQ, and recovery.
 5. **Model gateway:** provider abstraction, routing, budgets, metering,
    retry/failover, and structured outputs.
-6. **Evidence connectors (current):** bounded acquisition, immutable provenance,
+6. **Evidence connectors:** bounded acquisition, immutable provenance,
    redaction, and deterministic correlation.
-7. **Tools and sandboxing:** policy-gated effects and isolation.
-8. **Memory and retrieval:** tenant-safe context with provenance.
-9. **Evaluation and observability:** quality gates and production signals.
-10. **Enterprise operations:** resilience, governance, and deployment evidence.
+7. **Specialist orchestration:** fixed roles, durable artifacts,
+   deterministic DAG scheduling, critic gates, and safe abstention.
+8. **Controlled remediation:** exact approvals, fenced effects,
+   reconciliation, and explicit verification.
+9. **Hardened sandbox execution (current):** bounded analysis/test/patch
+   preparation with isolation, exact approval, artifacts, and cleanup. Memory and
+   retrieval remain separate future work.
+10. **Evaluation and observability:** production quality gates and signals.
+11. **Enterprise operations:** resilience, governance, and deployment evidence.
 
 Across these layers the checkout-failure demo grows from fixture-backed evidence
 to durable investigation, approval-gated rollback, recovery verification, and
@@ -73,9 +90,12 @@ deterministic aggregation. Fixed specialist roles produce typed evidence,
 findings, hypotheses, remediation proposals, and verification results. They
 communicate only by committing those artifacts to the event ledger—never by
 peer chat—and cannot spawn other agents. Read-only investigations can run in
-parallel; risky tools remain approval-gated. These contracts are defined, but
-the durable scheduler, agent execution, and deterministic aggregation that
-would run the workflow remain planned.
+parallel; risky tools remain approval-gated. Layer 7 implements the durable
+scheduler, fixed-role execution boundary, deterministic aggregation, and
+critic/finalization gates. Layer 8 consumes the proposal through policy,
+authenticated human approval, a current lease fence, a provider-neutral action
+port, reconciliation, and fresh-evidence verification. Specialists and models
+cannot approve or expand the action.
 
 Each layer has an acceptance gate in [the roadmap](docs/roadmap.md). The
 [enterprise checklist](docs/enterprise-checklist.md) distinguishes implemented
@@ -96,6 +116,19 @@ python -m pip install --upgrade pip
 python -m pip install -e '.[dev]'
 make check
 ```
+
+Run the deterministic checkout investigation with fake providers and connectors:
+
+```bash
+python -m aegis_agent_platform.agents --scenario success
+python -m aegis_agent_platform.remediation --scenario approved-success
+python -m aegis_agent_platform.sandbox --scenario approved-analysis
+make evals
+```
+
+Both demos perform no live network call. The remediation demo executes only a
+deterministic fake action and explicitly reports that it does not use production
+credentials or claim exactly-once delivery.
 
 To inspect the local infrastructure configuration:
 
@@ -127,7 +160,7 @@ timeline correlation, webhook security requirements, and connector extension.
 src/aegis_agent_platform/  Importable platform boundaries
   integrations/            Dynatrace, GitHub, Kubernetes, and runbook adapters
   evidence/                Ingestion, persistence, operations, and correlation
-  agents/                  Fixed roles and typed coordination artifacts
+  agents/                  Governed DAG, artifacts, engines, and projections
   event_store/             PostgreSQL ledger, inbox/outbox, and projections
   queueing/                Redis Streams and outbox publication
   runtime/                 Fenced leases, supervisor, and operator controls
