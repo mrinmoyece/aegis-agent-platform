@@ -177,6 +177,14 @@ def seed_gateway_work(lease: WorkLease) -> None:
     with admin_connection() as connection:
         connection.execute(
             """
+            INSERT INTO event_stream_heads (tenant_id, aggregate_id, current_version)
+            VALUES (%s, %s, 1)
+            ON CONFLICT (tenant_id, aggregate_id) DO NOTHING
+            """,
+            (request_event.tenant_id, request_event.aggregate_id),
+        )
+        connection.execute(
+            """
             INSERT INTO events (
                 event_id, tenant_id, aggregate_id, aggregate_sequence, event_type,
                 schema_version, occurred_at, payload, correlation_id, causation_id,
@@ -197,14 +205,6 @@ def seed_gateway_work(lease: WorkLease) -> None:
                 request_event.correlation_id,
                 request_event.idempotency_key or f"seed-{lease.work_id}",
             ),
-        )
-        connection.execute(
-            """
-            INSERT INTO event_stream_heads (tenant_id, aggregate_id, current_version)
-            VALUES (%s, %s, 1)
-            ON CONFLICT (tenant_id, aggregate_id) DO NOTHING
-            """,
-            (request_event.tenant_id, request_event.aggregate_id),
         )
         connection.execute(
             """
