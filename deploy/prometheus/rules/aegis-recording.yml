@@ -1,0 +1,66 @@
+groups:
+  - name: aegis.sli.v1
+    interval: 30s
+    rules:
+      - record: aegis:sli_api_error_ratio:rate5m
+        expr: |
+          (
+            sum(rate(aegis_api_requests_total{aegis_status=~"failed|timed_out"}[5m]))
+            /
+            sum(rate(aegis_api_requests_total[5m]))
+          ) or vector(0)
+      - record: aegis:sli_api_error_ratio:rate1h
+        expr: |
+          (
+            sum(rate(aegis_api_requests_total{aegis_status=~"failed|timed_out"}[1h]))
+            /
+            sum(rate(aegis_api_requests_total[1h]))
+          ) or vector(0)
+      - record: aegis:sli_api_error_ratio:rate6h
+        expr: |
+          (
+            sum(rate(aegis_api_requests_total{aegis_status=~"failed|timed_out"}[6h]))
+            /
+            sum(rate(aegis_api_requests_total[6h]))
+          ) or vector(0)
+      - record: aegis:sli_api_error_ratio:rate3d
+        expr: |
+          (
+            sum(rate(aegis_api_requests_total{aegis_status=~"failed|timed_out"}[3d]))
+            /
+            sum(rate(aegis_api_requests_total[3d]))
+          ) or vector(0)
+      - record: aegis:sli_api_error_ratio:rate30d
+        expr: |
+          (
+            sum(rate(aegis_api_requests_total{aegis_status=~"failed|timed_out"}[30d]))
+            /
+            sum(rate(aegis_api_requests_total[30d]))
+          ) or vector(0)
+      # Approximation: until the runtime emits an accepted-work counter plus
+      # accepted-to-terminal latency buckets, this records terminal success ratio rather
+      # than the catalog's accepted work terminal within 60s objective.
+      - record: aegis:sli_work_fresh_ratio:rate5m
+        expr: |
+          (
+            sum(rate(aegis_worker_outcomes_total{aegis_work_state="succeeded"}[5m]))
+            /
+            sum(rate(aegis_worker_outcomes_total[5m]))
+          ) or vector(0)
+      - record: aegis:sli_action_verified_ratio:rate1h
+        expr: |
+          sum(rate(aegis_action_verification_total{aegis_status="succeeded"}[1h]))
+          /
+          clamp_min(sum(rate(aegis_action_verification_total[1h])), 1)
+      - record: aegis:sli_sandbox_cleanup_ratio:rate1h
+        expr: |
+          sum(rate(aegis_sandbox_cleanup_total{aegis_status="succeeded"}[1h]))
+          /
+          clamp_min(sum(rate(aegis_sandbox_cleanup_total[1h])), 1)
+      - record: aegis:sli_memory_retrieval_success_ratio:rate1h
+        expr: |
+          (
+            sum(rate(aegis_memory_retrieval_duration_seconds_bucket{aegis_status="succeeded",le="1"}[1h]))
+            /
+            sum(rate(aegis_memory_retrieval_duration_seconds_count{aegis_status="succeeded"}[1h]))
+          ) or vector(0)

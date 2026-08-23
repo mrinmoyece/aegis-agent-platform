@@ -18,6 +18,7 @@ from aegis_agent_platform.identity import (
     Permission,
     Principal,
 )
+from aegis_agent_platform.observability.context import PropagationContext
 from aegis_agent_platform.remediation.approvals import (
     ApprovalDecision,
     ProposalDecision,
@@ -77,6 +78,7 @@ class RemediationOperations:
         plan: RemediationPlan,
         *,
         idempotency_key: str,
+        propagation: PropagationContext | None = None,
     ) -> ProposalDecision:
         policy = self._policy(context)
         usage = await self._quotas.quota_usage(context, at=self._clock())
@@ -87,6 +89,7 @@ class RemediationOperations:
             policy,
             usage,
             idempotency_key=idempotency_key,
+            propagation=propagation,
         )
 
     async def decide(

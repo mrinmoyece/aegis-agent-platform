@@ -32,6 +32,9 @@ dependencies = [
   "uvicorn>=0.35,<1",
 ]
 
+[project.scripts]
+aegis-replay = "aegis_agent_platform.observability.__main__:main"
+
 [project.optional-dependencies]
 dev = [
   "mypy>=1.17,<2",

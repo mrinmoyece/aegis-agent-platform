@@ -14,7 +14,7 @@ deployments, Kubernetes/runtime changes, and runbooks. This narrow story makes
 durability, evidence provenance, authorization, and safe effects testable end
 to end.
 
-> **Current status: Layer 11 — Layered deterministic evaluation gates.** Layers 1–4 add
+> **Current status: Layer 12 - Enterprise observability and replay.** Layers 1-4 add
 > tenant-bound work events, a crash-reconcilable PostgreSQL outbox publisher,
 > Redis Streams consumer groups, inbox deduplication, PostgreSQL renewable
 > leases and fencing, fair bounded supervision, quota enforcement, cancellation,
@@ -40,14 +40,22 @@ to end.
 > forced-RLS pgvector/lexical retrieval, exact provenance/citations,
 > contradiction-aware bounded context, retention/legal hold/deletion, deterministic
 > demos/evals, and rebuildable indexes/caches. Layer 11 adds immutable
-> provider-neutral evaluation contracts, a governed 91-case synthetic corpus
+> provider-neutral evaluation contracts, a governed synthetic corpus
 > including 12 adversarial cases and all 22 named fault cuts, hermetic execution,
 > hard safety gates, canonical baselines, scoped expiring non-safety waivers,
 > fixture governance, bounded reports/telemetry, and a developer CLI. Evaluation
-> is release evidence, never runtime truth. Live model/connector qualification,
+> is release evidence, never runtime truth. Layer 12 adds versioned semantic
+> conventions, strict context propagation and telemetry redaction, bounded
+> cardinality metrics, structured logs, configured SLOs and burn-rate alerts,
+> provisioned dashboards, component health, tenant/operator observability APIs,
+> and ledger-grounded read-only replay debugging. The evaluation catalog now has
+> 97 deterministic cases, including six observability invariants. These are
+> configured and locally validated controls, not evidence of production SLO
+> attainment. Live model/connector and production telemetry qualification,
 > model-judge execution, independent penetration testing, human labeling,
-> observability/SLOs, operator UI, MCP/A2A, production deployment, HA/DR/
-> multi-region, and final load/chaos certification remain deferred. See
+> operator UI, MCP/A2A, external managed backends, 24/7 on-call evidence,
+> production deployment, HA/DR/multi-region, compliance certification, and final
+> load/chaos certification remain deferred. See
 > [Limitations and production gaps](docs/limitations.md) for the complete,
 > honest gap list.
 
@@ -186,7 +194,7 @@ src/aegis_agent_platform/  Importable platform boundaries
   runtime/                 Fenced leases, supervisor, and operator controls
   gateway/                 Catalog, routing, budgets, resilience, and metering
   providers/               Neutral protocol plus OpenAI/Anthropic/mock adapters
-  evals/                   Layer 11 contracts, catalog, gates, and reporting
+  evals/                   Layer 11/12 contracts, catalog, gates, and reporting
   persistence/             PostgreSQL identity/governance repositories
 evals/                     Governed fixtures, dataset, baseline, and waivers
 tests/                     Deterministic unit, adapter, API, and architecture tests

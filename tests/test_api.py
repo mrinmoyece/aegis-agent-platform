@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
+from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
@@ -57,6 +58,12 @@ from aegis_agent_platform.gateway import (
     ProviderControls,
 )
 from aegis_agent_platform.identity import PLATFORM_TENANT_ID, Principal
+from aegis_agent_platform.observability import (
+    ObservabilityOperations,
+    ReplayDebugger,
+    SloSummary,
+    SupportReportTooLargeError,
+)
 from aegis_agent_platform.policy import InMemoryPolicyRepository
 from aegis_agent_platform.tenancy import (
     InMemoryTenantRepository,
@@ -656,6 +663,121 @@ def test_readiness_includes_configured_storage_dependency() -> None:
     assert ready["checks"] == ["configuration", "storage"]
     assert failed_status == 503
     assert failed["reason"] == "storage_unavailable"
+
+
+def test_api_rejects_hostile_trace_context_before_authentication() -> None:
+    status, body, _ = request(
+        "/health/live",
+        headers=[(b"traceparent", b"00-hostile")],
+    )
+
+    assert status == 400
+    assert body["error"]["code"] == "invalid_trace_context"
+
+
+def test_observability_api_is_redacted_derived_paginated_and_audited() -> None:
+    item = EventEnvelope(
+        event_id=uuid4(),
+        tenant_id=str(TENANT_ID),
+        aggregate_id="run-sensitive",
+        event_type=DomainEventType.RUN_STARTED,
+        schema_version=1,
+        occurred_at=datetime(2025, 1, 1, tzinfo=UTC),
+        recorded_at=datetime(2025, 1, 1, tzinfo=UTC),
+        aggregate_sequence=1,
+        global_position=1,
+        payload={"prompt": "never return this"},
+    )
+    signing = signing_fixture()
+    audit = InMemoryAuditStore()
+    store = TimelineEventStore(item)
+    replay = ReplayDebugger(
+        store,  # type: ignore[arg-type]
+        identifier_hash_key=b"o" * 32,
+        hash_key_version="test-v1",
+    )
+    operations = ObservabilityOperations(
+        replay,
+        audit,
+        identifier_hash_key=b"o" * 32,
+        hash_key_version="test-v1",
+        slo_reader=lambda: (
+            SloSummary(
+                "api-availability",
+                "30d",
+                "99.9%",
+                "unmeasured",
+                False,
+                "local_only",
+            ),
+        ),
+    )
+    app = ControlPlaneApp(
+        authentication=authentication_service(signing),
+        tenants=InMemoryTenantRepository((Tenant(TENANT_ID, "Tenant Alpha"),)),
+        policies=InMemoryPolicyRepository((tenant_policy(),)),
+        audit=audit,
+        observability_operations=operations,
+    )
+    authorization = bearer(token(signing))
+
+    timeline_status, timeline, _ = request(
+        "/v1/tenants/tenant-alpha/observability/timeline/run-sensitive",
+        app=app,
+        authorization=authorization,
+        query_string="cursor=0",
+    )
+    slo_status, slos, _ = request(
+        "/v1/tenants/tenant-alpha/observability/slos",
+        app=app,
+        authorization=authorization,
+    )
+    support_status, support, _ = request(
+        "/v1/tenants/tenant-alpha/observability/support-reports/run-sensitive",
+        app=app,
+        authorization=authorization,
+    )
+
+    assert timeline_status == slo_status == 200
+    assert timeline["events"][0]["event_type"] == DomainEventType.RUN_STARTED
+    assert "run-sensitive" not in timeline["aggregate_reference"]
+    assert "prompt" not in json.dumps(timeline)
+    assert timeline["authoritative_source"] == "event_ledger"
+    assert slos["authoritative"] is False
+    assert slos["objectives"][0]["measured"] is False
+    assert support_status == 403
+    assert support["error"]["code"] == "authorization_denied"
+    assert AuditEventType.OBSERVABILITY_ACCESS in {
+        event.event_type for event in audit.query(TenantContext(TENANT_ID))
+    }
+
+
+def test_support_report_size_error_returns_bounded_response() -> None:
+    signing = signing_fixture()
+    operations = Mock(
+        spec=ObservabilityOperations,
+        support_report=AsyncMock(
+            side_effect=SupportReportTooLargeError(
+                "support report exceeds the byte bound"
+            )
+        ),
+    )
+    app = ControlPlaneApp(
+        authentication=authentication_service(signing),
+        tenants=InMemoryTenantRepository((Tenant(TENANT_ID, "Tenant Alpha"),)),
+        policies=InMemoryPolicyRepository((tenant_policy(),)),
+        audit=InMemoryAuditStore(),
+        observability_operations=operations,
+    )
+
+    status, body, _ = request(
+        "/v1/tenants/tenant-alpha/observability/support-reports/run-large",
+        app=app,
+        authorization=bearer(token(signing)),
+    )
+
+    assert status == 422
+    assert body == {"error": {"code": "support_report_too_large"}}
 
 
 def test_evidence_api_accepts_durable_work_and_exposes_bounded_views() -> None:

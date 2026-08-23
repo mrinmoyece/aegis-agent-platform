@@ -302,3 +302,13 @@ connector design; evaluation; observability/SLOs; failure modes; scaling and
 multi-region; privacy/compliance; deployment/supply chain; and an ADR index.
 The protocol curriculum in `protocols.md` must remain explicit that internal
 typed ledger protocols—not A2A or MCP—provide correctness.
+
+## Layer 12 - Observability, SLOs, and deterministic replay
+
+Implemented: semantic conventions, safe context propagation, sensitive-data and
+cardinality guards, structured logs, metrics, component health, configured SLO
+catalog and multi-window burn alerts, ten Grafana dashboards, hardened local
+collector topology, authenticated timeline/SLO/support endpoints, replay CLI,
+and deterministic observability evals. Production telemetry qualification,
+managed backends, operator React UI, MCP/A2A, 24/7 on-call evidence,
+HA/DR/multi-region, final load/chaos, and compliance remain future layers.

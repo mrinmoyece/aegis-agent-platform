@@ -13,6 +13,7 @@ from aegis_agent_platform.domain.events import (
     DomainEventType,
     EventEnvelope,
     JsonValue,
+    TraceContext,
     freeze_json_mapping,
 )
 
@@ -105,6 +106,7 @@ class WorkRequest:
     requested_at: datetime
     payload: Mapping[str, JsonValue]
     causation_id: UUID | None = None
+    trace_context: TraceContext | None = None
     max_attempts: int = 5
     timeout_seconds: int = 300
     schema_version: int = 1
@@ -205,7 +207,10 @@ class WorkTransition:
             payload=payload,
             correlation_id=request.correlation_id,
             causation_id=causation_id or request.causation_id,
-            idempotency_key=f"{request.idempotency_key}:{self.event_type}:{event_id}",
+            idempotency_key=(
+                f"{request.idempotency_key}:{self.event_type.value}:{event_id}"
+            ),
+            trace_context=request.trace_context,
         )
 
 

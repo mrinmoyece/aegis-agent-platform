@@ -28,6 +28,7 @@ from aegis_agent_platform.domain import (
     PolicyOutcome,
     RemediationPlan,
     RemediationState,
+    TraceContext,
     WorkRequest,
     plan_to_payload,
     replay_remediation,
@@ -39,6 +40,10 @@ from aegis_agent_platform.identity import (
     Permission,
     Principal,
     PrincipalKind,
+)
+from aegis_agent_platform.observability.context import (
+    PropagationContext,
+    durable_trace_context,
 )
 from aegis_agent_platform.remediation.policy import (
     ActionQuotaUsage,
@@ -102,6 +107,7 @@ class RemediationApprovalService:
         usage: ActionQuotaUsage,
         *,
         idempotency_key: str,
+        propagation: PropagationContext | None = None,
     ) -> ProposalDecision:
         at = self._clock()
         self._require(
@@ -136,6 +142,7 @@ class RemediationApprovalService:
                 "policy_digest": current_policy.digest,
                 "revision": plan.revision,
             },
+            trace_context=durable_trace_context(propagation),
             max_attempts=5,
             timeout_seconds=3_600,
         )
@@ -151,6 +158,7 @@ class RemediationApprovalService:
                 },
                 idempotency_key=f"{idempotency_key}:proposal",
                 at=at,
+                trace_context=request.trace_context,
             )
         ]
         for action in plan.actions:
@@ -180,6 +188,7 @@ class RemediationApprovalService:
                         f"{current_policy.digest}"
                     ),
                     at=at,
+                    trace_context=request.trace_context,
                 )
             )
             self._audit_event(
@@ -226,6 +235,7 @@ class RemediationApprovalService:
                         f"{current_policy.digest}"
                     ),
                     at=at,
+                    trace_context=request.trace_context,
                 )
             )
             self._metrics.add("approvals_requested", action_kind=action.kind)
@@ -617,6 +627,7 @@ class RemediationApprovalService:
         idempotency_key: str,
         at: datetime,
         event_id: UUID | None = None,
+        trace_context: TraceContext | None = None,
     ) -> EventEnvelope:
         return EventEnvelope(
             event_id=event_id or self._uuid_factory(),
@@ -631,6 +642,7 @@ class RemediationApprovalService:
             identity_reference=principal.subject,
             policy_reference=plan.approval_policy.digest,
             idempotency_key=idempotency_key,
+            trace_context=trace_context,
         )
 
     def _audit_event(

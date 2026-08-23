@@ -41,6 +41,9 @@ class Settings:
     worker_max_concurrency: int = 16
     worker_lease_seconds: int = 30
     worker_heartbeat_seconds: int = 10
+    telemetry_export_timeout_seconds: float = 2.0
+    telemetry_buffer_capacity: int = 4_096
+    telemetry_sample_rate: float = 0.1
 
     def __post_init__(self) -> None:
         """Enforce invariants for every construction path."""
@@ -86,6 +89,15 @@ class Settings:
             worker_heartbeat_seconds = int(
                 values.get("AEGIS_WORKER_HEARTBEAT_SECONDS", "10")
             )
+            telemetry_export_timeout_seconds = float(
+                values.get("AEGIS_TELEMETRY_EXPORT_TIMEOUT_SECONDS", "2")
+            )
+            telemetry_buffer_capacity = int(
+                values.get("AEGIS_TELEMETRY_BUFFER_CAPACITY", "4096")
+            )
+            telemetry_sample_rate = float(
+                values.get("AEGIS_TELEMETRY_SAMPLE_RATE", "0.1")
+            )
         except ValueError as error:
             raise ConfigurationError(
                 "Redis and worker numeric settings must be numbers"
@@ -118,6 +130,9 @@ class Settings:
             worker_max_concurrency=worker_max_concurrency,
             worker_lease_seconds=worker_lease_seconds,
             worker_heartbeat_seconds=worker_heartbeat_seconds,
+            telemetry_export_timeout_seconds=telemetry_export_timeout_seconds,
+            telemetry_buffer_capacity=telemetry_buffer_capacity,
+            telemetry_sample_rate=telemetry_sample_rate,
         )
 
     def validate(self) -> None:
@@ -156,6 +171,16 @@ class Settings:
             raise ConfigurationError(
                 "worker heartbeat must be positive and shorter than its lease"
             )
+        if not 0.1 <= self.telemetry_export_timeout_seconds <= 10:
+            raise ConfigurationError(
+                "telemetry export timeout must be between 0.1 and 10 seconds"
+            )
+        if not 1 <= self.telemetry_buffer_capacity <= 4_096:
+            raise ConfigurationError(
+                "telemetry buffer capacity must be between 1 and 4096"
+            )
+        if not 0 <= self.telemetry_sample_rate <= 1:
+            raise ConfigurationError("telemetry sample rate must be between 0 and 1")
         if self.environment is Environment.PRODUCTION:
             required = {
                 "AEGIS_DATABASE_URL": self.database_url,

@@ -14,6 +14,7 @@ from aegis_agent_platform.domain import (
     replay_sandbox,
 )
 from aegis_agent_platform.identity import AuthorizationService, Permission, Principal
+from aegis_agent_platform.observability.context import PropagationContext
 from aegis_agent_platform.sandbox.execution import (
     SandboxRequestDecision,
     SandboxRequestService,
@@ -57,6 +58,7 @@ class SandboxOperations:
         context: TenantContext,
         request: SandboxRequest,
         binding: SandboxApprovalBinding,
+        propagation: PropagationContext | None = None,
     ) -> SandboxRequestDecision:
         policy = self._policies.get(context)
         if policy is None:
@@ -67,6 +69,7 @@ class SandboxOperations:
             request,
             policy,
             binding,
+            propagation=propagation,
         )
 
     async def status(

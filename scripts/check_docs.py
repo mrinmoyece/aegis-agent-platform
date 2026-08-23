@@ -89,7 +89,7 @@ def main() -> None:
         raise SystemExit("broken documentation links:\n" + "\n".join(failures))
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    if "Current status: Layer 11" not in readme:
+    if "Current status: Layer 12" not in readme:
         raise SystemExit("README must state the current implementation layer")
 
 

@@ -95,7 +95,7 @@ def full_report() -> EvaluationReport:
 def test_catalog_covers_every_layer_outcome_and_gate_pack() -> None:
     suite = build_suite()
 
-    assert len(suite.cases) == 91
+    assert len(suite.cases) == 97
     assert {case.layer for case in suite.cases} == {
         "layer-2",
         "layer-3",
@@ -106,6 +106,7 @@ def test_catalog_covers_every_layer_outcome_and_gate_pack() -> None:
         "layer-8",
         "layer-9",
         "layer-10",
+        "layer-12",
         "cross-layer",
     }
     assert set(ExpectedOutcome).issubset(
@@ -773,7 +774,7 @@ def test_report_outputs_are_bounded_redacted_and_replayable(
     compared_json = json.loads(compared_paths.json.read_text(encoding="utf-8"))
     assert compared_json["comparison"]["passed"] is False
     junit_comparison = compared_paths.junit.read_text(encoding="utf-8")
-    assert 'tests="92"' in junit_comparison
+    assert 'tests="98"' in junit_comparison
     assert 'failures="1"' in junit_comparison
     assert 'name="baseline_comparison"' in junit_comparison
     with pytest.raises(ValueError, match="sensitive"):

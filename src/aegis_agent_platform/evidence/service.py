@@ -35,6 +35,10 @@ from aegis_agent_platform.evidence.ports import (
     EvidenceQuery,
 )
 from aegis_agent_platform.evidence.telemetry import EvidenceMetrics, EvidenceTracer
+from aegis_agent_platform.observability.context import (
+    PropagationContext,
+    durable_trace_context,
+)
 from aegis_agent_platform.policy import TenantPolicy
 from aegis_agent_platform.tenancy import TenantContext
 
@@ -264,6 +268,7 @@ class EvidenceQueryService:
         policy: TenantPolicy,
         *,
         actor_id: str,
+        propagation: PropagationContext | None = None,
     ) -> EvidenceRequestResult:
         self._validate_request(context, query, policy)
         event = self._event(
@@ -281,6 +286,7 @@ class EvidenceQueryService:
             actor_id=actor_id,
             idempotency_suffix="requested",
         )
+        event = replace(event, trace_context=durable_trace_context(propagation))
         outbox = OutboxMessage(
             message_id=self._uuid_factory(),
             destination="aegis.work.evidence",

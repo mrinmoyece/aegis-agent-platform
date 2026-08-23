@@ -118,3 +118,14 @@ Provider idempotency headers also do not guarantee exactly-once billing.
 Read-only connectors avoid mutation effects, but network reads still require
 durable intent because they consume quota, expose credentials, and advance
 authoritative ingestion cursors.
+
+## Layer 12 observability failure modes
+
+Exporter timeout, backpressure, queue overflow, collector restart, clock skew,
+duplicate delivery, and missing telemetry cannot change authoritative work.
+They open a bounded circuit, drop/count derived signals, report degradation, and
+fall back to ledger replay. Invalid propagation is rejected before use.
+Dashboard no-data is unknown, never healthy. Ledger corruption stops replay and
+projection rebuild. Optional telemetry does not fail readiness; unavailable
+correctness dependencies do. See
+[on-call-observability.md](on-call-observability.md).

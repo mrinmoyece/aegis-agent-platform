@@ -130,3 +130,16 @@ Status meanings:
 Changing a row to Implemented requires tests or operational evidence in the
 same pull request. Planned capabilities map to concrete EP-01 through EP-16
 delivery slices and exit gates in the enterprise implementation blueprint.
+
+## Layer 12 evidence
+
+- Implemented: semantic catalog, redaction/cardinality enforcement, strict
+  propagation, structured logs, metric contracts, health semantics,
+  authenticated timelines/SLO summaries/support manifests, replay CLI, rules,
+  dashboards, collector hardening, deterministic tests, and six CI-gated
+  observability evaluation cases.
+- Configured/local evidence only: SLO targets, burn alerts, dashboard panels,
+  collector/Prometheus/Grafana topology.
+- Not complete: production SLO attainment, live production telemetry
+  qualification, external managed backends, 24/7 on-call evidence, operator
+  React UI, HA/DR/multi-region, final load/chaos, or compliance certification.
