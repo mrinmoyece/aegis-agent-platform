@@ -51,6 +51,83 @@ WHERE tenant_id = %s AND aggregate_id = %s
 ORDER BY aggregate_sequence
 LIMIT %s
 """
+_CLAIM_OUTBOX = """
+WITH candidates AS (
+    SELECT tenant_id, message_id
+    FROM outbox_messages
+    WHERE tenant_id = %s
+      AND status IN ('pending', 'leased')
+      AND (
+          attempt_count < max_attempts
+          OR (
+              status = 'leased'
+              AND last_error_code IS NULL
+          )
+      )
+      AND available_at <= clock_timestamp()
+      AND (
+          lease_expires_at IS NULL
+          OR lease_expires_at <= clock_timestamp()
+      )
+    ORDER BY available_at, message_id
+    FOR UPDATE SKIP LOCKED
+    LIMIT %s
+)
+UPDATE outbox_messages AS outbox
+SET status = 'leased',
+    lease_owner = %s,
+    lease_expires_at = clock_timestamp()
+        + (%s * interval '1 second'),
+    attempt_count = attempt_count + 1,
+    last_error_code = NULL
+FROM candidates
+WHERE outbox.tenant_id = candidates.tenant_id
+  AND outbox.message_id = candidates.message_id
+RETURNING outbox.message_id, outbox.event_id,
+    outbox.destination, outbox.payload, outbox.headers,
+    outbox.available_at, outbox.max_attempts,
+    outbox.attempt_count, outbox.lease_owner,
+    outbox.lease_expires_at
+"""
+_CLAIM_OUTBOX_ONE_DESTINATION = """
+WITH candidates AS (
+    SELECT tenant_id, message_id
+    FROM outbox_messages
+    WHERE tenant_id = %s
+      AND destination = %s
+      AND status IN ('pending', 'leased')
+      AND (
+          attempt_count < max_attempts
+          OR (
+              status = 'leased'
+              AND last_error_code IS NULL
+          )
+      )
+      AND available_at <= clock_timestamp()
+      AND (
+          lease_expires_at IS NULL
+          OR lease_expires_at <= clock_timestamp()
+      )
+    ORDER BY available_at, message_id
+    FOR UPDATE SKIP LOCKED
+    LIMIT %s
+)
+UPDATE outbox_messages AS outbox
+SET status = 'leased',
+    lease_owner = %s,
+    lease_expires_at = clock_timestamp()
+        + (%s * interval '1 second'),
+    attempt_count = attempt_count + 1,
+    last_error_code = NULL
+FROM candidates
+WHERE outbox.tenant_id = candidates.tenant_id
+  AND outbox.message_id = candidates.message_id
+RETURNING outbox.message_id, outbox.event_id,
+    outbox.destination, outbox.payload, outbox.headers,
+    outbox.available_at, outbox.max_attempts,
+    outbox.attempt_count, outbox.lease_owner,
+    outbox.lease_expires_at
+"""
 _CONNECTION_LOCKS: WeakKeyDictionary[psycopg.AsyncConnection[Any], asyncio.Lock] = (
     WeakKeyDictionary()
 )
@@ -533,8 +610,14 @@ class PostgresEventStore:
         lease_expires_at: datetime,
         now: datetime,
         limit: int,
+        destination: str | None = None,
     ) -> tuple[ClaimedOutboxMessage, ...]:
-        """Lease publishable work using skip-locked race-safe claiming."""
+        """Lease publishable work using skip-locked race-safe claiming.
+
+        Pass ``destination`` to restrict claiming to a specific outbox queue
+        (e.g. ``"aegis.work"`` for the worker publisher). Omit it to claim
+        from all destinations.
+        """
         lease_duration = lease_expires_at - now
         if (
             not lease_owner
@@ -546,52 +629,24 @@ class PostgresEventStore:
             raise ValueError("outbox claim limit must be between 1 and 100")
         try:
             async with _tenant_transaction(self._connection, self._lock, context):
-                cursor = await self._connection.execute(
-                    """
-                    WITH candidates AS (
-                        SELECT tenant_id, message_id
-                        FROM outbox_messages
-                        WHERE tenant_id = %s
-                          AND status IN ('pending', 'leased')
-                          AND (
-                              attempt_count < max_attempts
-                              OR (
-                                  status = 'leased'
-                                  AND last_error_code IS NULL
-                              )
-                          )
-                          AND available_at <= clock_timestamp()
-                          AND (
-                              lease_expires_at IS NULL
-                              OR lease_expires_at <= clock_timestamp()
-                          )
-                        ORDER BY available_at, message_id
-                        FOR UPDATE SKIP LOCKED
-                        LIMIT %s
+                if destination is not None:
+                    stmt = _CLAIM_OUTBOX_ONE_DESTINATION
+                    params: tuple[object, ...] = (
+                        str(context.tenant_id),
+                        destination,
+                        limit,
+                        lease_owner,
+                        lease_duration.total_seconds(),
                     )
-                    UPDATE outbox_messages AS outbox
-                    SET status = 'leased',
-                        lease_owner = %s,
-                        lease_expires_at = clock_timestamp()
-                            + (%s * interval '1 second'),
-                        attempt_count = attempt_count + 1,
-                        last_error_code = NULL
-                    FROM candidates
-                    WHERE outbox.tenant_id = candidates.tenant_id
-                      AND outbox.message_id = candidates.message_id
-                    RETURNING outbox.message_id, outbox.event_id,
-                        outbox.destination, outbox.payload, outbox.headers,
-                        outbox.available_at, outbox.max_attempts,
-                        outbox.attempt_count, outbox.lease_owner,
-                        outbox.lease_expires_at
-                    """,
-                    (
+                else:
+                    stmt = _CLAIM_OUTBOX
+                    params = (
                         str(context.tenant_id),
                         limit,
                         lease_owner,
                         lease_duration.total_seconds(),
-                    ),
-                )
+                    )
+                cursor = await self._connection.execute(stmt, params)
                 rows = await cursor.fetchall()
         except psycopg.Error as error:
             raise classify_storage_error(error) from error

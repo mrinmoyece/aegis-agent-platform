@@ -244,6 +244,7 @@ def test_inbox_deduplication_and_outbox_claim_race() -> None:
                     lease_expires_at=expiry,
                     now=now,
                     limit=1,
+                    destination="later-worker",
                 ),
                 PostgresEventStore(second_connection).claim_outbox(
                     TENANT_A,
@@ -251,6 +252,7 @@ def test_inbox_deduplication_and_outbox_claim_race() -> None:
                     lease_expires_at=expiry,
                     now=now,
                     limit=1,
+                    destination="later-worker",
                 ),
             )
             assert sum(len(claim) for claim in claims) == 1
