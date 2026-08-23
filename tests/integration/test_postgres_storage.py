@@ -264,6 +264,7 @@ def test_inbox_deduplication_and_outbox_claim_race() -> None:
                 TENANT_A,
                 message.message_id,
                 lease_owner=winning_claim.lease_owner,
+                lease_expires_at=expiry,
                 retry_at=now,
                 error_code="temporary_delivery_failure",
             )
@@ -279,6 +280,7 @@ def test_inbox_deduplication_and_outbox_claim_race() -> None:
                 TENANT_A,
                 message.message_id,
                 lease_owner="publisher-retry",
+                lease_expires_at=expiry,
                 retry_at=now,
                 error_code="poison_message",
             )
@@ -345,6 +347,7 @@ def test_inbox_deduplication_and_outbox_claim_race() -> None:
                 TENANT_A,
                 crash_message.message_id,
                 lease_owner="reconciling-publisher",
+                lease_expires_at=expiry + timedelta(minutes=2),
                 published_at=expiry + timedelta(minutes=1),
             )
             async with first_connection.transaction():
@@ -503,6 +506,9 @@ def test_durable_repositories_are_tenant_scoped_and_audit_is_redacted() -> None:
                         "approval_from_risk": 2,
                         "tools_requiring_approval": [],
                         "approver_roles": ["approver"],
+                        "allowed_providers": [],
+                        "allowed_data_residencies": [],
+                        "allow_provider_retention": False,
                     }
                 ),
             ),
