@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import re
-import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -24,7 +22,6 @@ from aegis_agent_platform.domain import (
     SpanReference,
     TraceReference,
     TrustStatus,
-    require_aware_datetime,
 )
 from aegis_agent_platform.evidence import (
     CancellationSignal,
@@ -68,8 +65,8 @@ class TelemetryEvidence:
     attributes: Mapping[str, JsonValue]
 
     def __post_init__(self) -> None:
-        """Require a timestamp safe for cross-source incident correlation."""
-        require_aware_datetime(self.observed_at, field_name="observed_at")
+        if self.observed_at.tzinfo is None:
+            raise ValueError("observed_at must be timezone-aware")
 
 
 class DynatraceEvidenceReader(Protocol):
@@ -78,7 +75,7 @@ class DynatraceEvidenceReader(Protocol):
     async def collect(
         self,
         *,
-        tenant: TenantContext,
+        tenant_id: str,
         query: str,
         start: datetime,
         end: datetime,
@@ -86,8 +83,6 @@ class DynatraceEvidenceReader(Protocol):
     ) -> Sequence[TelemetryEvidence]:
         """Collect normalized incident evidence for a bounded time window."""
         ...
-
-
 _SUPPORTED = (
     EvidenceKind.LOG,
     EvidenceKind.METRIC,
@@ -100,8 +95,6 @@ _SUPPORTED = (
     EvidenceKind.CHANGE,
     EvidenceKind.DEPLOYMENT,
 )
-_GRAIL_POLL_INITIAL_DELAY_SECONDS = 0.25
-_GRAIL_POLL_MAX_DELAY_SECONDS = 5.0
 
 
 class DynatraceAdapter:
@@ -228,21 +221,12 @@ class DynatraceAdapter:
         partial: bool,
     ) -> Mapping[str, JsonValue]:
         base = self._config.environment_url.rstrip("/")
-        deadline = time.monotonic() + self._config.limits.timeout_seconds
-        delay_seconds = _GRAIL_POLL_INITIAL_DELAY_SECONDS
-        for attempt in range(self._config.limits.max_pages):
+        for _ in range(self._config.limits.max_pages):
             if cancellation is not None and cancellation.cancelled:
                 raise ConnectorError(
                     ConnectorErrorClass.CANCELLED,
                     "query_cancelled",
                     retryable=False,
-                    partial=partial,
-                )
-            if time.monotonic() >= deadline:
-                raise ConnectorError(
-                    ConnectorErrorClass.TIMEOUT,
-                    "dynatrace_query_poll_timed_out",
-                    retryable=True,
                     partial=partial,
                 )
             response = await self._transport.send(
@@ -272,25 +256,6 @@ class DynatraceAdapter:
                     retryable=state == "FAILED",
                     partial=partial,
                 )
-            if attempt == self._config.limits.max_pages - 1:
-                break
-            sleep_seconds = _grail_poll_delay(
-                response.headers.get("retry-after"),
-                delay_seconds,
-                deadline,
-            )
-            if sleep_seconds is None:
-                raise ConnectorError(
-                    ConnectorErrorClass.TIMEOUT,
-                    "dynatrace_query_poll_timed_out",
-                    retryable=True,
-                    partial=partial,
-                )
-            await asyncio.sleep(sleep_seconds)
-            delay_seconds = min(
-                delay_seconds * 2,
-                _GRAIL_POLL_MAX_DELAY_SECONDS,
-            )
         raise ConnectorError(
             ConnectorErrorClass.TIMEOUT,
             "dynatrace_query_poll_exhausted",
@@ -454,25 +419,6 @@ def _grail_query(kind: EvidenceKind, selectors: Mapping[str, str]) -> str:
     else:
         clauses.append("fields timestamp, content, loglevel, trace.id, span.id")
     return " | ".join(clauses)
-
-
-def _grail_poll_delay(
-    retry_after: str | None,
-    fallback_seconds: float,
-    deadline: float,
-) -> float | None:
-    try:
-        hinted_seconds = None if retry_after is None else max(0.0, float(retry_after))
-    except ValueError:
-        hinted_seconds = None
-    remaining = max(0.0, deadline - time.monotonic())
-    if remaining <= 0:
-        return None
-    return min(
-        hinted_seconds if hinted_seconds is not None else fallback_seconds,
-        _GRAIL_POLL_MAX_DELAY_SECONDS,
-        remaining,
-    )
 
 
 def _items(
