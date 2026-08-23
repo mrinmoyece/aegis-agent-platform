@@ -1121,8 +1121,7 @@ async def _observability_probe(
             rule is not None
             and rule.get("expr")
             == "increase(aegis_eval_safety_violations_total[5m]) > 0"
-            and dict(rule.get("labels", {}))
-            == {"severity": "page", "owner": "safety"}
+            and dict(rule.get("labels", {})) == {"severity": "page", "owner": "safety"}
         )
     else:
         raise ValueError(f"unknown observability probe: {variant}")
@@ -1167,8 +1166,7 @@ async def _observability_probe(
 
 def _prometheus_alert_rule(name: str) -> Mapping[str, object] | None:
     rules_path = (
-        Path(__file__).resolve().parents[3]
-        / "deploy/prometheus/rules/aegis-alerts.yml"
+        Path(__file__).resolve().parents[3] / "deploy/prometheus/rules/aegis-alerts.yml"
     )
     document = yaml.safe_load(rules_path.read_text(encoding="utf-8"))
     groups = document.get("groups", []) if isinstance(document, Mapping) else []

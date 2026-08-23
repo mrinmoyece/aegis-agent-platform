@@ -50,6 +50,8 @@ def _descending_cursor(
     if isinstance(cursor, tuple):
         return cursor
     return cursor, _MAX_UUID
+
+
 _RedriveRow = tuple[UUID, UUID]
 _ExpiredLeaseRow = tuple[
     UUID,

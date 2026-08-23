@@ -665,4 +665,4 @@ def test_context_and_event_size_handle_strict_tracestate_and_json_escaping() -> 
     assert sanitize_url("https://user:pass@example.test:8443/path?q=1#frag") == (
         "https://example.test:8443/path"
     )
-    assert not bounded_event_size({"value": "\"" * 5000})
+    assert not bounded_event_size({"value": '"' * 5000})

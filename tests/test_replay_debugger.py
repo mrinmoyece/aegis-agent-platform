@@ -480,21 +480,23 @@ def test_replay_cli_loader_rejects_missing_and_oversized_ranges(tmp_path: Path) 
         _load_events(tmp_path / "missing.json")
     oversized = tmp_path / "oversized.json"
     oversized.write_text(
-        json.dumps([
-            {
-                "event_id": str(UUID(int=index)),
-                "tenant_id": "tenant-a",
-                "aggregate_id": "run-a",
-                "event_type": str(DomainEventType.RUN_STARTED),
-                "schema_version": 1,
-                "occurred_at": (NOW + timedelta(seconds=index)).isoformat(),
-                "payload": {},
-                "aggregate_sequence": index,
-                "global_position": index,
-                "recorded_at": (NOW + timedelta(seconds=index)).isoformat(),
-            }
-            for index in range(1, 5002)
-        ]),
+        json.dumps(
+            [
+                {
+                    "event_id": str(UUID(int=index)),
+                    "tenant_id": "tenant-a",
+                    "aggregate_id": "run-a",
+                    "event_type": str(DomainEventType.RUN_STARTED),
+                    "schema_version": 1,
+                    "occurred_at": (NOW + timedelta(seconds=index)).isoformat(),
+                    "payload": {},
+                    "aggregate_sequence": index,
+                    "global_position": index,
+                    "recorded_at": (NOW + timedelta(seconds=index)).isoformat(),
+                }
+                for index in range(1, 5002)
+            ]
+        ),
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="replay event bound"):
