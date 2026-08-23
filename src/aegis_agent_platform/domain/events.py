@@ -334,6 +334,8 @@ class EventEnvelope:
 
 def freeze_json_mapping(value: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
     """Snapshot a JSON mapping so committed values cannot be aliased."""
+    if not all(isinstance(k, str) for k in value):
+        raise ValueError("JSON object keys must be strings")
     return MappingProxyType({key: freeze_json(item) for key, item in value.items()})
 
 
@@ -343,6 +345,13 @@ def freeze_json(value: JsonValue) -> JsonValue:
         return freeze_json_mapping(value)
     if isinstance(value, Sequence) and not isinstance(value, str):
         return tuple(freeze_json(item) for item in value)
+    if isinstance(value, float):
+        from math import isfinite
+
+        if not isfinite(value):
+            raise ValueError("JSON numbers must be finite")
+    if not isinstance(value, (str, int, float, bool, type(None), Mapping, Sequence)):
+        raise ValueError(f"unsupported JSON value type: {type(value).__name__}")
     return value
 
 

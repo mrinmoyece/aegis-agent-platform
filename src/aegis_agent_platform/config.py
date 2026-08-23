@@ -45,6 +45,9 @@ class Settings:
     telemetry_buffer_capacity: int = 4_096
     telemetry_sample_rate: float = 0.1
 
+    def __post_init__(self) -> None:
+        self.validate()
+
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> Settings:
         """Build and validate settings from an environment mapping."""

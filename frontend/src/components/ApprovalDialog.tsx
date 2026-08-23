@@ -20,7 +20,7 @@ interface ApprovalDialogProps {
 
 export function ApprovalDialog({
   approval,
-  serverTime,
+  serverTime: _serverTime,
   onClose,
   onSubmit,
 }: ApprovalDialogProps) {

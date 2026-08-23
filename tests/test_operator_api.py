@@ -67,6 +67,7 @@ def principal() -> Principal:
         (
             binding(Role.APPROVER, assigned_at=NOW - timedelta(hours=1)),
             binding(Role.OPERATOR, assigned_at=NOW - timedelta(hours=1)),
+            binding(Role.TENANT_ADMIN, assigned_at=NOW - timedelta(hours=1)),
         ),
     ).to_principal()
 

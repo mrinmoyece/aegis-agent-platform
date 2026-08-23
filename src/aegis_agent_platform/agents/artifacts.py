@@ -620,7 +620,7 @@ class ArtifactMetadata:
     def __post_init__(self) -> None:
         if not self.tenant_id or not self.incident_id:
             raise ValueError("tenant_id and incident_id are required")
-        if self.created_at.tzinfo is None:
+        if self.created_at.tzinfo is None or self.created_at.utcoffset() is None:
             raise ValueError("created_at must be timezone-aware")
 
 
@@ -655,6 +655,13 @@ class VerificationArtifact(ArtifactMetadata):
     recovered: bool
     evidence_ids: tuple[UUID, ...]
     observation_window_seconds: int
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if not self.evidence_ids:
+            raise ValueError("evidence citations are required")
+        if not 60 <= self.observation_window_seconds <= 86_400:
+            raise ValueError("verification window must be between 60 and 86400")
 
 
 type AgentArtifact = (
