@@ -657,7 +657,7 @@ class VerificationArtifact(ArtifactMetadata):
     observation_window_seconds: int
 
     def __post_init__(self) -> None:
-        super().__post_init__()
+        ArtifactMetadata.__post_init__(self)
         if not self.evidence_ids:
             raise ValueError("evidence citations are required")
         if not 60 <= self.observation_window_seconds <= 86_400:

@@ -118,10 +118,7 @@ class Settings:
             redis_url=values.get("AEGIS_REDIS_URL", ""),
             oidc_issuer=values.get("AEGIS_OIDC_ISSUER", ""),
             oidc_jwks_url=values.get("AEGIS_OIDC_JWKS_URL", ""),
-            oidc_audience=values.get(
-                "AEGIS_OIDC_AUDIENCE",
-                "aegis-control-plane",
-            ),
+            oidc_audience=values.get("AEGIS_OIDC_AUDIENCE", ""),
             oidc_clock_skew_seconds=clock_skew_seconds,
             redis_max_connections=redis_max_connections,
             redis_connect_timeout_seconds=redis_connect_timeout_seconds,
@@ -190,7 +187,7 @@ class Settings:
                 "AEGIS_OIDC_JWKS_URL": self.oidc_jwks_url,
                 "AEGIS_OIDC_AUDIENCE": self.oidc_audience,
             }
-            missing = [name for name, value in required.items() if not value]
+            missing = [name for name, value in required.items() if not value.strip()]
             if missing:
                 raise ConfigurationError(
                     "production requires: " + ", ".join(sorted(missing))
