@@ -141,6 +141,12 @@ class FakeProjectionRepository:
         self.applied.clear()
         self.reset_count += 1
 
+    async def begin_rebuild(self, context: TenantContext, projection_name: str) -> None:
+        del context, projection_name
+
+    async def end_rebuild(self, context: TenantContext, projection_name: str) -> None:
+        del context, projection_name
+
 
 def test_projection_catch_up_is_idempotent_and_rebuildable() -> None:
     events = (stored_event(3), stored_event(7, sequence=2))

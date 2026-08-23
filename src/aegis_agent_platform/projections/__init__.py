@@ -19,6 +19,10 @@ class ProjectionCheckpoint:
     last_global_position: int
 
 
+_BUDGET_PROJECTIONS = frozenset({"model-usage"})
+"""Projections whose rows drive budget admission and require rebuild isolation."""
+
+
 class ProjectionRepository(Protocol):
     """Atomic read-model writer; implementations are never authoritative."""
 
@@ -41,6 +45,20 @@ class ProjectionRepository(Protocol):
 
     async def reset(self, context: TenantContext, projection_name: str) -> None:
         """Delete one tenant's disposable view and checkpoint."""
+        ...
+
+    async def begin_rebuild(self, context: TenantContext, projection_name: str) -> None:
+        """Acquire an exclusive maintenance lock before reset+catch-up.
+
+        For budget-admission projections (e.g. ``model-usage``) the
+        implementation MUST hold a distributed lock for the duration of the
+        rebuild so that concurrent admission queries fail closed rather than
+        observing the empty view produced by ``reset``.
+        """
+        ...
+
+    async def end_rebuild(self, context: TenantContext, projection_name: str) -> None:
+        """Release the maintenance lock acquired by ``begin_rebuild``."""
         ...
 
 
@@ -88,9 +106,21 @@ class ProjectionEngine:
     async def rebuild(
         self, context: TenantContext, projection_name: str
     ) -> ProjectionCheckpoint:
-        """Discard and deterministically recreate one tenant projection."""
-        await self._repository.reset(context, projection_name)
-        return await self.catch_up(context, projection_name)
+        """Discard and deterministically recreate one tenant projection.
+
+        For budget-admission projections (``model-usage``) this method holds a
+        distributed maintenance lock for the entire reset→catch-up window so
+        that concurrent admission queries fail closed instead of observing the
+        empty view exposed between the two transactions.
+        """
+        if projection_name in _BUDGET_PROJECTIONS:
+            await self._repository.begin_rebuild(context, projection_name)
+        try:
+            await self._repository.reset(context, projection_name)
+            return await self.catch_up(context, projection_name)
+        finally:
+            if projection_name in _BUDGET_PROJECTIONS:
+                await self._repository.end_rebuild(context, projection_name)
 
 
 def _validate_page(

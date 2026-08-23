@@ -1,0 +1,507 @@
+"""Layer 5 fenced, budgeted, policy-routed model gateway execution."""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Awaitable, Callable, Mapping
+from contextlib import suppress
+from dataclasses import replace
+from datetime import UTC, datetime
+
+from aegis_agent_platform.config import Environment
+from aegis_agent_platform.domain import (
+    ModelErrorClass,
+    ModelGatewayError,
+    ModelIdentity,
+    ModelRequest,
+    ModelResponse,
+    ToolCallPart,
+    WorkLease,
+)
+from aegis_agent_platform.gateway.catalog import (
+    ModelCatalog,
+    ModelCatalogEntry,
+    ModelRouter,
+    RoutePreference,
+)
+from aegis_agent_platform.gateway.repository import (
+    BudgetDeniedError,
+    BudgetReservation,
+    GatewayRepository,
+    estimate_cost,
+)
+from aegis_agent_platform.gateway.resilience import (
+    CircuitOpenError,
+    CircuitState,
+    ProviderControls,
+    RetryPolicy,
+)
+from aegis_agent_platform.gateway.structured import validate_object, validate_schema
+from aegis_agent_platform.gateway.telemetry import GatewayMetrics, GatewayTracer
+from aegis_agent_platform.policy import TenantPolicy
+from aegis_agent_platform.providers import CancellationToken, ModelProvider
+from aegis_agent_platform.tenancy import TenantContext
+
+
+class ModelGateway:
+    """Coordinates durable Layer 5 reservation, invocation, and reconciliation."""
+
+    def __init__(
+        self,
+        *,
+        catalog: ModelCatalog,
+        providers: Mapping[str, ModelProvider],
+        repository: GatewayRepository,
+        controls: ProviderControls,
+        retry_policy: RetryPolicy,
+        metrics: GatewayMetrics,
+        tracer: GatewayTracer,
+        router: ModelRouter | None = None,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    ) -> None:
+        catalog_providers = {entry.identity.provider for entry in catalog.entries()}
+        if set(providers) != catalog_providers:
+            raise ValueError("every catalog provider requires exactly one adapter")
+        self._catalog = catalog
+        self._providers = dict(providers)
+        self._repository = repository
+        self._controls = controls
+        self._retry_policy = retry_policy
+        self._metrics = metrics
+        self._tracer = tracer
+        self._router = router or ModelRouter()
+        self._clock = clock
+        self._sleep = sleep
+
+    async def complete(
+        self,
+        context: TenantContext,
+        request: ModelRequest,
+        lease: WorkLease,
+        policy: TenantPolicy,
+        *,
+        environment: Environment,
+        preference: RoutePreference = RoutePreference.COST,
+        cancellation: CancellationToken | None = None,
+    ) -> ModelResponse:
+        self._validate_request(request)
+        at = self._clock()
+        cached = await self._repository.completed(context, request, lease, at=at)
+        if cached is not None:
+            return cached
+        unavailable = frozenset(
+            entry.identity
+            for entry in self._catalog.entries()
+            if self._controls.circuit(entry.identity).state.value == "open"
+        )
+        deadline = asyncio.get_running_loop().time() + request.timeout_seconds
+        route = self._router.route(
+            request,
+            catalog=self._catalog,
+            policy=policy,
+            environment=environment,
+            unavailable=unavailable,
+            preference=preference,
+        )
+        candidates = route.candidates[: self._retry_policy.max_failovers + 1]
+        token_limit = request.prompt_token_estimate + request.max_output_tokens
+        reservation_cost = max(
+            estimate_cost(
+                candidate.pricing,
+                request.prompt_token_estimate,
+                request.max_output_tokens,
+            )
+            for candidate in candidates
+        )
+        try:
+            reservation = await self._repository.reserve(
+                context,
+                request,
+                lease,
+                route,
+                quotas=policy.quotas,
+                token_limit=token_limit,
+                cost_limit_usd=reservation_cost,
+                price_version=route.selected.pricing.version,
+                at=self._clock(),
+            )
+        except BudgetDeniedError:
+            self._metrics.add("budget_denials", route.selected.identity)
+            raise
+        self._metrics.add("route_decisions", route.selected.identity)
+        last_error: ModelGatewayError | None = None
+        for fallback_index, candidate in enumerate(candidates):
+            if fallback_index > 0:
+                self._metrics.add("fallbacks", candidate.identity)
+            response, last_error = await self._try_model(
+                context,
+                request,
+                lease,
+                reservation,
+                candidate,
+                fallback_index=fallback_index,
+                deadline=deadline,
+                cancellation=cancellation,
+            )
+            if response is not None:
+                try:
+                    self._validate_response(
+                        request,
+                        response,
+                        expected_model=candidate.identity,
+                    )
+                    await self._repository.succeed(
+                        context,
+                        request,
+                        lease,
+                        reservation,
+                        response,
+                        candidate.pricing,
+                        at=self._clock(),
+                    )
+                except ModelGatewayError as error:
+                    await self._repository.record_usage_failure(
+                        context,
+                        request,
+                        lease,
+                        reservation,
+                        response,
+                        candidate.pricing,
+                        error,
+                        at=self._clock(),
+                    )
+                    raise
+                self._metrics.usage(candidate.identity, response.usage)
+                self._metrics.add("latency_ms", candidate.identity, response.latency_ms)
+                cost = candidate.pricing.cost(response.usage)
+                self._metrics.add("cost_usd", candidate.identity, float(cost))
+                self._metrics.add(
+                    "reservation_drift_tokens",
+                    candidate.identity,
+                    token_limit - response.usage.billable_tokens,
+                )
+                self._metrics.add(
+                    "reservation_drift_cost_usd",
+                    candidate.identity,
+                    float(reservation_cost - cost),
+                )
+                return response
+            if last_error is not None and not last_error.retryable:
+                break
+        if last_error is None:
+            last_error = ModelGatewayError(
+                ModelErrorClass.PROVIDER_UNAVAILABLE,
+                "no_provider_attempt_succeeded",
+                retryable=True,
+            )
+        await self._repository.fail(
+            context,
+            request,
+            lease,
+            reservation,
+            last_error,
+            at=self._clock(),
+        )
+        raise last_error
+
+    async def _try_model(
+        self,
+        context: TenantContext,
+        request: ModelRequest,
+        lease: WorkLease,
+        reservation: BudgetReservation,
+        candidate: ModelCatalogEntry,
+        *,
+        fallback_index: int,
+        deadline: float,
+        cancellation: CancellationToken | None,
+    ) -> tuple[ModelResponse | None, ModelGatewayError | None]:
+        model = candidate.identity
+        circuit = self._controls.circuit(model)
+        probe_acquired = False
+        try:
+            circuit.acquire()
+            probe_acquired = circuit.state is CircuitState.HALF_OPEN
+        except CircuitOpenError:
+            self._metrics.add("circuit_open", model)
+            return None, ModelGatewayError(
+                ModelErrorClass.PROVIDER_UNAVAILABLE,
+                "provider_circuit_open",
+                retryable=True,
+            )
+        provider = self._providers[model.provider]
+        last_error: ModelGatewayError | None = None
+        try:
+            for attempt in range(1, self._retry_policy.max_attempts + 1):
+                if not self._controls.admit(
+                    model,
+                    request.prompt_token_estimate + request.max_output_tokens,
+                ):
+                    last_error = ModelGatewayError(
+                        ModelErrorClass.RATE_LIMIT,
+                        "local_rate_limit",
+                        retryable=True,
+                    )
+                    self._metrics.add("rate_limits", model)
+                    break
+                attempt_started = False
+                semaphore = self._controls.semaphore(model)
+                acquired = False
+                try:
+                    await self._acquire_semaphore(
+                        semaphore,
+                        deadline=deadline,
+                        cancellation=cancellation,
+                    )
+                    acquired = True
+                    await self._repository.record_attempt(
+                        context,
+                        request,
+                        lease,
+                        reservation,
+                        provider=model.provider,
+                        model=model.model,
+                        attempt=attempt,
+                        fallback_index=fallback_index,
+                        at=self._clock(),
+                    )
+                    attempt_started = True
+                    self._metrics.add("attempts", model)
+                    remaining_seconds = deadline - asyncio.get_running_loop().time()
+                    if remaining_seconds <= 0:
+                        raise ModelGatewayError(
+                            ModelErrorClass.TIMEOUT,
+                            "provider_attempt_timeout",
+                            retryable=True,
+                        )
+                    with self._tracer.attempt(model):
+                        response = await provider.complete(
+                            replace(
+                                request,
+                                timeout_seconds=min(
+                                    request.timeout_seconds,
+                                    remaining_seconds,
+                                ),
+                            ),
+                            model,
+                            cancellation=cancellation,
+                        )
+                except ModelGatewayError as error:
+                    last_error = error
+                    if error.error_class is ModelErrorClass.MALFORMED_RESPONSE:
+                        self._metrics.add("malformed_responses", model)
+                    if error.error_class is ModelErrorClass.RATE_LIMIT:
+                        self._metrics.add("rate_limits", model)
+                    if attempt_started:
+                        await self._repository.record_attempt_failure(
+                            context,
+                            request,
+                            lease,
+                            reservation,
+                            error,
+                            provider=model.provider,
+                            model=model.model,
+                            attempt=attempt,
+                            fallback_index=fallback_index,
+                            at=self._clock(),
+                        )
+                    if not self._retry_policy.may_retry(error, attempt):
+                        break
+                    self._metrics.add("retries", model)
+                    delay = (
+                        error.retry_after_seconds
+                        if error.retry_after_seconds is not None
+                        else self._retry_policy.backoff.delay(attempt).total_seconds()
+                    )
+                    remaining_seconds = deadline - asyncio.get_running_loop().time()
+                    if remaining_seconds <= 0:
+                        break
+                    delay = min(delay, remaining_seconds)
+                    if not await self._wait_for_retry(
+                        delay,
+                        cancellation=cancellation,
+                    ):
+                        last_error = ModelGatewayError(
+                            ModelErrorClass.CANCELLED,
+                            "gateway_retry_cancelled",
+                            retryable=False,
+                        )
+                        break
+                    continue
+                finally:
+                    if acquired:
+                        semaphore.release()
+                circuit.succeed()
+                return response, None
+        finally:
+            if probe_acquired:
+                circuit.release_probe()
+        if last_error is not None:
+            if _provider_health_failure(last_error):
+                circuit.fail()
+            else:
+                circuit.abandon()
+        return None, last_error
+
+    async def _wait_for_retry(
+        self,
+        delay: float,
+        *,
+        cancellation: CancellationToken | None,
+    ) -> bool:
+        if cancellation is None:
+            await self._sleep(delay)
+            return True
+        cancel_task: asyncio.Task[bool] = asyncio.create_task(cancellation.wait())
+        sleep_task: asyncio.Task[None] = asyncio.create_task(
+            self._sleep_for_retry(delay)
+        )
+        try:
+            done, pending = await asyncio.wait(
+                (cancel_task, sleep_task),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+            if cancel_task in done and cancellation.is_set():
+                return False
+            await sleep_task
+            return True
+        finally:
+            if not cancel_task.done():
+                cancel_task.cancel()
+            if not sleep_task.done():
+                sleep_task.cancel()
+
+    async def _sleep_for_retry(self, delay: float) -> None:
+        await self._sleep(delay)
+
+    async def _acquire_semaphore(
+        self,
+        semaphore: asyncio.Semaphore,
+        *,
+        deadline: float,
+        cancellation: CancellationToken | None,
+    ) -> None:
+        if cancellation is not None and cancellation.is_set():
+            raise ModelGatewayError(
+                ModelErrorClass.CANCELLED,
+                "gateway_concurrency_cancelled",
+                retryable=False,
+            )
+        remaining_seconds = deadline - asyncio.get_running_loop().time()
+        if remaining_seconds <= 0:
+            raise ModelGatewayError(
+                ModelErrorClass.TIMEOUT,
+                "gateway_concurrency_timeout",
+                retryable=True,
+            )
+        acquire_task = asyncio.create_task(
+            asyncio.wait_for(semaphore.acquire(), timeout=remaining_seconds)
+        )
+        cancellation_task: asyncio.Task[bool] | None = None
+        try:
+            if cancellation is None:
+                await acquire_task
+                return
+            cancellation_task = asyncio.create_task(cancellation.wait())
+            done, _ = await asyncio.wait(
+                (acquire_task, cancellation_task),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if cancellation_task in done:
+                if (
+                    acquire_task in done
+                    and not acquire_task.cancelled()
+                    and acquire_task.exception() is None
+                ):
+                    semaphore.release()
+                else:
+                    acquire_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await acquire_task
+                raise ModelGatewayError(
+                    ModelErrorClass.CANCELLED,
+                    "gateway_concurrency_cancelled",
+                    retryable=False,
+                )
+            await acquire_task
+        except TimeoutError as error:
+            raise ModelGatewayError(
+                ModelErrorClass.TIMEOUT,
+                "gateway_concurrency_timeout",
+                retryable=True,
+            ) from error
+        finally:
+            if cancellation_task is not None and not cancellation_task.done():
+                cancellation_task.cancel()
+            await asyncio.gather(acquire_task, return_exceptions=True)
+
+    @staticmethod
+    def _validate_request(request: ModelRequest) -> None:
+        if request.response_schema is not None:
+            validate_schema(request.response_schema)
+        for tool in request.tools:
+            validate_schema(tool.input_schema)
+
+    @staticmethod
+    def _validate_response(
+        request: ModelRequest,
+        response: ModelResponse,
+        *,
+        expected_model: ModelIdentity,
+    ) -> None:
+        if response.request_id != request.request_id:
+            raise ModelGatewayError(
+                ModelErrorClass.MALFORMED_RESPONSE,
+                "response_request_id_mismatch",
+                retryable=False,
+                billing_ambiguous=True,
+            )
+        if response.model != expected_model:
+            raise ModelGatewayError(
+                ModelErrorClass.MALFORMED_RESPONSE,
+                "response_model_mismatch",
+                retryable=False,
+                billing_ambiguous=True,
+            )
+        if request.response_schema is not None:
+            if response.structured_output is None:
+                raise ModelGatewayError(
+                    ModelErrorClass.SCHEMA,
+                    "structured_output_missing",
+                    retryable=False,
+                    billing_ambiguous=True,
+                )
+            validate_object(response.structured_output, request.response_schema)
+        tool_schemas = {tool.name: tool.input_schema for tool in request.tools}
+        for part in response.content:
+            if isinstance(part, ToolCallPart):
+                try:
+                    schema = tool_schemas[part.proposal.tool_name]
+                except KeyError as error:
+                    raise ModelGatewayError(
+                        ModelErrorClass.SCHEMA,
+                        "unknown_tool_call",
+                        retryable=False,
+                        billing_ambiguous=True,
+                    ) from error
+                validate_object(part.proposal.arguments, schema)
+
+
+__all__ = ["ModelGateway"]
+
+
+def _provider_health_failure(error: ModelGatewayError) -> bool:
+    if error.error_class is ModelErrorClass.RATE_LIMIT:
+        return error.code != "local_rate_limit"
+    if error.error_class is ModelErrorClass.TIMEOUT:
+        return error.code != "gateway_concurrency_timeout"
+    return error.error_class in {
+        ModelErrorClass.TRANSIENT,
+        ModelErrorClass.PROVIDER_UNAVAILABLE,
+        ModelErrorClass.MALFORMED_RESPONSE,
+        ModelErrorClass.PROVIDER_BUG,
+    }

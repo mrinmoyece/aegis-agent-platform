@@ -1,17 +1,17 @@
 # Limitations and production gaps
 
-## Foundation capabilities and remaining runtime gaps
+## Remaining platform gaps
 
-- No queue backend, renewal implementation, fencing enforcement, retry, or
-  reconciliation exists.
 - Dynatrace and GitHub packages are interfaces, not working connectors.
 - Kubernetes, runbook, incident-management, and remediation adapters do not
   exist.
-- Agent roles, artifacts, plans, budgets, and ledger are types only. There is no
-  scheduler, model invocation, deterministic aggregation, critic enforcement,
-  approval workflow, or specialist execution.
-- Sandbox, tools, memory, evaluation, and observability packages are
-  boundaries only.
+- Agent roles, artifacts, and plans are types only. There is no specialist
+  scheduler, deterministic aggregation, critic enforcement, approval workflow,
+  or specialist execution. Model invocation and model-call budgets are
+  implemented independently of that future orchestration.
+- Sandbox, tools, memory, and evaluation packages are boundaries only.
+- Runtime spans and bounded metric instruments exist, but no production
+  collector dashboards, alert rules, or SLO evidence are claimed.
 - Three-tier memory is a documented design only. No pgvector retrieval,
   provenance pipeline, PII handling, retention/deletion, or context compaction
   is implemented.
@@ -19,6 +19,38 @@
   tool access, external task exchange, streaming, cancellation, or status.
 - CI scans and builds a baseline but does not yet emit an SBOM, provenance,
   signature, release artifact, or deployment.
+
+## Current Layer 5 implementation (model gateway)
+
+- Provider-neutral immutable contracts cover messages/content, tools, schemas,
+  capabilities, identity, safety/refusal, finish reasons, five usage token
+  classes, latency, versioned pricing, and classified failures.
+- Official OpenAI and Anthropic Python SDK adapters are isolated at the provider
+  edge and tested through mocked SDK clients. They are production-capable
+  translations, but CI performs no live provider call and proves no provider
+  account, regional endpoint, quota, or SLA.
+- Routing fails closed for unknown models/prices and enforces tenant model/
+  provider/environment/residency/retention policy, capability/context/output
+  limits, bounded catalog health, and cost/latency ordering.
+- PostgreSQL fenced reservations serialize tenant capacity and atomically commit
+  route/request/reservation events before network. Usage/charge/release commits
+  after response. Stale workers cannot call before a failed reservation or
+  charge/surface a response after a failed result fence.
+- Only metadata and a content digest enter model events. Raw prompts, tool
+  arguments/results, images, keys, and SDK errors are not persisted or logged.
+  There is no encrypted prompt/response artifact store yet.
+- Prompt token estimates are conservative caller input; exact preflight
+  tokenizers are not implemented. Reservation drift is observable.
+- Provider timeouts can be billing-ambiguous. Idempotency is forwarded where
+  supported, but exactly-once provider billing is not claimed. Automated
+  reconciliation with provider billing exports is not implemented.
+- Automatic structured-output repair is not implemented. Invalid JSON/schema or
+  tool arguments fail explicitly; a future repair must be a separately durable,
+  budgeted call.
+- The read-only model catalog, usage, and health APIs are implemented. Live
+  completion is deliberately not an HTTP shortcut; production invocation must
+  enter through durable worker execution. The CLI diagnostic uses only the
+  scripted mock.
 
 ## Current Layer 2 implementation (identity, tenancy, and governance)
 
@@ -63,9 +95,9 @@
   six-test PostgreSQL 16 suite executes migrations and those adapters in CI.
 - Global positions provide ordering, not a no-gap promise after rolled-back
   identity allocations. Aggregate sequence is gapless.
-- The outbox is delivery state only. There is no publisher/Redis notifier,
-  worker lifecycle, model/provider call, live connector, agent execution,
-  approval service, or external effect adapter.
+- The outbox remains delivery state only. Layer 4 publishes it to Redis, but
+  live connectors, agent execution, approval, and external remediation effect
+  adapters do not exist. Layer 5 model calls use their own durable fenced path.
 - Exactly-once effects are not claimed. Intent/result contracts and idempotency
   keys exist, but later adapters must implement idempotency or reconciliation.
 - Projections cover generic run status, artifacts, approvals, usage, and tenant
@@ -74,10 +106,37 @@
   brokering, and migration downgrade automation are not implemented. Security
   migrations are forward-only; correction uses additive migrations.
 
+## Current Layer 4 implementation (distributed work)
+
+- `work.*.v1` events, deterministic transport envelopes, one shared Redis
+  Stream/consumer group, explicit acknowledgement, pending inspection/reclaim,
+  poison rejection, and deterministic inbox message identity are implemented.
+- `work_items`, `work_leases`, `work_dead_letters`, and durable two-actor
+  `work_requeue_approvals` are tenant-RLS
+  projections. PostgreSQL CAS claims issue renewable UUID tokens plus monotonic
+  generations; `append_fenced` rejects stale, released, or expired workers.
+- The supervisor bounds global and per-tenant concurrency, schedules tenants
+  round-robin, drains gracefully, polls cooperative cancellation, contains
+  handler exceptions, enforces timeout, and records classified retry or DLQ
+  outcomes before acknowledgement.
+- Live tests prove two-worker claim exclusion, renewal/reclaim, stale fencing,
+  duplicate delivery/inbox behavior, ack ordering, poison handling, and RLS.
+- A shared stream bounds Redis key/group cardinality and preserves global
+  transport order. It does not provide strict tenant fairness across independent
+  worker processes; the in-process scheduler is round-robin.
+- Redis loss can delay delivery but cannot erase work truth. Reconciliation
+  releases expired PostgreSQL leases; a deployment must continuously run both
+  publisher and reconciliation loops. There is no tested Redis Sentinel/Cluster,
+  PostgreSQL failover, multi-region ordering, or HA claim.
+- No external side effect is implemented. The intent/result protocol represents
+  the crash window, but downstream adapters must use target idempotency keys or
+  reconcile target state; Aegis does not claim exactly-once effects.
+
 ## Claims deliberately not made
 
 Aegis does not currently diagnose checkout failures, protect production data,
-guarantee exactly-once effects, provide a secure code sandbox, satisfy a
+guarantee exactly-once effects or provider billing, provide a secure code
+sandbox, satisfy a
 compliance framework, meet an SLO, or support multi-region recovery. Live local
 PostgreSQL tests prove specific RLS and durability controls, not production
 deployment hardening or operational readiness.

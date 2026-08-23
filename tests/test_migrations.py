@@ -11,6 +11,7 @@ from scripts.check_migrations import _validate_migration_names, security_reversa
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "migrations" / "0001_identity_governance.sql"
 LEDGER_MIGRATION = ROOT / "migrations" / "0002_durable_ledger.sql"
+GATEWAY_MIGRATION = ROOT / "migrations" / "0004_model_gateway.sql"
 
 
 def test_identity_governance_schema_has_tenant_constraints_and_indexes() -> None:
@@ -131,3 +132,21 @@ def test_migration_name_validation_requires_pattern_and_contiguous_sequence() ->
         _validate_migration_names([Path("001_bad-name.sql")])
     with pytest.raises(SystemExit, match="contiguous"):
         _validate_migration_names([Path("0001_first.sql"), Path("0003_third.sql")])
+
+
+def test_model_budget_schema_is_tenant_scoped_fenced_and_versioned() -> None:
+    schema = GATEWAY_MIGRATION.read_text(encoding="utf-8").lower()
+    for table in (
+        "tenant_model_budget_locks",
+        "model_budget_reservations",
+        "model_usage_projection",
+    ):
+        assert f"alter table {table} force row level security" in schema
+        assert f"{table}_tenant_isolation" in schema
+    assert "model_budget_reservations_request_active_idx" in schema
+    assert "model_budget_reservations_idempotency_active_idx" in schema
+    assert "where status in ('active', 'charged')" in schema
+    assert "price_version text not null" in schema
+    assert "lease_generation bigint not null" in schema
+    assert "expires_at timestamptz" in schema
+    assert "where status = 'active'" in schema

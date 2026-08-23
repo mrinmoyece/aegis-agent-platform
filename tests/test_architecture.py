@@ -11,7 +11,9 @@ ALLOWED_DOMAIN_IMPORT_ROOTS = {
     "__future__",
     "collections",
     "dataclasses",
+    "decimal",
     "datetime",
+    "enum",
     "math",
     "types",
     "typing",
@@ -182,3 +184,18 @@ def test_no_agent_framework_dependencies() -> None:
     assert "langchain" not in pyproject
     assert "crewai" not in pyproject
     assert "autogen" not in pyproject
+
+
+def test_vendor_sdks_are_isolated_to_provider_adapters() -> None:
+    allowed = {
+        ROOT / "src" / "aegis_agent_platform" / "providers" / "openai.py",
+        ROOT / "src" / "aegis_agent_platform" / "providers" / "anthropic.py",
+    }
+    violations = [
+        str(path.relative_to(ROOT))
+        for path in (ROOT / "src").rglob("*.py")
+        if path not in allowed
+        and imported_modules(path).intersection({"openai", "anthropic"})
+    ]
+
+    assert not violations

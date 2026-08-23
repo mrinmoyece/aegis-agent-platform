@@ -1,6 +1,4 @@
-"""Types that prevent vendor SDK objects from crossing platform boundaries."""
-
-from __future__ import annotations
+"""Compatibility exports for provider-neutral domain contracts."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -8,7 +6,7 @@ from enum import StrEnum
 
 
 class ResponseFormat(StrEnum):
-    """Portable output formats supported by core orchestration."""
+    """Portable output formats retained for backward-compatible imports."""
 
     TEXT = "text"
     JSON = "json"
@@ -55,3 +53,6 @@ class ModelResponse:
         """Reject impossible usage values before cost accounting."""
         if self.input_tokens < 0 or self.output_tokens < 0:
             raise ValueError("token counts cannot be negative")
+
+
+__all__ = ["ModelMessage", "ModelRequest", "ModelResponse", "ResponseFormat"]

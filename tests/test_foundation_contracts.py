@@ -14,13 +14,19 @@ from scripts.check_manifests import (
     unpinned_workflow_actions,
 )
 
+import aegis_agent_platform.providers as providers
 from aegis_agent_platform.domain import EventEnvelope
+from aegis_agent_platform.domain import ModelRequest as DomainModelRequest
 from aegis_agent_platform.integrations.dynatrace import (
     SignalKind,
     TelemetryEvidence,
 )
 from aegis_agent_platform.integrations.github import ChangeEvidence, ChangeKind
-from aegis_agent_platform.providers import ModelMessage, ModelRequest, ModelResponse
+from aegis_agent_platform.providers import (
+    LegacyModelMessage,
+    LegacyModelRequest,
+    LegacyModelResponse,
+)
 from aegis_agent_platform.queueing import Lease
 
 
@@ -124,16 +130,16 @@ def test_evidence_and_lease_timestamps_must_be_aware() -> None:
 
 
 def test_model_request_uses_validated_portable_options() -> None:
-    request = ModelRequest(
+    request = LegacyModelRequest(
         model="reasoning-model",
-        messages=(ModelMessage(role="user", content="Investigate"),),
+        messages=(LegacyModelMessage(role="user", content="Investigate"),),
         temperature=0.2,
         max_output_tokens=1_000,
     )
 
     assert request.temperature == 0.2
     with pytest.raises(ValueError, match="temperature"):
-        ModelRequest(model="model", messages=(), temperature=3.0)
+        LegacyModelRequest(model="model", messages=(), temperature=3.0)
 
 
 @pytest.mark.parametrize(
@@ -145,12 +151,16 @@ def test_model_response_rejects_negative_usage(
     output_tokens: int,
 ) -> None:
     with pytest.raises(ValueError, match="cannot be negative"):
-        ModelResponse(
+        LegacyModelResponse(
             content="result",
             finish_reason="stop",
             input_tokens=input_tokens,
             output_tokens=output_tokens,
         )
+
+
+def test_providers_model_request_export_points_to_domain_contract() -> None:
+    assert providers.ModelRequest is DomainModelRequest
 
 
 def test_final_docker_stage_user_parser_ignores_comments_and_prior_stages() -> None:

@@ -23,6 +23,7 @@ from aegis_agent_platform.config import ConfigurationError, Settings
 from aegis_agent_platform.domain import EventEnvelope, JsonValue
 from aegis_agent_platform.domain.events import thaw_json
 from aegis_agent_platform.event_store import EventStore, TransientStorageError
+from aegis_agent_platform.gateway.operations import GatewayOperations
 from aegis_agent_platform.identity import (
     PLATFORM_TENANT_ID,
     AuthenticationError,
@@ -76,6 +77,7 @@ class ControlPlaneApp:
         event_store: EventStore | None = None,
         projections: RunStatusReader | None = None,
         storage_ready: Callable[[], Awaitable[bool]] | None = None,
+        gateway_operations: GatewayOperations | None = None,
     ) -> None:
         self._authentication = authentication
         self._authorization = authorization or AuthorizationService()
@@ -85,6 +87,7 @@ class ControlPlaneApp:
         self._event_store = event_store
         self._projections = projections
         self._storage_ready = storage_ready
+        self._gateway_operations = gateway_operations
 
     async def __call__(
         self,
@@ -134,6 +137,19 @@ class ControlPlaneApp:
             return
         if len(segments) == 4 and segments[3] == "policy":
             await self._get_policy(send, principal, tenant_id, correlation_id)
+            return
+        if len(segments) == 4 and segments[3] in {
+            "models",
+            "model-usage",
+            "provider-health",
+        }:
+            await self._get_model_view(
+                send,
+                principal,
+                tenant_id,
+                correlation_id=correlation_id,
+                view=segments[3],
+            )
             return
         if len(segments) == 4 and segments[3] == "ledger":
             try:
@@ -332,6 +348,65 @@ class ControlPlaneApp:
             await _respond(send, 404, {"error": {"code": "policy_not_found"}})
             return
         await _respond(send, 200, _policy_body(policy))
+
+    async def _get_model_view(
+        self,
+        send: Send,
+        principal: Principal,
+        tenant_id: TenantId,
+        *,
+        correlation_id: UUID,
+        view: str,
+    ) -> None:
+        if not await self._authorize(
+            send,
+            principal,
+            tenant_id,
+            Permission.MODEL_READ,
+            correlation_id=correlation_id,
+            resource=f"tenant/{tenant_id}/{view}",
+        ):
+            return
+        if self._gateway_operations is None:
+            await _respond(send, 503, {"error": {"code": "gateway_not_configured"}})
+            return
+        context = TenantContext(tenant_id)
+        policy = self._policies.get(context)
+        if policy is None:
+            await _respond(send, 404, {"error": {"code": "policy_not_found"}})
+            return
+        at = datetime.now(UTC)
+        try:
+            if view == "models":
+                body: dict[str, Any] = {
+                    "models": self._gateway_operations.catalog(
+                        principal,
+                        context,
+                        policy,
+                        at=at,
+                    )
+                }
+            elif view == "model-usage":
+                body = dict(
+                    await self._gateway_operations.usage(
+                        principal,
+                        context,
+                        at=at,
+                    )
+                )
+            else:
+                body = {
+                    "providers": self._gateway_operations.health(
+                        principal,
+                        context,
+                        policy,
+                        at=at,
+                    )
+                }
+        except PermissionError:
+            await _respond(send, 403, {"error": {"code": "permission_denied"}})
+            return
+        await _respond(send, 200, body)
 
     async def _get_ledger(
         self,
@@ -604,9 +679,14 @@ def _policy_body(policy: TenantPolicy) -> dict[str, Any]:
         "version": policy.version,
         "allow": {
             "models": sorted(policy.allowed_models),
+            "providers": sorted(policy.allowed_providers),
             "tools": sorted(policy.allowed_tools),
             "connectors": sorted(policy.allowed_connectors),
             "environments": sorted(policy.allowed_environments),
+            "data_residencies": sorted(policy.allowed_data_residencies),
+        },
+        "data": {
+            "allow_provider_retention": policy.allow_provider_retention,
         },
         "risk": {
             "maximum": policy.max_risk.name.lower(),

@@ -36,6 +36,14 @@ to one logical effect where the external system supports it.
 **Inbox** — Tenant/source/message deduplication record committed in the same
 transaction as the events produced by an incoming delivery.
 
+**Dead-letter queue (DLQ)** — Tenant-scoped projection of work that exhausted
+retry policy or failed permanently. Requeue requires authorization and explicit
+approval; it never rewrites the failure events.
+
+**Delivery count** — Redis pending-entry attempt count used for operations and
+reclaim decisions. It is diagnostic transport metadata, not authoritative work
+attempt state.
+
 **Intent event** — Durable record of an exact planned side effect written before
 attempting it.
 
@@ -48,6 +56,21 @@ not by itself fence stale writers.
 
 **Outbox** — Mutable delivery state committed atomically with causing events. It
 supports at-least-once publication but is not authoritative run state.
+
+**Budget reservation** — Durable worst-case token and cost capacity held before
+a model network effect, then charged and released against normalized actual
+usage under the same worker fence.
+
+**Circuit breaker** — Bounded provider-health state (`closed`, `open`,
+`half_open`) that prevents repeated calls during an outage and admits one
+deterministic recovery probe.
+
+**Pricing version** — Immutable catalog identifier and token-class rates applied
+to one usage record so historical cost never changes when current prices do.
+
+**Billing ambiguity** — State where a provider may have accepted/billed a call
+but Aegis did not receive a trustworthy response; it must be reconciled and is
+not exactly-once billing.
 
 **Projection** — Rebuildable query view derived from the event ledger.
 
@@ -63,6 +86,10 @@ object.
 
 **Reconciliation** — Determining the outcome of an ambiguous external effect
 from idempotency and target state.
+
+**Shared stream** — Layer 4's single bounded Redis Stream. Tenant identity is
+inside a validated envelope; PostgreSQL RLS and leases enforce isolation and
+ownership. The choice bounds Redis cardinality but moves fairness to workers.
 
 **Redaction** — Unconditional removal of credential-, token-, and secret-shaped
 values from audit event details at construction time, not by caller

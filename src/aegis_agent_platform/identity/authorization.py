@@ -15,6 +15,7 @@ ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyTy
                 Permission.TENANT_READ,
                 Permission.RESOURCE_READ,
                 Permission.POLICY_READ,
+                Permission.MODEL_READ,
             }
         ),
         Role.INVESTIGATOR: frozenset(
@@ -23,6 +24,8 @@ ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyTy
                 Permission.RESOURCE_READ,
                 Permission.POLICY_READ,
                 Permission.INVESTIGATION_CREATE,
+                Permission.MODEL_READ,
+                Permission.MODEL_DIAGNOSTIC,
             }
         ),
         Role.APPROVER: frozenset(
@@ -31,6 +34,7 @@ ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyTy
                 Permission.RESOURCE_READ,
                 Permission.POLICY_READ,
                 Permission.APPROVAL_DECIDE,
+                Permission.MODEL_READ,
             }
         ),
         Role.OPERATOR: frozenset(
@@ -39,6 +43,10 @@ ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyTy
                 Permission.RESOURCE_READ,
                 Permission.POLICY_READ,
                 Permission.OPERATION_PROPOSE,
+                Permission.QUEUE_READ,
+                Permission.WORK_CANCEL,
+                Permission.MODEL_READ,
+                Permission.MODEL_DIAGNOSTIC,
             }
         ),
         Role.TENANT_ADMIN: frozenset(
@@ -52,6 +60,12 @@ ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyTy
                 Permission.IDENTITY_MANAGE,
                 Permission.ROLE_BINDING_MANAGE,
                 Permission.SECRET_REFERENCE_MANAGE,
+                Permission.QUEUE_READ,
+                Permission.WORK_CANCEL,
+                Permission.DLQ_REQUEUE,
+                Permission.WORK_RECONCILE,
+                Permission.MODEL_READ,
+                Permission.MODEL_DIAGNOSTIC,
             }
         ),
         Role.PLATFORM_ADMIN: frozenset(
@@ -59,6 +73,7 @@ ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyTy
                 Permission.TENANT_READ,
                 Permission.PLATFORM_TENANT_CREATE,
                 Permission.PLATFORM_AUDIT_READ,
+                Permission.WORK_RECONCILE,
             }
         ),
     }

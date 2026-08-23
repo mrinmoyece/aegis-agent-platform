@@ -3,9 +3,10 @@
 ## Scope and assumptions
 
 This model covers the intended platform and marks control status honestly.
-Layer 1 established contracts; Layer 2 added identity and governance. Layer 3
-adds the durable PostgreSQL ledger, forced RLS, inbox/outbox, projections, and
-live database isolation evidence. The system assumes model output, tool output, retrieved
+Layer 1 established contracts; Layers 2–3 added governance and the ledger.
+Layer 4 adds Redis delivery plus PostgreSQL leases/fencing and live race evidence.
+Layer 5 adds the provider-neutral model gateway and fenced cost governance.
+The system assumes model output, tool output, retrieved
 content, and tenant input can be hostile. Cloud, identity provider, model
 provider, and operator accounts can be compromised. Prompt instructions are
 never trusted as controls.
@@ -42,14 +43,17 @@ never trusted as controls.
 | Identity spoofing | Attacker acts as an operator | OIDC validation, key rotation, audience checks | Standards-correct JWT signature/issuer/audience/expiry/algorithm verification implemented against deterministic fixtures and a Keycloak-compatible JWKS config, with a committed negative-test suite for malformed/expired/wrong-issuer/wrong-audience/unsupported-algorithm tokens; live-IdP key-rotation drills against a running Keycloak remain a deployment-time check |
 | Prompt injection | Model invokes unauthorized tool | Typed tool allowlist, runtime policy, approval | Boundary only |
 | Confused deputy | Tool uses broader platform privilege | Scoped capability token per invocation | Planned |
-| Duplicate delivery | Repeated financial or external effect | Intent event, idempotency key, reconciliation | Inbox deduplication and atomic event/outbox commit implemented; effect reconciliation remains planned |
+| Duplicate delivery | Repeated work or external effect | Intent event, deterministic message identity, inbox, reconciliation | Redis publication and inbox deduplication implemented; future target reconciliation remains required |
+| Stale lease holder | Old worker overwrites a reclaimed result | PostgreSQL token/generation fence on every write | Implemented and live-tested |
+| Queue tenant spoofing | Work executes under another tenant | Tenant-bound envelope plus trusted context and RLS | Implemented; malformed/mismatched envelopes fail closed |
+| Poison queue payload | Parser exploit or supervisor crash | Size/schema bounds and quarantine | Safe decoder and supervisor containment implemented |
 | Event tampering | False state or missing audit evidence | Append controls, hashes/retention, restricted roles | Event/audit update-delete rejected by grants and live-tested triggers; retention and access review remain planned |
 | Sandbox escape | Host or network compromise | Strong isolation, deny-by-default egress, quotas | Boundary only |
 | Secret exfiltration | Credentials in prompts or telemetry | Brokered secrets, redaction, content policy | Secret-reference abstraction, redacted `SecretValue`, and audit-detail redaction implemented; only a local environment-variable provider exists, no vault-backed broker |
-| Provider data leakage | Sensitive content retained externally | Provider policy, classification, regional routing | Planned |
-| Resource exhaustion | Runaway token/tool loop | Budgets, deadlines, queue backpressure, quotas | Pure tenant quota/risk policy evaluator implemented; authoritative usage accounting and runtime enforcement planned with the durable runtime |
+| Provider data leakage | Sensitive content retained externally | Provider policy, classification, regional routing | Retention/residency policy and routing implemented; provider account verification and encrypted content artifacts remain planned |
+| Resource exhaustion | Runaway work or noisy tenant | Deadlines, queue backpressure, global and tenant quotas | Worker and provider concurrency, timeouts, request/token limits, circuits, and fenced model budgets implemented |
 | Supply-chain compromise | Malicious build dependency/action | Pinned actions, review, scanning, attestations | Partial |
-| Telemetry leakage | Tenant data in labels or traces | Redaction and bounded-cardinality conventions | Storage telemetry accepts counts/durations only; end-to-end telemetry remains planned |
+| Telemetry leakage | Tenant data in labels or traces | Redaction and bounded-cardinality conventions | Runtime/model instruments use fixed names and catalog-bounded provider/model labels without tenant/run/request IDs; backend review remains planned |
 | Evaluation poisoning | Unsafe release passes gates | Dataset provenance, immutable results, approvals | Planned |
 | Evidence spoofing | Forged logs or change metadata drives a false hypothesis | Authenticated adapters, immutable references, timestamps, source labeling | Contracts only |
 | Stale correlation | Unrelated deployment is blamed for checkout failures | Explicit time windows, topology, counter-evidence, confidence | Planned |
@@ -156,9 +160,31 @@ vault-backed broker, rotation, or leak-scanning pipeline.
 The ledger, inbox/outbox mechanics, projections, durable Layer 2 repositories,
 and database isolation are implemented and live-tested. This does not prove
 exactly-once effects: no effect adapter exists, and a future crash after target
-acceptance will require idempotency or reconciliation. The outbox has leasing
-and dead-letter representation but no publisher or Redis notifier. Projection
-handlers cover representative typed events; the incident state machine and
-agent scheduler remain absent. The maintenance role requires deployment-time
-credential brokering and approval. Backup, restore, retention, partitioning,
-HA, and regional recovery remain Layer 8.
+acceptance will require idempotency or reconciliation. Layer 4 supplies the
+publisher and Redis notifier. Projection handlers cover representative typed
+events; the incident state machine and agent scheduler remain absent. The
+maintenance role requires deployment-time credential brokering and approval.
+Backup, restore, retention, partitioning, HA, and regional recovery remain
+Layer 8.
+
+## Layer 4 residual risk
+
+Redis is transport and can lose availability without losing PostgreSQL truth, but
+continuous publisher/reconciler deployment is an operational requirement. Shared
+stream fairness is approximate across worker processes. TLS/auth are validated
+for production configuration but managed Redis failover, PostgreSQL HA, backup,
+restore, and multi-region behavior are untested. No external target is called, so
+the intent/result ambiguity protocol is represented but target idempotency and
+reconciliation are not yet proven. Cooperative cancellation does not isolate
+hostile code; sandboxing remains Layer 6.
+
+## Layer 5 residual risk
+
+Provider SDK calls now require tenant policy, catalog capability, health, and a
+fenced durable reservation. Raw content and API keys are excluded from model
+events, logs, metrics, and spans. This does not prove a provider honors retention
+or residency claims, and the environment secret provider is not a vault. There
+is no encrypted durable prompt/response store. A timeout can follow provider
+acceptance and billing; Aegis records ambiguity but cannot automatically
+reconcile a provider invoice. Provider egress, proxy, TLS trust roots, account
+rotation, and live regional failure drills remain deployment evidence.

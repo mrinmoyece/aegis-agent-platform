@@ -18,9 +18,14 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
+  "anthropic>=0.64,<1",
   "cryptography>=45,<49",
+  "jsonschema>=4.25,<5",
+  "openai>=1.99,<3",
+  "opentelemetry-api>=1.36,<2",
   "psycopg[binary]>=3.2.9,<4",
   "pyjwt>=2.10,<3",
+  "redis>=6.4,<7",
   "uvicorn>=0.35,<1",
 ]
 
@@ -32,6 +37,7 @@ dev = [
   "pyyaml>=6.0.2,<7",
   "ruff>=0.12,<1",
   "types-pyyaml>=6.0.12,<7",
+  "types-jsonschema>=4.25,<5",
 ]
 
 [project.urls]
@@ -51,6 +57,8 @@ ignore = ["S101"]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/**" = ["ANN401"]
+"src/aegis_agent_platform/providers/anthropic.py" = ["ANN401"]
+"src/aegis_agent_platform/providers/openai.py" = ["ANN401"]
 "tests/**" = ["ANN201"]
 
 [tool.ruff.format]
@@ -70,6 +78,7 @@ addopts = "--strict-config --strict-markers -q"
 testpaths = ["tests"]
 markers = [
   "integration: requires a live PostgreSQL test database",
+  "redis_integration: requires live PostgreSQL and Redis test services",
 ]
 
 [tool.coverage.run]
@@ -78,6 +87,9 @@ source = ["aegis_agent_platform"]
 omit = [
   "src/aegis_agent_platform/event_store/postgres.py",
   "src/aegis_agent_platform/persistence/postgres.py",
+  "src/aegis_agent_platform/runtime/postgres.py",
+  "src/aegis_agent_platform/gateway/postgres.py",
+  "src/aegis_agent_platform/queueing/redis_streams.py",
 ]
 
 [tool.coverage.report]

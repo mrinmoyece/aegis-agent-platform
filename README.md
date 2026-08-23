@@ -14,14 +14,15 @@ deployments, Kubernetes/runtime changes, and runbooks. This narrow story makes
 durability, evidence provenance, authorization, and safe effects testable end
 to end.
 
-> **Current status: Layer 3 — Durable PostgreSQL ledger.** Layer 2 identity and
-> governance now have production PostgreSQL repositories and live forced-RLS
-> tests. Layer 3 adds additive immutable event envelopes, expected-version
-> atomic append, transactional inbox/outbox, deterministic replay, rebuildable
-> projections/checkpoints, append-only event/audit enforcement, tenant-scoped
-> ledger/timeline read APIs, and PostgreSQL 16 migration/concurrency tests.
-> Redis workers, model calls, live evidence connectors, agent execution, and
-> external effects remain planned. See
+> **Current status: Layer 5 — Provider-neutral model gateway.** Layers 1–4 add
+> tenant-bound work events, a crash-reconcilable PostgreSQL outbox publisher,
+> Redis Streams consumer groups, inbox deduplication, PostgreSQL renewable
+> leases and fencing, fair bounded supervision, quota enforcement, cancellation,
+> timeout/retry/DLQ handling, authorized operations, and live PostgreSQL/Redis
+> race tests. Layer 5 adds OpenAI/Anthropic adapters, a deterministic mock,
+> capability/policy routing, versioned pricing, fenced budget accounting,
+> structured validation, and resilience controls. Specialist reasoning, live
+> connectors, memory, remediation, and tested HA remain planned. See
 > [Limitations and production gaps](docs/limitations.md) for the complete,
 > honest gap list.
 
@@ -41,13 +42,16 @@ to end.
 1. **Foundation:** boundaries, invariants, tooling, local stack.
 2. **Identity and tenancy:** authenticated principals, deny-by-default
    tenant authorization, policy/quota governance, and audit evidence.
-3. **Durable persistence (current):** event ledger, inbox/outbox, projections,
+3. **Durable persistence:** event ledger, inbox/outbox, projections,
    replay, and PostgreSQL tenant controls.
-4. **Workers and leases:** reliable claiming, retries, and recovery.
-5. **Tools and sandboxing:** policy-gated effects and isolation.
-6. **Memory and retrieval:** tenant-safe context with provenance.
-7. **Evaluation and observability:** quality gates, traces, and cost signals.
-8. **Enterprise operations:** resilience, governance, and deployment evidence.
+4. **Workers and leases:** reliable delivery, fencing, retries,
+   cancellation, DLQ, and recovery.
+5. **Model gateway (current):** provider abstraction, routing, budgets, metering,
+   retry/failover, and structured outputs.
+6. **Tools and sandboxing:** policy-gated effects and isolation.
+7. **Memory and retrieval:** tenant-safe context with provenance.
+8. **Evaluation and observability:** quality gates and production signals.
+9. **Enterprise operations:** resilience, governance, and deployment evidence.
 
 Across these layers the checkout-failure demo grows from fixture-backed evidence
 to durable investigation, approval-gated rollback, recovery verification, and
@@ -99,10 +103,15 @@ See [Getting started](docs/getting-started.md) for the tutorial,
 [Architecture](docs/architecture.md) for the system boundaries, and the
 [identity and tenancy tutorial](docs/identity-tenancy.md) for a hands-on
 walkthrough of authentication, authorization, policy, quotas, audit, and
-secrets. The [Staff-level curriculum](docs/curriculum.md),
+secrets. [Reliable distributed work](docs/worker-runtime.md) covers Redis
+Streams, fencing, backpressure, cancellation, reconciliation, and DLQ
+operations. The [Staff-level curriculum](docs/curriculum.md),
 [demo scripts](docs/demo-script.md), and
 [interview question bank](docs/interview-question-bank.md) turn the roadmap
 into a structured learning path.
+[Provider-neutral model gateway](docs/model-gateway.md) covers provider
+translation, routing, fenced budgets, structured output, failover, and billing
+ambiguity.
 
 ## Repository map
 
@@ -111,6 +120,10 @@ src/aegis_agent_platform/  Importable platform boundaries
   integrations/            Typed future integration ports; no connectors yet
   agents/                  Fixed roles and typed coordination artifacts
   event_store/             PostgreSQL ledger, inbox/outbox, and projections
+  queueing/                Redis Streams and outbox publication
+  runtime/                 Fenced leases, supervisor, and operator controls
+  gateway/                 Catalog, routing, budgets, resilience, and metering
+  providers/               Neutral protocol plus OpenAI/Anthropic/mock adapters
   persistence/             PostgreSQL identity/governance repositories
 tests/                     Fast foundation and architecture tests
 docs/                      Architecture, threat model, roadmap, and ADRs

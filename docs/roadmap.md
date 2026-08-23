@@ -79,25 +79,45 @@ RLS, immutable rows, audit redaction, replay, and projection rebuild.
 **Acceptance gate:** persistence and replay mechanics are done. No external effect
 path is implemented yet; later layers must consume
 `effect.intent_recorded.v1` before adding any effect. Deterministic incident state
-transitions, fixture-backed investigation behavior, Redis workers, and agent
-execution remain Layer 4+ work rather than being falsely claimed here.
+transitions, fixture-backed investigation behavior, and agent execution remain
+future work. Redis workers are implemented separately in Layer 4.
 
-## Layer 4 — Workers, leases, and providers
+## Layer 4 — Workers and leases
 
-Implement durable work claiming, fenced renewable leases, retry policy,
-provider-neutral model adapters, metering, idempotent provider calls, and
-read-only Dynatrace/GitHub connectors for telemetry, topology, changes, pull
-requests, and deployments. Add coordinator scheduling for a validated dependency
-DAG with fixed per-role capability, budget, and timeout envelopes.
+Implement durable publication/consumption, fenced renewable leases, bounded
+workers, fair tenant scheduling, cancellation, retry/DLQ, and reconciliation.
 
-**Acceptance gate:** duplicate delivery, lease expiry, worker death, timeout,
-rate-limit, and ambiguous provider outcomes recover without concurrent ownership
-or lost work. Connector contract tests replay the canonical incident without
-requiring live vendor accounts. Parallel investigation tests prove deterministic
-aggregation regardless of completion order, and failed or timed-out specialists
-cannot exceed their limits or silently disappear from the incident record.
+**Status:** the distributed execution substrate is implemented and live-tested.
+PostgreSQL remains authoritative; Redis Streams is shared at-least-once
+transport. Provider calls, connectors, coordinator/specialist reasoning, and
+remediation are intentionally deferred.
 
-## Layer 5 — Tools, policy, and sandbox
+**Acceptance gate:** duplicate delivery, lease expiry/reclaim, stale writers,
+publisher restart windows, cancellation races, timeout/retry exhaustion, poison
+messages, and DLQ operations have deterministic or live-service evidence.
+Provider controls and ambiguous-outcome recording are implemented separately in
+Layer 5. Connector fixtures and deterministic specialist aggregation remain
+future work and are not claimed by this worker layer.
+
+## Layer 5 — Provider-neutral model gateway
+
+Implement neutral content/message/tool/schema contracts, OpenAI and Anthropic
+adapters, a deterministic fake, explicit catalog/pricing, tenant policy routing,
+fenced pre-call budget reservation, usage reconciliation, structured validation,
+retry/failover/rate/concurrency/circuit controls, redacted telemetry, and bounded
+operator views.
+
+**Status:** implemented in `domain.model`, `providers`, `gateway`, migration
+`0004_model_gateway.sql`, and deterministic adapter/routing/budget evaluations.
+No live provider call runs in CI.
+
+**Acceptance gate:** unknown models/prices deny; intent and reservation precede
+network; stale workers cannot call/charge/surface responses; permanent failures
+do not retry; fallback is bounded; usage retains its price version; prompts and
+keys never enter model events or telemetry; ambiguous provider billing is
+reported rather than treated as exactly once.
+
+## Layer 6 — Tools, policy, and sandbox
 
 Add typed tool contracts, policy decisions, approvals, capability-scoped
 credentials, an incident proposal/approval workflow, and isolated execution with
@@ -109,7 +129,7 @@ authorization; sandbox escape and egress tests fail closed; every effect is
 attributable to an approved intent; the checkout rollback cannot execute before
 valid approval.
 
-## Layer 6 — Memory and retrieval
+## Layer 7 — Memory and retrieval
 
 Add tenant-scoped short- and long-term memory, pgvector retrieval, provenance,
 classification, retention, export, and deletion workflows. Index runbooks and
@@ -123,7 +143,7 @@ retrieved item has provenance; deletion and retention behavior is auditable.
 Compaction tests preserve material evidence, uncertainty, conflict, approval
 state, and budgets, and semantic retrieval cannot cross tenants.
 
-## Layer 7 — Evaluation and observability
+## Layer 8 — Evaluation and observability
 
 Add versioned datasets, offline and online evaluation, release gates, traces,
 metrics, logs, cost accounting, and safe content handling. Score hypothesis
@@ -134,7 +154,7 @@ and recovery verification on checkout-failure variants.
 event-to-trace correlation works; telemetry contains no disallowed content or
 unbounded tenant labels.
 
-## Layer 8 — Enterprise operations
+## Layer 9 — Enterprise operations
 
 Add deployment automation, SLOs, alerting, runbooks, backup and restore, HA,
 capacity tests, software provenance, signing, governance evidence, and incident

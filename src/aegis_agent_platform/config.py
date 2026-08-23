@@ -35,6 +35,12 @@ class Settings:
     oidc_jwks_url: str = ""
     oidc_audience: str = ""
     oidc_clock_skew_seconds: int = 30
+    redis_max_connections: int = 32
+    redis_connect_timeout_seconds: float = 2.0
+    redis_socket_timeout_seconds: float = 5.0
+    worker_max_concurrency: int = 16
+    worker_lease_seconds: int = 30
+    worker_heartbeat_seconds: int = 10
 
     def __post_init__(self) -> None:
         """Enforce invariants for every construction path."""
@@ -65,6 +71,25 @@ class Settings:
             raise ConfigurationError(
                 "AEGIS_OIDC_CLOCK_SKEW_SECONDS must be an integer"
             ) from error
+        try:
+            redis_max_connections = int(values.get("AEGIS_REDIS_MAX_CONNECTIONS", "32"))
+            redis_connect_timeout_seconds = float(
+                values.get("AEGIS_REDIS_CONNECT_TIMEOUT_SECONDS", "2")
+            )
+            redis_socket_timeout_seconds = float(
+                values.get("AEGIS_REDIS_SOCKET_TIMEOUT_SECONDS", "5")
+            )
+            worker_max_concurrency = int(
+                values.get("AEGIS_WORKER_MAX_CONCURRENCY", "16")
+            )
+            worker_lease_seconds = int(values.get("AEGIS_WORKER_LEASE_SECONDS", "30"))
+            worker_heartbeat_seconds = int(
+                values.get("AEGIS_WORKER_HEARTBEAT_SECONDS", "10")
+            )
+        except ValueError as error:
+            raise ConfigurationError(
+                "Redis and worker numeric settings must be numbers"
+            ) from error
 
         return cls(
             environment=environment,
@@ -87,6 +112,12 @@ class Settings:
                 "",
             ),
             oidc_clock_skew_seconds=clock_skew_seconds,
+            redis_max_connections=redis_max_connections,
+            redis_connect_timeout_seconds=redis_connect_timeout_seconds,
+            redis_socket_timeout_seconds=redis_socket_timeout_seconds,
+            worker_max_concurrency=worker_max_concurrency,
+            worker_lease_seconds=worker_lease_seconds,
+            worker_heartbeat_seconds=worker_heartbeat_seconds,
         )
 
     def validate(self) -> None:
@@ -101,6 +132,30 @@ class Settings:
             raise ConfigurationError(
                 "AEGIS_OIDC_CLOCK_SKEW_SECONDS must be between 0 and 300"
             )
+        if not 1 <= self.redis_max_connections <= 1_000:
+            raise ConfigurationError(
+                "AEGIS_REDIS_MAX_CONNECTIONS must be between 1 and 1000"
+            )
+        if not 0.1 <= self.redis_connect_timeout_seconds <= 30:
+            raise ConfigurationError(
+                "AEGIS_REDIS_CONNECT_TIMEOUT_SECONDS must be between 0.1 and 30"
+            )
+        if not 0.1 <= self.redis_socket_timeout_seconds <= 60:
+            raise ConfigurationError(
+                "AEGIS_REDIS_SOCKET_TIMEOUT_SECONDS must be between 0.1 and 60"
+            )
+        if not 1 <= self.worker_max_concurrency <= 1_000:
+            raise ConfigurationError(
+                "AEGIS_WORKER_MAX_CONCURRENCY must be between 1 and 1000"
+            )
+        if not 5 <= self.worker_lease_seconds <= 3_600:
+            raise ConfigurationError(
+                "AEGIS_WORKER_LEASE_SECONDS must be between 5 and 3600"
+            )
+        if not 1 <= self.worker_heartbeat_seconds < self.worker_lease_seconds:
+            raise ConfigurationError(
+                "worker heartbeat must be positive and shorter than its lease"
+            )
         if self.environment is Environment.PRODUCTION:
             required = {
                 "AEGIS_DATABASE_URL": self.database_url,
@@ -113,4 +168,8 @@ class Settings:
             if missing:
                 raise ConfigurationError(
                     "production requires: " + ", ".join(sorted(missing))
+                )
+            if not self.redis_url.startswith("rediss://"):
+                raise ConfigurationError(
+                    "production AEGIS_REDIS_URL must use rediss:// TLS"
                 )

@@ -13,12 +13,12 @@ Status meanings:
 | Architecture dependency rule | Implemented | `tests/test_architecture.py` |
 | Liveness and configuration readiness | Implemented | control-plane ASGI tests |
 | Local pgvector PostgreSQL | Implemented | Compose plus live PostgreSQL 16 tests |
-| Local Redis | Scaffolded | `compose.yaml` |
+| Local Redis transport | Implemented | Redis Streams adapter, Compose, live tests |
 | Local OIDC realm | Scaffolded | Keycloak import |
 | OTLP, Prometheus, and Grafana topology | Scaffolded | `deploy/` |
 | Dynatrace evidence read contract | Scaffolded | `integrations.dynatrace` |
 | GitHub delivery evidence read contract | Scaffolded | `integrations.github` |
-| Live Dynatrace and GitHub connectors | Planned | Layer 4 |
+| Live Dynatrace and GitHub connectors | Planned | Future connector layer |
 | Checkout-failure incident investigation | Planned | Layers 3–7 |
 | Approval-gated rollback and recovery verification | Planned | Layers 5–7 |
 | Fixed incident specialist roles and typed artifacts | Scaffolded | `agents` |
@@ -47,17 +47,26 @@ Status meanings:
 | EP-02 durable Postgres RLS enforcement proven against a live database | Implemented | `tests/integration/test_postgres_storage.py` forced-RLS and append-only coverage |
 | Durable Postgres-backed identity/tenant/policy/audit adapters | Implemented | `persistence.postgres`, live RLS/audit tests |
 | Vault-backed secret broker with rotation | Planned | Layer 5 |
-| Quota usage accounting projection | Implemented | Rebuildable usage view; runtime emission planned |
+| Quota usage accounting projection | Implemented | Model usage events plus rebuildable versioned-cost view |
 | Append-only event store | Implemented | `PostgresEventStore`, migration `0002`, live race/immutability tests |
 | Additive event compatibility | Implemented | additive defaults and legacy fixture replay |
-| Deterministic run state machine | Planned | Layer 4; generic run-status projection exists |
-| Intent-before-side-effect enforcement | Scaffolded | typed intent/result events; no effect path exists |
+| Deterministic incident state machine | Planned | Specialist runtime; generic run-status projection exists |
+| Intent-before-model-side-effect enforcement | Implemented | fenced model request/reservation before SDK call |
 | Transactional inbox/outbox | Implemented | deduplication, atomic append, claims, retry/DLQ |
 | Rebuildable projections/checkpoints | Implemented | run/artifact/approval/usage/tenant views |
 | Authorized ledger/timeline inspection | Implemented | tenant-scoped redacted read-only API |
-| Durable queue and fenced leases | Planned | Layer 4 |
-| Retry, timeout, dead-letter, and recovery policy | Planned | Layer 4 |
-| Provider adapters and normalized metering | Planned | Layer 4 |
+| Durable queue and fenced leases | Implemented | `queueing`, `runtime.postgres`, migration `0003`, live race tests |
+| Retry, timeout, dead-letter, and recovery policy | Implemented | `runtime.WorkerSupervisor`, deterministic tests |
+| Authorized queue/cancel/DLQ/reconcile operations | Implemented | `runtime.operations`; payload-free bounded views |
+| Bounded runtime metrics and OTel spans | Implemented | `observability.runtime`; no identifier labels |
+| Provider-neutral model contracts and deterministic fake | Implemented | `domain.model`, `providers.fake` |
+| OpenAI and Anthropic official-SDK adapters | Implemented | isolated adapters plus mocked-transport tests |
+| Capability/policy/cost/latency routing | Implemented | deterministic fail-closed `ModelRouter` |
+| Versioned pricing and fenced budget reconciliation | Implemented | migration `0004`, gateway repository/events |
+| Structured output and tool-argument validation | Implemented | Draft 2020-12 strict validation |
+| Provider retry/failover/rate/concurrency/circuit controls | Implemented | deterministic clocks/backoff and state tests |
+| Exactly-once provider billing | Planned | providers can bill ambiguous accepted calls; reconciliation required |
+| Encrypted durable prompt/response artifacts | Planned | Layer 7 privacy/memory work |
 | Tool schema registry and runtime policy | Planned | Layer 5 |
 | Human approval and break-glass audit | Planned | Layer 5 |
 | Isolated sandbox with egress policy and quotas | Planned | Layer 5 |
@@ -67,7 +76,8 @@ Status meanings:
 | Data retention, export, and erasure workflows | Planned | Layer 6 |
 | Offline evaluation datasets and baselines | Planned | Layer 7 |
 | Online quality, safety, latency, and cost signals | Planned | Layer 7 |
-| Trace/event correlation and content redaction | Planned | Layer 7 |
+| Model span/metric content redaction | Implemented | bounded catalog labels; no prompt/tenant/request labels |
+| End-to-end trace/event correlation | Planned | Layer 8 |
 | SLOs, alerts, runbooks, backup, and restore evidence | Planned | Layer 8 |
 | HA deployment and capacity evidence | Planned | Layer 8 |
 | SBOM, provenance, image signing, and release policy | Planned | Layer 8 |

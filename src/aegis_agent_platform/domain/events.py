@@ -27,6 +27,10 @@ class _StringConstant(str):
         except KeyError as error:
             raise ValueError(f"{value!r} is not a valid {cls.__name__}") from error
 
+    @property
+    def value(self) -> str:
+        return str(self)
+
     @classmethod
     def _define(cls, value: str) -> Self:
         member: Self = str.__new__(cls, value)
@@ -64,6 +68,33 @@ class DomainEventType(_StringConstant):
     SIDE_EFFECT_FAILED: ClassVar[DomainEventType]
     OUTBOX_DEAD_LETTERED: ClassVar[DomainEventType]
     TENANT_REGISTERED: ClassVar[DomainEventType]
+    WORK_REQUESTED: ClassVar[DomainEventType]
+    WORK_PUBLISHED: ClassVar[DomainEventType]
+    WORK_CLAIMED: ClassVar[DomainEventType]
+    WORK_STARTED: ClassVar[DomainEventType]
+    WORK_HEARTBEAT: ClassVar[DomainEventType]
+    WORK_LEASE_EXPIRED: ClassVar[DomainEventType]
+    WORK_SUCCEEDED: ClassVar[DomainEventType]
+    WORK_FAILED: ClassVar[DomainEventType]
+    WORK_RETRY_SCHEDULED: ClassVar[DomainEventType]
+    WORK_CANCEL_REQUESTED: ClassVar[DomainEventType]
+    WORK_CANCELLED: ClassVar[DomainEventType]
+    WORK_DEAD_LETTERED: ClassVar[DomainEventType]
+    WORK_RECONCILED: ClassVar[DomainEventType]
+    MODEL_CALL_REQUESTED: ClassVar[DomainEventType]
+    MODEL_CALL_STARTED: ClassVar[DomainEventType]
+    MODEL_CALL_ATTEMPTED: ClassVar[DomainEventType]
+    MODEL_CALL_SUCCEEDED: ClassVar[DomainEventType]
+    MODEL_CALL_FAILED: ClassVar[DomainEventType]
+    MODEL_CALL_TIMED_OUT: ClassVar[DomainEventType]
+    MODEL_CALL_RATE_LIMITED: ClassVar[DomainEventType]
+    MODEL_CALL_CANCELLED: ClassVar[DomainEventType]
+    MODEL_USAGE_RECORDED: ClassVar[DomainEventType]
+    MODEL_ROUTE_DECIDED: ClassVar[DomainEventType]
+    MODEL_FALLBACK_SELECTED: ClassVar[DomainEventType]
+    MODEL_BUDGET_RESERVED: ClassVar[DomainEventType]
+    MODEL_BUDGET_RELEASED: ClassVar[DomainEventType]
+    MODEL_BUDGET_CHARGED: ClassVar[DomainEventType]
 
 
 DomainEventType.INVESTIGATION_REQUESTED = DomainEventType._define(
@@ -86,6 +117,59 @@ DomainEventType.OUTBOX_DEAD_LETTERED = DomainEventType._define(
     "delivery.outbox_dead_lettered.v1"
 )
 DomainEventType.TENANT_REGISTERED = DomainEventType._define("tenant.registered.v1")
+DomainEventType.WORK_REQUESTED = DomainEventType._define("work.requested.v1")
+DomainEventType.WORK_PUBLISHED = DomainEventType._define("work.published.v1")
+DomainEventType.WORK_CLAIMED = DomainEventType._define("work.claimed.v1")
+DomainEventType.WORK_STARTED = DomainEventType._define("work.started.v1")
+DomainEventType.WORK_HEARTBEAT = DomainEventType._define("work.heartbeat.v1")
+DomainEventType.WORK_LEASE_EXPIRED = DomainEventType._define("work.lease_expired.v1")
+DomainEventType.WORK_SUCCEEDED = DomainEventType._define("work.succeeded.v1")
+DomainEventType.WORK_FAILED = DomainEventType._define("work.failed.v1")
+DomainEventType.WORK_RETRY_SCHEDULED = DomainEventType._define(
+    "work.retry_scheduled.v1"
+)
+DomainEventType.WORK_CANCEL_REQUESTED = DomainEventType._define(
+    "work.cancel_requested.v1"
+)
+DomainEventType.WORK_CANCELLED = DomainEventType._define("work.cancelled.v1")
+DomainEventType.WORK_DEAD_LETTERED = DomainEventType._define("work.dead_lettered.v1")
+DomainEventType.WORK_RECONCILED = DomainEventType._define("work.reconciled.v1")
+DomainEventType.MODEL_CALL_REQUESTED = DomainEventType._define(
+    "model.call_requested.v1"
+)
+DomainEventType.MODEL_CALL_STARTED = DomainEventType._define("model.call_started.v1")
+DomainEventType.MODEL_CALL_ATTEMPTED = DomainEventType._define(
+    "model.call_attempted.v1"
+)
+DomainEventType.MODEL_CALL_SUCCEEDED = DomainEventType._define(
+    "model.call_succeeded.v1"
+)
+DomainEventType.MODEL_CALL_FAILED = DomainEventType._define("model.call_failed.v1")
+DomainEventType.MODEL_CALL_TIMED_OUT = DomainEventType._define(
+    "model.call_timed_out.v1"
+)
+DomainEventType.MODEL_CALL_RATE_LIMITED = DomainEventType._define(
+    "model.call_rate_limited.v1"
+)
+DomainEventType.MODEL_CALL_CANCELLED = DomainEventType._define(
+    "model.call_cancelled.v1"
+)
+DomainEventType.MODEL_USAGE_RECORDED = DomainEventType._define(
+    "model.usage_recorded.v1"
+)
+DomainEventType.MODEL_ROUTE_DECIDED = DomainEventType._define("model.route_decided.v1")
+DomainEventType.MODEL_FALLBACK_SELECTED = DomainEventType._define(
+    "model.fallback_selected.v1"
+)
+DomainEventType.MODEL_BUDGET_RESERVED = DomainEventType._define(
+    "model.budget_reserved.v1"
+)
+DomainEventType.MODEL_BUDGET_RELEASED = DomainEventType._define(
+    "model.budget_released.v1"
+)
+DomainEventType.MODEL_BUDGET_CHARGED = DomainEventType._define(
+    "model.budget_charged.v1"
+)
 
 
 @dataclass(frozen=True, slots=True)

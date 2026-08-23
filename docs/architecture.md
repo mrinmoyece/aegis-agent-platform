@@ -5,10 +5,11 @@
 Aegis separates decision-making from effects so an interrupted incident
 investigation can be explained, resumed, and audited. Its reference product is
 an enterprise incident-response agent. Layer 1 established package and trust
-boundaries. Layer 2 adds identity, tenancy, and governance. Layer 3 adds the
-production PostgreSQL event ledger, inbox/outbox, rebuildable projections,
-durable Layer 2 repositories, forced-RLS evidence, and authorized inspection.
-Connectors, workers, investigation execution, and models arrive later.
+boundaries. Layers 2–3 add identity/governance and the PostgreSQL ledger.
+Layer 4 adds Redis Streams delivery, PostgreSQL-authoritative leases/fencing,
+bounded fair workers, cancellation, retry/DLQ, and reconciliation protocols.
+Layer 5 adds the provider-neutral model gateway and cost governance. Connectors,
+investigation execution, tools, and remediation arrive later.
 
 ```mermaid
 flowchart LR
@@ -30,9 +31,45 @@ flowchart LR
   W -. telemetry .-> O
 ```
 
-Dashed paths are diagnostic, never authoritative. The Dynatrace and GitHub
-packages currently define read ports only. The event store is implemented; the
-durable queue worker, runtime, providers, and connector adapters remain planned.
+Dashed paths are diagnostic, never authoritative. PostgreSQL is truth; Redis is
+only at-least-once transport. Queue/lease and model gateway execution are
+implemented. Specialist, connector, tool, and remediation execution remain
+planned.
+
+## Model gateway data flow
+
+The Layer 5 flow is documented in
+[Provider-neutral model gateway](model-gateway.md). Route decision,
+`model.call_requested.v1`, and `model.budget_reserved.v1` commit under the
+current worker fence before an OpenAI/Anthropic network call. Result, normalized
+usage, versioned charge, and released capacity commit under the same fence
+before a response is surfaced. PostgreSQL migration `0004_model_gateway.sql`
+adds RLS-protected reservation and usage projections; events remain truth.
+
+## Distributed delivery and worker data flow
+
+```mermaid
+sequenceDiagram
+  participant C as Authorized caller
+  participant P as PostgreSQL ledger/outbox
+  participant O as Outbox publisher
+  participant R as Redis Stream
+  participant W as Worker supervisor
+  C->>P: append work.requested.v1 + outbox
+  O->>P: bounded SKIP LOCKED claim
+  O->>R: XADD deterministic message_id
+  O->>P: mark published
+  R-->>W: consumer-group delivery
+  W->>P: inbox dedup + published event
+  W->>P: CAS lease claim (token, generation, expiry)
+  W->>P: fenced start / heartbeat / outcome
+  W->>R: XACK only after durable outcome
+```
+
+A crash after `XADD` but before PostgreSQL acknowledgement republishes the same
+logical message. The inbox absorbs duplicates. Redis ownership never authorizes
+a result: every state-changing worker append checks the current PostgreSQL lease
+token and generation. See [Reliable distributed work](worker-runtime.md).
 
 ## Package boundaries
 
@@ -55,7 +92,8 @@ flowchart TB
 
 `domain` imports no other platform package. Infrastructure-facing packages
 depend inward on domain types. PostgreSQL adapters live under `event_store` and
-`persistence`; database/vendor types never enter domain contracts.
+`persistence`; model SDKs are isolated to `providers/openai.py` and
+`providers/anthropic.py`; database/vendor types never enter domain contracts.
 
 `integrations.dynatrace` and `integrations.github` expose provider-neutral,
 tenant-scoped evidence contracts. Future adapters will translate vendor APIs at
@@ -134,9 +172,9 @@ ceilings, tenant-period token/cost ceilings, and a concurrency ceiling).
 combines allowlist checks, risk comparison, and quota arithmetic against
 caller-supplied `QuotaUsage` to return an auditable `PolicyDecision`
 (`allow`/`deny`/`require_approval`, reasons, and required approver roles).
-Quota *usage* accounting itself — the authoritative counters this evaluator
-consumes — is a durable-runtime concern and remains planned with the Layer
-3/4 event store and worker runtime.
+Layer 5 now records authoritative model token/cost usage and maintains a
+rebuildable budget projection. Other quota classes remain caller-supplied until
+their runtimes emit durable usage.
 
 **Audit (`audit`).** Security events use additive, versioned type names
 (`security.authentication_outcome.v1`, `security.authorization_decision.v1`,
@@ -173,12 +211,13 @@ these adapters; the demo application does not silently open a database.
 behind a small route set: `/healthz` and `/health/live` for liveness,
 `/readyz` and `/health/ready` for configuration readiness (unauthenticated, as
 in Layer 1), `/v1/me` returning the authenticated principal's tenant and active
-roles, tenant and policy routes, plus bounded redacted ledger, run-timeline, and
-run-status projection reads. Every `/v1/*` route requires a valid bearer token,
-but `/v1/me` returns immediately after authentication; the tenant-scoped routes
-also require a passing authorization decision. Authentication outcomes, and
-authorization outcomes where authorization runs, are recorded as audit events
-before a response is returned. No other `/v1/*`
+roles, tenant and policy routes, bounded model catalog/usage/provider-health
+views, plus bounded redacted ledger, run-timeline, and run-status projection
+reads. Every `/v1/*` route requires a valid bearer token; `/v1/me` returns
+immediately after authentication, while the tenant-scoped routes also require a
+passing authorization decision. Authentication outcomes, and authorization
+outcomes where authorization runs, are recorded as audit events before a
+response is returned. No other `/v1/*`
 surface should be assumed until it appears in the code and its tests.
 
 ## Canonical incident: checkout failures after deployment
@@ -324,10 +363,11 @@ Crashes between steps are expected. Recovery reads the event stream and either
 retries safely or reconciles an ambiguous effect. A trace or queue message
 cannot replace the committed intent.
 
-Layer 3 implements the ledger and intent/result contracts, but no external
-effect caller. Events and outbox work commit atomically; inbox identity
-deduplicates delivery. Outbox leases and dead-letter status are delivery
-projections, not truth. See `durable-execution.md` and ADR 0010.
+Layer 3 implements the ledger and intent/result contracts; Layer 4 delivers and
+fences work but still has no external effect caller. Events and outbox work
+commit atomically; inbox identity deduplicates delivery. Outbox and dead-letter
+status are projections, not truth. See `durable-execution.md`,
+`worker-runtime.md`, and ADR 0010/0011.
 
 ## Binding invariants
 

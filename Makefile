@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install format format-check lint type test postgres-test docs-check manifest-check migration-check check compose-config container-check
+.PHONY: help install format format-check lint type test postgres-test integration-test docs-check manifest-check migration-check check compose-config container-check
 
 PYTHON ?= python3
 
@@ -26,6 +26,9 @@ test: ## Run deterministic unit tests with coverage
 	$(PYTHON) -m pytest --cov --cov-report=term-missing
 
 postgres-test: ## Run live PostgreSQL integration tests (requires AEGIS_TEST_DATABASE_URL)
+	$(PYTHON) -m pytest tests/integration
+
+integration-test: ## Run live PostgreSQL and Redis integration tests
 	$(PYTHON) -m pytest tests/integration
 
 docs-check: ## Validate documentation links and required content

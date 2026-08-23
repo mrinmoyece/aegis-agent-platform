@@ -45,14 +45,27 @@ automated negative-test suite: `tests/test_identity_security.py`,
    `migrations/0001_identity_governance.sql`'s row-level-security policies and
    append-only audit trigger.
 
+## Layer 3–4 lab: durable delivery and fenced workers
+
+**Implemented.**
+
+1. Run `tests/integration` against disposable PostgreSQL and Redis services.
+2. Observe two workers race one work ID and only one PostgreSQL claim commit.
+3. Renew the lease, release/reclaim it, then attempt a stale started append and
+   observe `FencingError`.
+4. Publish the same deterministic message identity twice and observe inbox
+   deduplication and no terminal-state regression.
+5. Add a malformed stream entry and observe poison rejection before a handler.
+6. Run `tests/test_worker_runtime.py` to inspect fairness, backoff, cancellation,
+   worker-bug containment, authorization, and bounded telemetry.
+
 ## Planned labs by layer
 
 | Layer | Lab | Failure injection and evidence |
 | --- | --- | --- |
-| 2 | Live-Keycloak drill | Exercise `RemoteJwksProvider` against a real Keycloak realm with rotated keys; the PostgreSQL forced-RLS and append-only trigger coverage already runs live in `tests/integration/test_postgres_storage.py` |
-| 3 | Durable investigation | Crash after each event append; replay identical incident state |
+| 2 | Live-Keycloak drill | Forced RLS policies and the append-only trigger already run against live PostgreSQL in integration tests; the remaining gap is exercising `RemoteJwksProvider` against a real Keycloak realm with rotated keys |
+| 3 | Incident-specific durable investigation | Crash after each coordinator transition; replay identical incident state |
 | 3 | Schema evolution | Replay old checkout fixtures through additive upcasters |
-| 4 | Lease recovery | Pause a worker past expiry; prove stale fence rejection |
 | 4 | Connector ambiguity | Rate-limit and truncate Dynatrace/GitHub responses; preserve provenance and partial status |
 | 4 | Deterministic parallelism | Randomize specialist completion order; obtain the same aggregate |
 | 5 | Approval binding | Replay approval against another proposal, tenant, and expiry; deny all |

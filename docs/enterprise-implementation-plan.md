@@ -39,12 +39,13 @@ flowchart LR
   L1[Layer 1: contracts and local stack]
   L2[Identity, tenancy, RBAC]
   L3[Event ledger and orchestration]
-  L4[Workers, providers, read connectors]
-  L5[Policy, approvals, tools, sandbox]
-  L6[Memory and retrieval]
-  L7[Evals and observability]
-  L8[Enterprise operations and protocols]
-  L1 --> L2 --> L3 --> L4 --> L5 --> L6 --> L7 --> L8
+  L4[Workers and leases]
+  L5[Model gateway]
+  L6[Policy, approvals, tools, sandbox]
+  L7[Memory and retrieval]
+  L8[Evals and observability]
+  L9[Enterprise operations and protocols]
+  L1 --> L2 --> L3 --> L4 --> L5 --> L6 --> L7 --> L8 --> L9
   L3 --> L5
   L4 --> L7
   L2 --> L6
@@ -66,7 +67,7 @@ Each slice is intended to be a reviewable PR with one primary acceptance gate.
 | EP-04 | 3 | Deterministic incident state machine and projections | EP-03 | crash-point replay and projection rebuild |
 | EP-05 | 3 | Transactional command, intent, inbox, and outbox handling | EP-03 | duplicate and ambiguous-effect recovery tests |
 | EP-06 | 4 | Fenced lease queue and worker lifecycle | EP-03 | stale-writer, renewal, worker-death, and DLQ tests |
-| EP-07 | 4 | Provider routing, budgets, metering, and reconciliation | EP-05, EP-06 | adapter contract and cost-limit tests |
+| EP-07 | 5 | Provider routing, budgets, metering, and reconciliation | EP-05, EP-06 | adapter contract and cost-limit tests |
 | EP-08 | 4 | Dynatrace, GitHub, Kubernetes, and runbook read adapters | EP-02, EP-06 | fixture, rate-limit, pagination, provenance tests |
 | EP-09 | 4 | Coordinator DAG and fixed specialist runtime | EP-04, EP-06, EP-07, EP-08 | deterministic parallel aggregation and timeout tests |
 | EP-10 | 5 | Policy engine, exact approvals, and controlled tools | EP-05, EP-09 | no-action-before-approval and replay-denial tests |
@@ -131,6 +132,31 @@ RLS denial, replay, inbox deduplication, outbox claim/dead-letter behavior, and
 projection rebuild. The incident-specific state machine, external effects, and
 ambiguous-effect reconciliation remain planned; their exit gates are not claimed.
 
+**Layer 4 worker delivery status (2026-08):** EP-06 is implemented for reliable
+work delivery: shared Redis Streams, deterministic message identity, PostgreSQL
+inbox/outbox, CAS leases with token/generation fencing, heartbeat/reclaim,
+bounded fair supervision, Layer 2 concurrency quotas, cancellation, timeout,
+retry/DLQ, authorized operations, reconciliation protocol, fixed telemetry, and
+live Redis/PostgreSQL races. EP-07 is implemented in Layer 5 with neutral contracts, OpenAI/Anthropic/mock
+adapters, tenant routing, fenced reservations, versioned charges, resilience,
+strict schemas, and deterministic evaluations. EP-08 connectors and EP-09
+specialist/coordinator execution remain planned.
+
+### EP-07 implemented evidence
+
+- `model.call_requested.v1` and `model.budget_reserved.v1` precede provider I/O;
+  all gateway events are additive and legacy replay is unchanged.
+- Migration `0004_model_gateway.sql` adds forced-RLS reservation/usage
+  projections with tenant serialization, request/idempotency uniqueness, worker
+  lease token/generation, and retained pricing version.
+- Mocked SDK transports and scripted providers cover normalized messages/tools,
+  structured output/refusal, usage classes, classified errors,
+  timeout/cancellation, retry/fallback/circuits/rate/concurrency limits, budget
+  races, stale fences, refunds, malformed returns, redaction, and replay.
+- Raw prompts, tool values, images, keys, and SDK exception text are absent from
+  events/telemetry. Billing ambiguity and missing encrypted response persistence
+  remain explicit residual risks.
+
 ### Storage model
 
 PostgreSQL is the initial correctness store:
@@ -194,16 +220,16 @@ intent.
 
 ### Provider routing
 
-- Implement provider adapters behind normalized request, response, streaming,
-  usage, safety, and error contracts.
+- Implement provider adapters behind normalized request, response, usage,
+  safety, and error contracts. Streaming remains a later additive contract.
 - Route using tenant policy, data classification, region, model capability,
   latency, availability, and budget—not model-generated preference.
-- Enforce per-run, per-tenant, and global token/cost ceilings before calls and
-  while streaming.
+- Enforce per-run and per-tenant-period token/cost ceilings before calls. Global
+  fleet ceilings and streaming enforcement remain planned.
 - Record provider/model/version, normalized usage, latency, retries, request ID,
   and estimated/actual cost.
-- Use idempotency where supported; otherwise reconcile ambiguous outcomes and
-  never claim exactly-once provider execution.
+- Use idempotency where supported; mark ambiguous outcomes for operator
+  reconciliation and never claim exactly-once provider execution or billing.
 - Add circuit breakers, concurrency limits, rate-limit coordination, and
   approved fallbacks that preserve classification and quality policy.
 
@@ -212,6 +238,10 @@ intent.
 Worker death, lease expiry, duplicate delivery, provider timeout, rate limit,
 partial stream, budget exhaustion, and stale ownership cannot corrupt state,
 exceed authority, or silently lose work.
+
+Layer 5 proves all non-streaming cases above. Streaming, automated invoice
+reconciliation, fleet-global budgets, and encrypted response artifacts remain
+open and therefore the full EP-07 production operations gate is not claimed.
 
 ## EP-08: Live evidence connectors
 
