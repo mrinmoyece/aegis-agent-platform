@@ -77,7 +77,7 @@ pytestmark = [
 ]
 TENANT_A = TenantContext(TenantId("tenant-a"))
 TENANT_B = TenantContext(TenantId("tenant-b"))
-TENANT_GATEWAY = TenantContext(TenantId("tenant-gateway"))
+TENANT_GATEWAY = TENANT_B  # avoids interfering with tenant-a concurrent tests
 
 
 async def app_connection() -> psycopg.AsyncConnection[tuple[object, ...]]:
@@ -213,7 +213,7 @@ def seed_gateway_work(lease: WorkLease) -> None:
                 tenant_id, max_run_tokens, max_run_cost_usd,
                 max_tenant_tokens_per_period, max_tenant_cost_usd_per_period,
                 max_concurrent_runs, updated_at
-            ) VALUES ('tenant-gateway', 100, 1, 100, 1, 10, transaction_timestamp())
+            ) VALUES ('tenant-b', 100, 1, 100, 1, 10, transaction_timestamp())
             ON CONFLICT (tenant_id) DO UPDATE
             SET max_run_tokens = EXCLUDED.max_run_tokens,
                 max_run_cost_usd = EXCLUDED.max_run_cost_usd,
