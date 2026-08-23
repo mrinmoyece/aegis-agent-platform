@@ -14,6 +14,10 @@ separation-of-duties approval, fenced controlled effects, reconciliation, and
 explicit postcondition verification. Layer 9 adds strict untrusted execution
 contracts, approval-bound sandbox policy, fenced provider lifecycle intents,
 safe artifacts, default-deny egress, and cleanup reconciliation.
+Layer 10 adds event-grounded memory and derived retrieval. Layer 11 currently
+implements hermetic release gates, governed synthetic datasets, deterministic
+fault injection, baseline/waiver controls, bounded reports, and fail-closed
+optional-live/model-judge configuration.
 The system assumes model output, tool output, retrieved
 content, and tenant input can be hostile. Cloud, identity provider, model
 provider, and operator accounts can be compromised. Prompt instructions are
@@ -42,6 +46,7 @@ never trusted as controls.
 8. Build system to registries and deployment environments.
 9. Evidence sources and runbooks to the investigation context.
 10. Approval channel to controlled remediation tools.
+11. Dataset producers, evaluators, optional judges, and release decision makers.
 
 ## Principal threats and required controls
 
@@ -67,7 +72,10 @@ never trusted as controls.
 | Resource exhaustion | Runaway work or noisy tenant | Deadlines, queue backpressure, global and tenant quotas | Worker and provider concurrency, timeouts, request/token limits, circuits, and fenced model budgets implemented |
 | Supply-chain compromise | Malicious build dependency/action | Pinned actions, review, scanning, attestations | Partial |
 | Telemetry leakage | Tenant data in labels or traces | Redaction and bounded-cardinality conventions | Runtime/model instruments use fixed names and catalog-bounded provider/model labels without tenant/run/request IDs; backend review remains planned |
-| Evaluation poisoning | Unsafe release passes gates | Dataset provenance, immutable results, approvals | Planned |
+| Evaluation poisoning | Unsafe release passes gates | Synthetic governed datasets, provenance/digests, quarantine, immutable results | Implemented fixture manifest, digest/shape/sensitive-content checks, and quarantine disposition |
+| Baseline or waiver abuse | Regression is normalized or exception silently broadened | Reviewed immutable baseline changes; hard safety non-waivable; exact non-safety case/metric, owner, reason, and expiry | Implemented with complete-passing-run baseline updates and fail-closed expiry |
+| Model-judge manipulation | Prompt injection or judge drift marks unsafe behavior acceptable | Disabled-by-default versioned isolated configuration and deterministic safety gates | Configuration guard implemented; no judge execution or live qualification claimed |
+| Evaluation side effect | CI leaks a credential, reaches production, or mutates a target | Hermetic required suite; no live secret/network/effect; optional live boundary prohibited in CI and separately capped | Implemented and covered by evaluator meta-tests; no live adapter registered by default |
 | Evidence spoofing | Forged logs or change metadata drives a false hypothesis | Authenticated adapters, immutable references, timestamps, source labeling | Bounded authenticated adapters, digests, trust status, and quarantine implemented; live source assurance remains deployment evidence |
 | Stale correlation | Unrelated deployment is blamed for checkout failures | Explicit time windows, topology, counter-evidence, confidence | Deterministic clock-skew bounds, rationale, ambiguity, and conflicts implemented; no causal inference |
 | Runbook injection | Hostile text asks the agent to bypass policy | Treat runbooks as untrusted evidence; runtime authorization | Runtime approval and action policy implemented; injected arguments fail validation |
@@ -104,6 +112,10 @@ never trusted as controls.
 - Parallel specialists disagree about whether the deployment caused the failure.
 - A compromised specialist attempts to request a write-capable tool or spawn a
   helper outside the coordinator's plan.
+- A poisoned dataset or unauthorized baseline update hides a tenant-isolation
+  regression.
+- A model judge follows injected evidence or a waiver is replayed for a broader
+  release.
 
 ## Multi-agent failure controls
 
@@ -289,3 +301,17 @@ recovery evidence. They do not certify live embedding providers, external
 DLP/malware scanning, production encrypted/erasable blobs, key destruction,
 backup expiry, global cache invalidation, HA/DR, multi-region operation, or
 production-scale resistance to approximate-nearest-neighbor abuse.
+
+## Layer 11 residual risk
+
+[ADR 0018](adr/0018-layered-deterministic-evaluation-gates.md) and
+[evaluation.md](evaluation.md) define the implemented
+`aegis_agent_platform.evals` contracts, 91-case governed corpus, CLI, reports,
+hard gates, baseline/waiver handling, fixture governance, telemetry, and
+fail-closed optional-live boundary. The deterministic suite and existing fake
+behavioral matrices do not qualify live models/connectors or production
+behavior. No model judge or live adapter executes by default.
+
+Full production model/connector qualification, independent penetration testing,
+large-scale human labeling, operator UI, MCP/A2A, observability/SLOs, HA/DR,
+multi-region operation, and final load/chaos certification remain deferred.

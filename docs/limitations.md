@@ -15,8 +15,8 @@
 - Exact-scope human approval, fenced controlled effects, reconciliation,
   post-action verification, bounded Layer 9 analysis sandbox execution, and
   Layer 10 event-grounded memory/RAG are implemented. Arbitrary tools and
-  production evaluation packages remain planned. Layers 7–10 include
-  deterministic behavioral regression evals.
+  Layer 11 deterministic evaluation contracts/harness are implemented. This is
+  a hermetic release-evidence system, not live production qualification.
 - Runtime spans and bounded metric instruments exist, but no production
   collector dashboards, alert rules, or SLO evidence are claimed.
 - Three-tier memory, pgvector/lexical retrieval, provenance, scanner/redaction
@@ -27,6 +27,35 @@
   tool access, external task exchange, streaming, cancellation, or status.
 - CI scans and builds a baseline but does not yet emit an SBOM, provenance,
   signature, release artifact, or deployment.
+
+## Current Layer 11 implementation (evaluation and release evidence)
+
+- [ADR 0018](adr/0018-layered-deterministic-evaluation-gates.md) and
+  [evaluation.md](evaluation.md) define immutable provider-neutral contracts,
+  the governed synthetic scenario/adversarial/recovery corpus, all 22 named
+  fault cuts, fixture tamper/quarantine checks, hard gates, canonical baseline,
+  scoped expiring non-safety waivers, bounded reports, and telemetry.
+- The `aegis_agent_platform.evals` CLI supports list, run with repeatable
+  `--case`/`--tag` filters, replay, compare, explicit baseline update,
+  `check-fixtures`, and `write-manifest`; `make evals` and focused
+  `make eval-*` targets cover the required deterministic, adversarial, recovery,
+  baseline, fixture, and meta paths. The catalog contains 91 cases, including 12
+  adversarial cases, and
+  `tests/test_evaluation_platform.py` contains 22 evaluator meta-tests.
+- Required execution is hermetic with no live secrets, network, model judge, or
+  production effect. A capped opt-in live/statistical adapter boundary and
+  confidence calculation exist, but no adapter is registered by default and no
+  live production qualification is claimed.
+- Evaluator artifacts/results are release evidence only. They do not
+  authorize actions, reconstruct run state, or replace code-enforced production
+  safety and the event ledger.
+- `ModelJudgeConfig` enforces disabled-by-default, versioned, delimited,
+  never-sole-safety-gate configuration. Model judge execution and large-scale
+  human-label calibration do not exist.
+- Full production model/connector qualification, independent penetration
+  testing, large-scale human labeling, operator UI, MCP/A2A,
+  observability/SLOs, HA/DR and multi-region, and final load/chaos certification
+  remain deferred.
 
 ## Current Layer 5 implementation (model gateway)
 
@@ -305,8 +334,8 @@
 
 Aegis does not currently diagnose live checkout failures, protect production data,
 guarantee exactly-once effects, embedding, indexing, or provider billing, certify
-a production code sandbox, satisfy a
-compliance framework, meet an SLO, or support multi-region recovery. Live local
+a production code sandbox, satisfy a compliance framework, meet an SLO, or
+support multi-region recovery. Live local
 PostgreSQL tests prove specific RLS and durability controls, not production
 deployment hardening or operational readiness.
 

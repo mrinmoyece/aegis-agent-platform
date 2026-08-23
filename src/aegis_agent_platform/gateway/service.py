@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -58,6 +57,7 @@ class ModelGateway:
         router: ModelRouter | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        fault_hook: Callable[[str], None] | None = None,
     ) -> None:
         catalog_providers = {entry.identity.provider for entry in catalog.entries()}
         if set(providers) != catalog_providers:
@@ -72,6 +72,7 @@ class ModelGateway:
         self._router = router or ModelRouter()
         self._clock = clock
         self._sleep = sleep
+        self._fault_hook = fault_hook or _no_fault
 
     async def complete(
         self,
@@ -98,6 +99,7 @@ class ModelGateway:
         token_limit = request.prompt_token_estimate + request.max_output_tokens
         reservation_cost = self._reservation_cost(request, candidates)
         try:
+            self._fault_hook("before_intent_append")
             reservation = await self._repository.reserve(
                 context,
                 request,
@@ -109,6 +111,7 @@ class ModelGateway:
                 price_version=route.selected.pricing.version,
                 at=self._clock(),
             )
+            self._fault_hook("after_intent_append")
         except BudgetDeniedError:
             self._metrics.add("budget_denials", route.selected.identity)
             raise
@@ -129,8 +132,7 @@ class ModelGateway:
             if response is not None:
                 try:
                     self._validate_response(request, response)
-                    cost = candidate.pricing.cost(response.usage)
-                    response = replace(response, cost_usd=cost)
+                    self._fault_hook("before_result_append")
                     await self._repository.succeed(
                         context,
                         request,
@@ -140,7 +142,9 @@ class ModelGateway:
                         candidate.pricing,
                         at=self._clock(),
                     )
+                    self._fault_hook("after_result_append")
                 except ModelGatewayError as error:
+                    self._fault_hook("before_result_append")
                     await self._repository.record_usage_failure(
                         context,
                         request,
@@ -151,9 +155,11 @@ class ModelGateway:
                         error,
                         at=self._clock(),
                     )
+                    self._fault_hook("after_result_append")
                     raise
                 self._metrics.usage(candidate.identity, response.usage)
                 self._metrics.add("latency_ms", candidate.identity, response.latency_ms)
+                cost = candidate.pricing.cost(response.usage)
                 self._metrics.add("cost_usd", candidate.identity, float(cost))
                 self._metrics.add(
                     "reservation_drift_tokens",
@@ -174,6 +180,7 @@ class ModelGateway:
                 "no_provider_attempt_succeeded",
                 retryable=True,
             )
+        self._fault_hook("before_result_append")
         await self._repository.fail(
             context,
             request,
@@ -182,6 +189,7 @@ class ModelGateway:
             last_error,
             at=self._clock(),
         )
+        self._fault_hook("after_result_append")
         raise last_error
 
     def estimate_reservation_cost(
@@ -291,11 +299,13 @@ class ModelGateway:
                         )
                         self._metrics.add("attempts", model)
                         with self._tracer.attempt(model):
+                            self._fault_hook("before_side_effect")
                             response = await provider.complete(
                                 request,
                                 model,
                                 cancellation=cancellation,
                             )
+                            self._fault_hook("after_side_effect")
                 except ModelGatewayError as error:
                     last_error = error
                     if error.error_class is ModelErrorClass.MALFORMED_RESPONSE:
@@ -371,6 +381,10 @@ class ModelGateway:
                         billing_ambiguous=True,
                     ) from error
                 validate_object(part.proposal.arguments, schema)
+
+
+def _no_fault(_cut_point: str) -> None:
+    return None
 
 
 __all__ = ["ModelGateway"]

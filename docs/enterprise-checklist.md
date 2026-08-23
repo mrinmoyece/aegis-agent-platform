@@ -102,21 +102,30 @@ Status meanings:
 | Memory quotas and fenced lifecycle recovery | Implemented | atomic tenant-period reservations, durable intent/results, reconciliation and rebuild tests |
 | Deterministic specialist behavioral evaluations | Implemented | success, ambiguity, contradiction, budget, recovery; `make evals` |
 | Deterministic remediation behavioral evaluations | Implemented | approval success/denial/stale, ambiguity, verification/rollback, policy attack, crash recovery |
-| Versioned production evaluation datasets and baselines | Planned | Layer 11 |
-| Online quality, safety, latency, and cost signals | Planned | Layer 7 |
+| Layered provider-neutral evaluation contracts and harness | Implemented | `aegis_agent_platform.evals`; ADR 0018; 91-case catalog |
+| Governed synthetic scenario/adversarial/recovery corpus | Implemented | versioned manifest/fixtures; 12 adversarial cases and 22 fault cuts |
+| Hermetic deterministic release gates and hard safety baselines | Implemented | no live network, secrets, judge, or production effects |
+| Scoped expiring evaluation waivers and reviewed baseline changes | Implemented | non-safety waivers only; explicit reviewed update |
+| Environment-gated evaluation integration | Implemented | `make eval-integration`; disposable PostgreSQL/Redis only, separate from required CI |
+| Opt-in live/statistical evaluation | Scaffolded | fail-closed capped boundary; no adapter registered or production qualification |
+| Isolated optional model-as-judge | Scaffolded | configuration guard only; no judge execution; never sole safety gate |
+| Evaluation developer CLI and `make eval-*` targets | Implemented | list/run `--case`/`--tag`/replay/compare/update-baseline/check-fixtures/write-manifest; focused Make targets |
+| Bounded redacted evaluation telemetry and reports | Implemented | JSON/Markdown/JUnit; release evidence, never runtime truth |
+| Live production evaluation evidence | Planned | no live calls or production qualification |
+| Online quality, safety, latency, and cost signals | Planned | observability/SLO layer |
 | Model span/metric content redaction | Implemented | bounded catalog labels; no prompt/tenant/request labels |
 | Specialist span/metric content redaction | Implemented | fixed operation/role labels; no evidence/prompt/tenant/run labels |
 | Authorized investigation status/task/artifact APIs | Implemented | tenant authorization, redacted cursor pages |
 | Tenant-RLS specialist projections and rebuild | Implemented | migration `0006`, live PostgreSQL test |
-| End-to-end trace/event correlation | Planned | Layer 8 |
-| SLOs, alerts, runbooks, backup, and restore evidence | Planned | Layer 8 |
-| HA deployment and capacity evidence | Planned | Layer 8 |
-| SBOM, provenance, image signing, and release policy | Planned | Layer 8 |
-| Compliance evidence mapping and access review | Planned | Layer 8 |
-| MCP tool/context adapters under runtime policy | Planned | Layers 5–6 |
-| External A2A Agent Card and task lifecycle adapter | Planned | Layer 8 |
-| Durable A2A lifecycle mapping and replay protection | Planned | Layer 8 |
-| A2A conformance, tenant, and malicious-peer tests | Planned | Layer 8 |
+| End-to-end trace/event correlation | Planned | Layer 12 |
+| SLOs, alerts, runbooks, backup, and restore evidence | Planned | Layer 12 |
+| HA deployment and capacity evidence | Planned | Layer 12 |
+| SBOM, provenance, image signing, and release policy | Planned | Layer 12 |
+| Compliance evidence mapping and access review | Planned | Layer 12 |
+| MCP tool/context adapters under runtime policy | Planned | Layer 12 |
+| External A2A Agent Card and task lifecycle adapter | Planned | Layer 12 |
+| Durable A2A lifecycle mapping and replay protection | Planned | Layer 12 |
+| A2A conformance, tenant, and malicious-peer tests | Planned | Layer 12 |
 
 Changing a row to Implemented requires tests or operational evidence in the
 same pull request. Planned capabilities map to concrete EP-01 through EP-16

@@ -234,24 +234,45 @@ legal hold, and purge paths are explicit. Live providers, production encrypted
 blob/key storage, external scanning, HA/DR, and final load evidence are not
 claimed.
 
-## Layer 11 — Evaluation and observability
+## Layer 11 — Layered deterministic evaluation gates
 
-Add versioned datasets, offline and online evaluation, release gates, traces,
-metrics, logs, cost accounting, and safe content handling. Score hypothesis
-evidence coverage, unsupported claims, remediation choice, approval compliance,
-and recovery verification on checkout-failure variants.
+Add immutable provider-neutral contracts, governed synthetic
+scenario/adversarial/recovery datasets, named deterministic fault cut points,
+hermetic required CI, environment-gated integration, opt-in live/statistical
+qualification, bounded production evidence, hard safety baselines, scoped
+expiring waivers, and redacted reports. An optional isolated model judge is
+disabled in required CI and is never the sole safety gate.
 
-**Acceptance gate:** a reproducible evaluation blocks a known regression;
-event-to-trace correlation works; telemetry contains no disallowed content or
-unbounded tenant labels.
+**Status:** implemented in `aegis_agent_platform.evals`, the governed `evals/`
+artifacts, and `tests/test_evaluation_platform.py`; see
+[ADR 0018](adr/0018-layered-deterministic-evaluation-gates.md) and
+[evaluation.md](evaluation.md). The 91-case catalog includes 12 adversarial
+cases, all 22 named fault cut points, and cross-layer core scenarios. The CLI
+supports list, filtered run, replay, compare, explicit baseline update, fixture
+check, and manifest write; `make evals` and focused deterministic, adversarial,
+recovery, baseline, fixture, meta, and environment-gated integration targets are
+available.
 
-Layers 7–10 include bounded deterministic behavioral regression matrices; this
-layer adds production datasets, semantic quality measurement, and operational
-release gates.
+**Acceptance gate:** a hermetic replay deterministically blocks a seeded safety
+regression without live secrets, network, judge, or production effect; baseline
+changes and exact expiring non-safety waivers are reviewable while hard safety
+remains non-waivable; tampered/quarantined/deleted datasets fail closed; reports
+are bounded and redacted. Evaluator output is release evidence and cannot become
+runtime truth or safety enforcement.
 
-## Layer 12 — Enterprise operations
+The hermetic gate and fail-closed optional-live boundary meet this repository
+gate. No live adapter is registered by default, no model judge is executed, and
+environment/production qualification remains separate evidence.
 
-Add deployment automation, SLOs, alerting, runbooks, backup and restore, HA,
+Layers 7–10 include bounded deterministic fake behavioral matrices. Layer 11
+unifies and governs release evidence; full production model/connector
+qualification, independent penetration testing, and large-scale human labeling
+remain separate work.
+
+## Layer 12 — Observability and enterprise operations
+
+Add production traces, metrics, logs, event correlation, cost accounting, SLOs,
+alerting, deployment automation, runbooks, backup and restore, HA,
 capacity tests, software provenance, signing, governance evidence, and incident
 system integration for durable status updates. Add optional external A2A
 interoperability with Agent Cards, authenticated tasks/messages/artifacts,
@@ -265,6 +286,10 @@ approval, action, verification, and incident-update audit trail.
 The A2A adapter passes conformance, authentication, authorization,
 tenant-isolation, idempotency, replay, cancellation, downgrade, and malicious
 peer tests; every external task transition is replayable from the event ledger.
+
+Operator UI, MCP/A2A, production observability/SLO evidence, HA/DR and
+multi-region, and final load/chaos certification remain deferred until this
+gate's executable evidence exists.
 
 ## Curriculum documentation gates
 

@@ -31,3 +31,4 @@ secrets/
 # Runtime data
 data/
 logs/
+.aegis-evals/

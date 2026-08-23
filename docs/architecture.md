@@ -15,7 +15,9 @@ ledger-only typed reasoning artifacts, deterministic fan-out/fan-in, and critic
 gates. Layer 8 adds exact-scope approval, controlled action execution,
 reconciliation, and explicit postcondition verification. Layer 9 adds a separate
 fenced, approval-bound ephemeral sandbox for bounded analysis and change
-preparation. Memory arrives later.
+preparation. Layer 10 adds event-grounded memory and derived RAG. Layer 11's
+deterministic evaluation contracts, governed corpus, release gates, reports, and
+CLI are implemented.
 
 ```mermaid
 flowchart LR
@@ -50,6 +52,34 @@ only official write adapter is a fixed-shape Kubernetes deployment
 rollout-restart. The sandbox has a deterministic fake backend and a hardened
 Kubernetes Job adapter, but production cluster controls and connectivity are not
 configured or verified.
+
+## Evaluation release boundary
+
+Layer 11 is a release-pipeline boundary, not part of authoritative run
+execution. Its implemented contracts and workflow are documented in
+[Evaluation and release evidence](evaluation.md) and
+[ADR 0018](adr/0018-layered-deterministic-evaluation-gates.md).
+
+```mermaid
+flowchart LR
+  D[Versioned synthetic datasets] --> H[Hermetic deterministic harness]
+  F[Named fault cut points] --> H
+  H --> R[Immutable redacted results]
+  R --> G[Release gates and scoped expiring non-safety waivers]
+  I[Environment-gated integration] --> R
+  L[Opt-in live/statistical qualification] --> R
+  P[Bounded production evidence] -. review only .-> D
+```
+
+The required CI path uses fixed clocks, IDs, seeds, provider-neutral fakes, and
+no live secret, network, model judge, or production effect. Integration,
+live/statistical, and production-evidence classes stay separately gated and
+reported. Evaluation artifacts cannot authorize actions, reconstruct run state,
+or weaken code-enforced safety. Baselines, comparisons, waivers, and reports are
+versioned release evidence outside the runtime event stream.
+The 91-case hermetic catalog includes 12 adversarial cases, all 22 named fault
+cut points, and cross-layer core scenarios. Optional integration/live boundaries
+remain separately gated; no live adapter or model judge executes by default.
 
 ## Model gateway data flow
 
@@ -212,7 +242,9 @@ flowchart TB
   Integrations[integrations] --> Domain
 ```
 
-`domain` imports no other platform package. Infrastructure-facing packages
+`domain` imports no other platform package. The Layer 11 implementation
+under `aegis_agent_platform.evals` consumes provider-neutral contracts and
+cannot become a runtime authority. Infrastructure-facing packages
 depend inward on domain types. PostgreSQL adapters live under `event_store` and
 `persistence`; model SDKs are isolated to `providers/openai.py` and
 `providers/anthropic.py`; database/vendor types never enter domain contracts.
@@ -569,6 +601,8 @@ status are projections, not truth. See `durable-execution.md`,
    tenant context.
 8. **At-least-once reality:** consumers and effects are idempotent or
    reconcilable.
+9. **Evaluation is release evidence:** scores, baselines, model judges, reports,
+   and production telemetry never replace runtime truth or safety enforcement.
 
 ## Data and trust boundaries
 
@@ -588,6 +622,10 @@ security. Redis is used only
 where data loss cannot violate correctness. OpenTelemetry carries
 correlation metadata with tenant-safe cardinality; sensitive content is
 excluded by default, and audit-event redaction follows the same principle.
+Evaluation telemetry and reports follow the same bounded redaction:
+identifiers, digests, versions, counts, and aggregate statistics only. Synthetic
+dataset provenance and lifecycle are governed; quarantined, deleted, or
+digest-mismatched data cannot participate in a release gate.
 
 ## Local topology
 
