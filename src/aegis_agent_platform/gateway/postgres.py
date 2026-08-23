@@ -680,7 +680,7 @@ async def _quota_limits(
         SELECT max_run_tokens, max_run_cost_usd,
             max_tenant_tokens_per_period, max_tenant_cost_usd_per_period,
             max_concurrent_runs
-        FROM tenant_quotas WHERE tenant_id = %s FOR SHARE
+        FROM tenant_quotas WHERE tenant_id = %s
         """,
         (tenant_id,),
     )

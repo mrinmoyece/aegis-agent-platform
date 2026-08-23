@@ -30,3 +30,5 @@ def migrated_database() -> None:
                 ('tenant-b', 'Tenant B', true, transaction_timestamp())
             """
         )
+        # Ensure aegis_app can read quota limits for budget admission.
+        connection.execute("GRANT SELECT ON tenant_quotas TO aegis_app")
