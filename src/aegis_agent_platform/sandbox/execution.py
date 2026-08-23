@@ -32,6 +32,7 @@ from aegis_agent_platform.domain import (
     WorkRequest,
     replay_sandbox,
     sandbox_request_to_payload,
+    sandbox_result_digest,
     sandbox_result_to_payload,
 )
 from aegis_agent_platform.identity import (
@@ -1510,7 +1511,7 @@ class SandboxOrchestrator:
                             "image_digest": request.spec.image_digest,
                             "input_digest": request.spec.input_snapshot.digest,
                             "policy_digest": state.policy_digest,
-                            "result_digest": _result_digest(result),
+                            "result_digest": sandbox_result_digest(result),
                             "spec_digest": request.spec.digest,
                         },
                         "attestation",
@@ -1962,41 +1963,6 @@ def _fenced_event(
         causation_id=request.linkage.remediation_action_id,
         idempotency_key=f"{request.idempotency_key}:{suffix}:{lease.generation}",
     )
-
-
-def _result_digest(result: SandboxResult) -> str:
-    return sha256(
-        json.dumps(
-            {
-                "artifacts": [
-                    {
-                        "digest": artifact.digest,
-                        "media_type": artifact.media_type,
-                        "quarantined": artifact.quarantined,
-                        "size_bytes": artifact.size_bytes,
-                    }
-                    for artifact in result.artifacts
-                ],
-                "completed_at": result.completed_at.isoformat(),
-                "error_code": result.error_code,
-                "exit_code": result.exit_code,
-                "outcome": result.outcome.value,
-                "started_at": result.started_at.isoformat(),
-                "stderr": {
-                    "captured_bytes": result.stderr.captured_bytes,
-                    "digest": result.stderr.digest,
-                    "truncated": result.stderr.truncated,
-                },
-                "stdout": {
-                    "captured_bytes": result.stdout.captured_bytes,
-                    "digest": result.stdout.digest,
-                    "truncated": result.stdout.truncated,
-                },
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode()
-    ).hexdigest()
 
 
 def _artifact_contract_violation(

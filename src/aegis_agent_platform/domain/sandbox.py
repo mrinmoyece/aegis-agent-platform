@@ -1534,10 +1534,14 @@ def sandbox_result_digest(result: SandboxResult) -> str:
                 "outcome": result.outcome.value,
                 "started_at": result.started_at.isoformat(),
                 "stderr": {
+                    "captured_bytes": result.stderr.captured_bytes,
                     "digest": result.stderr.digest,
+                    "truncated": result.stderr.truncated,
                 },
                 "stdout": {
+                    "captured_bytes": result.stdout.captured_bytes,
                     "digest": result.stdout.digest,
+                    "truncated": result.stdout.truncated,
                 },
             },
             separators=(",", ":"),
