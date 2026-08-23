@@ -41,6 +41,7 @@ from aegis_agent_platform.domain import (
     DomainEventType,
     EventEnvelope,
     JsonValue,
+    MemoryContext,
     ModelGatewayError,
     WorkLease,
     WorkRequest,
@@ -55,6 +56,19 @@ class CancellationSignal(Protocol):
     def cancelled(self) -> bool: ...
 
 
+class SpecialistMemoryContextProvider(Protocol):
+    async def context_for(
+        self,
+        *,
+        tenant_id: str,
+        run_id: UUID,
+        assignment: SpecialistAssignment,
+        upstream_artifacts: tuple[DurableAgentArtifact, ...],
+        evidence: tuple[EvidenceCitation, ...],
+        lease: WorkLease,
+    ) -> MemoryContext | None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class SpecialistContext:
     """Bounded redacted input assembled only from committed upstream artifacts."""
@@ -66,6 +80,7 @@ class SpecialistContext:
     upstream_artifacts: tuple[DurableAgentArtifact, ...]
     evidence: tuple[EvidenceCitation, ...]
     attempt: int = 1
+    memory_context: MemoryContext | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,6 +142,7 @@ class DurableCoordinator:
         uuid_factory: Callable[[], UUID] = uuid4,
         metrics: AgentMetrics | None = None,
         tracer: AgentTracer | None = None,
+        memory_context_provider: SpecialistMemoryContextProvider | None = None,
     ) -> None:
         self._repository = repository
         self._engine = engine
@@ -134,6 +150,7 @@ class DurableCoordinator:
         self._uuid_factory = uuid_factory
         self._metrics = metrics or AgentMetrics()
         self._tracer = tracer or AgentTracer()
+        self._memory_context_provider = memory_context_provider
 
     async def request(
         self,
@@ -408,13 +425,37 @@ class DurableCoordinator:
         cancellation: CancellationSignal | None,
     ) -> _ExecutionOutcome:
         assignment = scheduled.assignment
-        specialist_context = self._specialist_context(
-            state,
-            assignment,
-            evidence,
-            attempt=state.tasks[assignment.assignment_id].attempts,
+        upstream_tasks = set(assignment.depends_on)
+        upstream_artifacts = tuple(
+            artifact
+            for artifact in state.artifacts
+            if artifact.task_id in upstream_tasks
+        )
+        cited_evidence = tuple(
+            sorted(evidence.values(), key=lambda item: item.evidence_id)
         )
         try:
+            memory_context = (
+                await self._memory_context_provider.context_for(
+                    tenant_id=state.plan.tenant_id,
+                    run_id=state.plan.run_id,
+                    assignment=assignment,
+                    upstream_artifacts=upstream_artifacts,
+                    evidence=cited_evidence,
+                    lease=lease,
+                )
+                if self._memory_context_provider is not None
+                else None
+            )
+            specialist_context = SpecialistContext(
+                tenant_id=state.plan.tenant_id,
+                incident_id=state.plan.incident_id,
+                run_id=state.plan.run_id,
+                assignment=assignment,
+                upstream_artifacts=upstream_artifacts,
+                evidence=cited_evidence,
+                memory_context=memory_context,
+            )
             with self._tracer.task(assignment.role):
                 result = await asyncio.wait_for(
                     self._engine.execute(

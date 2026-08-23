@@ -134,6 +134,29 @@ This lab launches no untrusted process, contacts no cluster, and does not prove
 production admission/runtime/network isolation, malware scanning, secret
 brokering, image signing, or supply-chain policy.
 
+## Layer 10 lab: event-grounded memory and RAG
+
+**Implemented with deterministic providers and environment-gated pgvector.**
+
+1. Run `python -m aegis_agent_platform.memory`; inspect cited retrieval,
+   poisoning quarantine, contradiction abstention, compaction, tenant denial,
+   and derived purge.
+2. Run the memory unit/API/demo/eval tests. Trace each external operation from
+   intent through fenced result and replay.
+3. Inject duplicate content, changed ACL/retention after proposal, scanner
+   failure, malformed dimensions, non-finite vectors, provider timeout, quota
+   exhaustion, stale fence, unsupported summary claims, and legal hold.
+4. With disposable PostgreSQL/Redis URLs, run
+   `tests/integration/test_memory_postgres.py`; verify forced RLS, pgvector
+   ranking, finite/dimension checks, atomic quotas, reference-only cache,
+   checkpoint rebuild, and purge.
+5. Confirm raw text, vectors, and query text are absent from immutable events and
+   retrieved instructions cannot grant policy, roles, tools, or approval.
+
+This lab does not verify a live model, production encrypted blob/key store,
+external DLP/malware service, backup expiry, HA/DR, multi-region cache
+coherence, or production load.
+
 ## Planned labs by layer
 
 | Layer | Lab | Failure injection and evidence |
@@ -141,12 +164,11 @@ brokering, image signing, or supply-chain policy.
 | 2 | Live-database and live-Keycloak drill | Run the row-level-security policies and the append-only trigger against a running Postgres instance, and exercise `RemoteJwksProvider` against a real Keycloak realm with rotated keys — both are currently only asserted statically or against mocked transports |
 | 3 | Schema evolution | Replay old checkout fixtures through additive upcasters |
 | 4 | Connector ambiguity | Rate-limit and truncate Dynatrace/GitHub responses; preserve provenance and partial status |
-| 6 | Retrieval isolation | Poison a runbook and attempt cross-tenant vector retrieval |
-| 10 | Production adversarial evaluation | Add versioned datasets, semantic graders, and release baselines beyond the deterministic Layers 7–9 matrices |
-| 10 | Telemetry privacy | Send sensitive/high-cardinality content; prove collector/backend redaction and rejection |
-| 11 | Capacity | Load hot and broad tenants while measuring queue lag and projection delay |
-| 11 | Regional failure | Lose a region and restore authoritative state within documented objectives |
-| 11 | Supply chain | Attempt unsigned promotion and dependency/action tampering |
+| 11 | Production adversarial evaluation | Add versioned datasets, semantic graders, and release baselines beyond the deterministic Layers 7–10 matrices |
+| 11 | Telemetry privacy | Send sensitive/high-cardinality content; prove collector/backend redaction and rejection |
+| 12 | Capacity | Load hot and broad tenants while measuring queue lag and projection delay |
+| 12 | Regional failure | Lose a region and restore authoritative state within documented objectives |
+| 12 | Supply chain | Attempt unsigned promotion and dependency/action tampering |
 
 Every future lab must state prerequisites, expected events, pass/fail assertions,
 cleanup, and the limitation it does not prove.

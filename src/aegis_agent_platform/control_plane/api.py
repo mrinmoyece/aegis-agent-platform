@@ -52,6 +52,8 @@ from aegis_agent_platform.identity import (
     Principal,
     TenantId,
 )
+from aegis_agent_platform.memory.api import MemoryHttpApi
+from aegis_agent_platform.memory.operations import MemoryOperations
 from aegis_agent_platform.policy import (
     InMemoryPolicyRepository,
     PolicyRepository,
@@ -110,6 +112,7 @@ class ControlPlaneApp:
         agent_operations: AgentOperations | None = None,
         remediation_operations: RemediationOperations | None = None,
         sandbox_operations: SandboxOperations | None = None,
+        memory_operations: MemoryOperations | None = None,
     ) -> None:
         self._authentication = authentication
         self._authorization = authorization or AuthorizationService()
@@ -124,6 +127,9 @@ class ControlPlaneApp:
         self._agent_operations = agent_operations
         self._remediation_operations = remediation_operations
         self._sandbox_operations = sandbox_operations
+        self._memory_api = (
+            MemoryHttpApi(memory_operations) if memory_operations is not None else None
+        )
 
     async def __call__(
         self,
@@ -171,7 +177,17 @@ class ControlPlaneApp:
                 and post_segments[:2] == ["v1", "tenants"]
                 and post_segments[3] == "sandboxes"
             )
-            if not evidence_post and not remediation_post and not sandbox_post:
+            memory_post = (
+                len(post_segments) >= 4
+                and post_segments[:2] == ["v1", "tenants"]
+                and post_segments[3] == "memories"
+            )
+            if (
+                not evidence_post
+                and not remediation_post
+                and not sandbox_post
+                and not memory_post
+            ):
                 await _respond(send, 405, {"error": {"code": "method_not_allowed"}})
                 return
         principal = await self._authenticate(scope, send, correlation_id)
@@ -195,6 +211,32 @@ class ControlPlaneApp:
             return
         if len(segments) == 3:
             await self._get_tenant(send, principal, tenant_id, correlation_id)
+            return
+        if len(segments) >= 4 and segments[3] == "memories":
+            if self._memory_api is None:
+                await _respond(
+                    send,
+                    503,
+                    {"error": {"code": "memory_not_configured"}},
+                )
+                return
+            raw_query = scope.get("query_string", b"")
+            if not isinstance(raw_query, bytes):
+                await _respond(
+                    send,
+                    400,
+                    {"error": {"code": "invalid_memory_request"}},
+                )
+                return
+            response = await self._memory_api.handle(
+                method=method,
+                tail=tuple(segments[4:]),
+                query_string=raw_query,
+                receive=receive,
+                principal=principal,
+                context=TenantContext(tenant_id),
+            )
+            await _respond(send, response.status, response.body)
             return
         if len(segments) == 4 and segments[3] == "policy":
             await self._get_policy(send, principal, tenant_id, correlation_id)

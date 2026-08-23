@@ -155,6 +155,27 @@ success.
    runtime class, PID, default-deny networking, artifact driver), disable the
    backend and treat it as a security incident.
 
+## Memory, pgvector, compaction, or retention incident
+
+1. Stop new memory claims for the tenant. Inspect bounded status/provenance and
+   the memory/retrieval event streams; never use Redis, pgvector rows, traces, or
+   model transcripts as authoritative state.
+2. Verify candidate acceptance, source digest, scan, chunk, embedding, indexing,
+   and current lease generation. For an intent without a result, observe the
+   content/version key before retry. Do not claim exactly-once embedding/indexing.
+3. Quarantine dimension, non-finite vector, scanner, citation, contract-digest,
+   or unsupported-summary mismatches. Preserve only bounded identifiers, digests,
+   versions, and error codes in operator output.
+4. For suspected cross-tenant access, disable the memory API, preserve database
+   and audit evidence, confirm the runtime is `aegis_app` rather than a bypass-RLS
+   role, and invalidate all affected tenant cache keys.
+5. Rebuild lexical/vector projections and checkpoints from ledger events plus
+   authorized source blobs under `aegis_maintenance`. Compare counts/digests,
+   then re-enable reads; never edit events to repair an index.
+6. For tombstone/deletion, check legal hold first, record intent, purge derived
+   index/cache, erase the referenced blob, and record completion. Immutable
+   identifier/digest events and unexpired backups are not claimed erased.
+
 ## Integrity or RLS incident
 
 Stop writers if an aggregate sequence gap, event mutation, or cross-tenant row is
@@ -166,7 +187,7 @@ drills remain Layer 11 work.
 ## Rollback policy
 
 Migrations `0002_durable_ledger.sql` through
-`0008_hardened_sandbox_execution.sql` are forward-only.
+`0009_event_grounded_memory_pgvector.sql` are forward-only.
 They create authoritative
 facts and security roles; automated downgrade would destroy evidence or weaken
 isolation. Roll forward with an additive corrective migration. Disaster restore

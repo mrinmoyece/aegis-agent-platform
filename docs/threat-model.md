@@ -83,9 +83,9 @@ never trusted as controls.
 | Runaway swarm | Recursive agents exhaust tokens or capacity | No specialist spawning; hard depth/fan-out/iteration/token/time bounds | Implemented |
 | Aggregation race | Completion order changes the chosen hypothesis | Plan ordinal/ID ordering and deterministic artifact append/fold | Implemented |
 | Critic bypass | Unsupported hypothesis reaches remediation | Required critic dependency, citations, confidence threshold, contradiction gate | Implemented for proposal/final assessment |
-| Memory poisoning | Hostile or stale knowledge biases incident response | Provenance, source quality, recency, critique, deletion | Planned |
-| Compaction loss | Summary drops conflict, approval, or safety limits | Citation-preserving compaction invariants and tests | Planned |
-| Cross-tenant embedding leak | Semantic search returns another tenant's data | Tenant partitioning, authorization, adversarial retrieval tests | Planned |
+| Memory poisoning | Hostile or stale knowledge biases incident response | Acceptance, provenance, scanning, source quality, recency, critique, deletion | Implemented with deterministic scanner hooks; external DLP/malware service unverified |
+| Compaction loss | Summary drops conflict, approval, or safety limits | Citation-preserving validation, rejection, deterministic fallback, and tests | Implemented |
+| Cross-tenant embedding leak | Semantic search returns another tenant's data | Tenant/ACL filtering, forced RLS, tenant cache keys, adversarial retrieval tests | Implemented |
 | A2A peer spoofing/replay | External agent injects or repeats tasks/artifacts | Authenticated peers, task binding, idempotency, replay protection | Planned |
 | Protocol authority bypass | MCP/A2A message invokes tools outside policy | Treat as untrusted adapter input; enforce internal runtime controls | Planned |
 
@@ -272,3 +272,20 @@ because their broker/copy-on-write boundaries are not implemented. Image
 signature/SBOM policy and remote attestation remain planned. Provider create/
 delete can still be ambiguous; stable naming and reconciliation do not make it
 exactly once.
+
+## Layer 10 residual risk
+
+Retrieved text, runbooks, historical summaries, and model output remain untrusted.
+Layer 10 marks injection/poisoning, requires curated acceptance, applies tenant/
+ACL/purpose/retention filters before ranking, renders snippets inside explicit
+data delimiters, and prevents memory from granting tools, roles, approvals, or
+policy. These controls reduce authority escalation but do not prove that accepted
+knowledge is true; citations, conflicts, confidence, critic review, and
+abstention remain mandatory.
+
+Forced RLS, tenant-first keys, tenant-digested caches, finite eight-dimensional
+vectors, quotas, fencing, and rebuild tests provide executable isolation and
+recovery evidence. They do not certify live embedding providers, external
+DLP/malware scanning, production encrypted/erasable blobs, key destruction,
+backup expiry, global cache invalidation, HA/DR, multi-region operation, or
+production-scale resistance to approximate-nearest-neighbor abuse.

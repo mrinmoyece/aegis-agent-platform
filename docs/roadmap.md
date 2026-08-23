@@ -210,26 +210,46 @@ cancellation, quarantine, cleanup redrive, RLS, quota claims, and projection
 rebuild have deterministic or environment-gated evidence. Exactly-once execution
 and cluster-level isolation are not claimed.
 
-Memory/RAG, pgvector retrieval, PII-aware compaction, retention/export/deletion,
-and semantic knowledge are explicitly deferred to a later layer rather than
-being coupled to sandbox authority.
+Memory/RAG remains separate from sandbox authority and is implemented in Layer
+10.
 
-## Layer 9 — Evaluation and observability
+## Layer 10 — Event-grounded memory, compaction, and RAG
+
+Add immutable working, episodic, and semantic contracts grounded in the event
+ledger. Curated tenant knowledge requires digest-bound acceptance, scanning,
+deterministic chunking, fenced embedding/index intent, exact provenance, ACL,
+retention/legal hold, quality, conflict, supersession, and tombstone metadata.
+PostgreSQL pgvector and lexical indexes plus Redis cache are derived and
+rebuildable.
+
+**Status:** implemented in `domain.memory`, `memory`, migration `0009`, the
+authenticated memory API, fake-only demo, deterministic tests/evals, and
+environment-gated pgvector/forced-RLS/Redis integration.
+
+**Acceptance gate:** tenant/ACL/purpose/retention filters precede deterministic
+hybrid ranking; exact citations and contradictions survive context construction
+and compaction; retrieved text cannot grant authority; stale/poisoned/tombstoned
+knowledge is excluded or quarantined; quota, fence, crash, ambiguity, rebuild,
+legal hold, and purge paths are explicit. Live providers, production encrypted
+blob/key storage, external scanning, HA/DR, and final load evidence are not
+claimed.
+
+## Layer 11 — Evaluation and observability
 
 Add versioned datasets, offline and online evaluation, release gates, traces,
 metrics, logs, cost accounting, and safe content handling. Score hypothesis
 evidence coverage, unsupported claims, remediation choice, approval compliance,
 and recovery verification on checkout-failure variants.
 
-Layer 7 includes only a bounded deterministic behavioral regression matrix; this
-layer adds production datasets, semantic quality measurement, and operational
-release gates.
-
 **Acceptance gate:** a reproducible evaluation blocks a known regression;
 event-to-trace correlation works; telemetry contains no disallowed content or
 unbounded tenant labels.
 
-## Layer 10 — Enterprise operations
+Layers 7–10 include bounded deterministic behavioral regression matrices; this
+layer adds production datasets, semantic quality measurement, and operational
+release gates.
+
+## Layer 12 — Enterprise operations
 
 Add deployment automation, SLOs, alerting, runbooks, backup and restore, HA,
 capacity tests, software provenance, signing, governance evidence, and incident

@@ -1,22 +1,23 @@
 # Implementation status
 
-The repository currently implements **Layer 9: hardened ephemeral sandbox
-execution** on top of the Layer 7 specialist DAG and Layer 8 exact approval/effect
-boundary.
+The repository currently implements **Layer 10: event-grounded memory, context
+compaction, and provenance-preserving pgvector RAG** on top of the Layer 7
+specialist DAG, Layer 8 exact approval/effect boundary, and Layer 9 sandbox.
 
-Implemented repository evidence includes immutable provider-neutral contracts,
-strict untrusted-input validation, additive sandbox events and deterministic
-replay, deny-by-default policy and egress ports, PostgreSQL-authoritative fencing,
-at-least-once reconciliation and cleanup, safe content-addressed workspace and
-artifact hooks, forced-RLS projections, authenticated redacted APIs, bounded
-telemetry, deterministic fake scenarios/evals, and a locked-down official-client
-Kubernetes suspended Job adapter with externally verified fencing admission as a
-mandatory readiness fact.
+Layer 10 adds immutable working/episodic/semantic contracts, additive lifecycle
+events and pure replay, authorized digest-bound ingestion, scanning/quarantine,
+deterministic chunking, neutral fake embedding/summarization ports, fenced
+intent-before-effect processing, atomic tenant quotas, forced-RLS pgvector and
+lexical retrieval, deterministic ranking/diversity, exact citations, untrusted
+context delimiters, contradiction abstention, citation-validating compaction,
+retention/legal hold/tombstone/blob-erasure workflows, authenticated redacted
+APIs, rebuild/reconciliation, a fake-only demo, and deterministic behavioral
+evaluations.
 
-The implementation does not certify a production Kubernetes cluster. Admission
-policy, isolated runtime class, PID enforcement, default-deny network policy,
-egress proxy/DNS defense, trusted CSI/artifact collector, scanner, secret broker,
-and image signing/SBOM enforcement require deployment evidence. Memory/RAG,
-operator UI, MCP/A2A, HA/DR/multi-region, and broad autonomous production
-mutation remain deferred. See [limitations](limitations.md) and
+The implementation does not certify a production Kubernetes cluster, live model,
+production blob/key service, external DLP/malware scanner, HA/DR/multi-region
+deployment, or final load profile. The executable embedding profile is fixed at
+eight dimensions for deterministic evidence. Operator UI, MCP/A2A, and broad
+autonomous production mutation remain deferred. See
+[limitations](limitations.md), [memory and RAG](memory-and-rag.md), and
 [sandbox execution](sandbox-execution.md).
