@@ -114,10 +114,7 @@ class FlakyProposalBlobStore(InMemoryMemoryBlobStore):
         snapshot: SourceSnapshot,
         text: str,
     ) -> bool:
-        if (
-            snapshot.content_reference == self._failing_reference
-            and not self._failed
-        ):
+        if snapshot.content_reference == self._failing_reference and not self._failed:
             self._failed = True
             raise RuntimeError("contract_blob_write_failed")
         return await super().put(context, snapshot, text)
@@ -268,8 +265,9 @@ async def test_acceptance_rejects_contract_rebinding() -> None:
 
 
 @pytest.mark.asyncio
-async def test_proposal_retry_repairs_missing_contract_blob_without_reappending(
-) -> None:
+async def test_proposal_retry_repairs_missing_contract_blob_without_reappending() -> (
+    None
+):
     ledger = InMemoryMemoryLedger()
     memory = semantic_memory("proposal-repair", "Promote the healthy replica.")
     context = TenantContext(TenantId("tenant-a"))

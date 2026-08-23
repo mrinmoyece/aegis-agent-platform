@@ -224,6 +224,8 @@ class DomainEventType(_StringConstant):
     SANDBOX_QUARANTINED: ClassVar[DomainEventType]
     SANDBOX_RECONCILIATION_REQUESTED: ClassVar[DomainEventType]
     SANDBOX_RECONCILED: ClassVar[DomainEventType]
+
+
 DomainEventType.MEMORY_CANDIDATE_PROPOSED = DomainEventType._define(
     "memory.candidate_proposed.v1"
 )
