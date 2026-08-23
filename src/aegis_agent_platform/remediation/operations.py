@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID
 
@@ -77,7 +77,7 @@ class RemediationOperations:
         idempotency_key: str,
     ) -> ProposalDecision:
         policy = self._policy(context)
-        usage = await self._quotas.quota_usage(context, at=plan.created_at)
+        usage = await self._quotas.quota_usage(context, at=datetime.now(UTC))
         return await self._approvals.propose(
             principal,
             context,

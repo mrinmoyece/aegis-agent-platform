@@ -6,6 +6,7 @@ import asyncio
 import json
 from collections.abc import Awaitable, Mapping, Sequence
 from contextlib import suppress
+from math import isfinite
 
 from aegis_agent_platform.domain import (
     ImagePart,
@@ -147,6 +148,9 @@ def classify_sdk_error(error: Exception) -> ModelGatewayError:
     )
 
 
+_MAX_RETRY_AFTER_SECONDS = 300
+
+
 def _retry_after(error: Exception) -> float | None:
     response = getattr(error, "response", None)
     headers = getattr(response, "headers", None)
@@ -154,9 +158,14 @@ def _retry_after(error: Exception) -> float | None:
         return None
     raw = headers.get("retry-after")
     try:
-        return float(raw) if raw is not None else None
+        value = float(raw) if raw is not None else None
     except (TypeError, ValueError):
         return None
+    if value is None:
+        return None
+    if not isfinite(value) or value < 0:
+        return None
+    return min(value, _MAX_RETRY_AFTER_SECONDS)
 
 
 def all_parts(messages: Sequence[ModelMessage]) -> tuple[object, ...]:

@@ -92,7 +92,7 @@ def test_verification_requires_evidence_and_positive_window() -> None:
             evidence_ids=(),
             observation_window_seconds=60,
         )
-    with pytest.raises(ValueError, match="window must be positive"):
+    with pytest.raises(ValueError, match="window must be between"):
         VerificationArtifact(
             artifact_id=uuid4(),
             tenant_id="tenant-1",

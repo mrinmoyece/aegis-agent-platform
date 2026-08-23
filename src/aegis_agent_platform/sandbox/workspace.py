@@ -158,6 +158,8 @@ class InMemoryArtifactStore:
         record = self._records.get((str(context.tenant_id), artifact_id))
         if record is None:
             return None
+        if record.scan_outcome is ScanOutcome.QUARANTINE:
+            return None
         return record, self._content[(record.tenant_id, record.digest)]
 
 

@@ -69,13 +69,16 @@ class EnvironmentSecretProvider:
 
     provider_name = "env"
 
-    def __init__(self, values: Mapping[str, str]) -> None:
+    def __init__(self, values: Mapping[str, str], *, tenant_id: TenantId) -> None:
         self._values = dict(values)
+        self._tenant_id = tenant_id
 
     @classmethod
-    def from_process_environment(cls) -> EnvironmentSecretProvider:
+    def from_process_environment(
+        cls, *, tenant_id: TenantId
+    ) -> EnvironmentSecretProvider:
         """Capture process environment only when explicitly requested."""
-        return cls(os.environ)
+        return cls(os.environ, tenant_id=tenant_id)
 
     def resolve(
         self,
@@ -83,6 +86,8 @@ class EnvironmentSecretProvider:
         reference: SecretReference,
     ) -> SecretValue:
         _require_tenant(context, reference)
+        if context.tenant_id != self._tenant_id:
+            raise SecretError("environment secrets are bound to a single tenant")
         if reference.provider != self.provider_name:
             raise SecretError("secret reference targets a different provider")
         if reference.version is not None:

@@ -116,7 +116,8 @@ def test_secret_values_never_render_or_serialize_raw_material() -> None:
 
 def test_environment_provider_requires_explicit_prefixed_reference() -> None:
     provider = EnvironmentSecretProvider(
-        {"AEGIS_SECRET_MODEL_API": "local-development-only"}
+        {"AEGIS_SECRET_MODEL_API": "local-development-only"},
+        tenant_id=TENANT_ID,
     )
     context = TenantContext(TENANT_ID)
     reference = SecretReference(TENANT_ID, "env", "AEGIS_SECRET_MODEL_API")

@@ -155,6 +155,11 @@ class OpenAIAdapter:
     ) -> dict[str, object]:
         inputs: list[dict[str, object]] = []
         for message in request.messages:
+            role = (
+                "developer"
+                if message.role is MessageRole.SYSTEM
+                else message.role.value
+            )
             content: list[dict[str, object]] = []
             for part in message.content:
                 if isinstance(part, TextPart):
@@ -162,7 +167,11 @@ class OpenAIAdapter:
                 elif isinstance(part, ImagePart):
                     content.append({"type": "input_image", "image_url": part.uri})
                 elif isinstance(part, ToolCallPart):
-                    content.append(
+                    # function_call is a top-level input item, not a content part
+                    if content:
+                        inputs.append({"role": role, "content": content})
+                        content = []
+                    inputs.append(
                         {
                             "type": "function_call",
                             "call_id": part.proposal.call_id,
@@ -175,7 +184,11 @@ class OpenAIAdapter:
                         }
                     )
                 elif isinstance(part, ToolResultPart):
-                    content.append(
+                    # function_call_output is a top-level input item, not a content part
+                    if content:
+                        inputs.append({"role": role, "content": content})
+                        content = []
+                    inputs.append(
                         {
                             "type": "function_call_output",
                             "call_id": part.call_id,
@@ -188,12 +201,8 @@ class OpenAIAdapter:
                         "unsupported_content_part",
                         retryable=False,
                     )
-            role = (
-                "developer"
-                if message.role is MessageRole.SYSTEM
-                else message.role.value
-            )
-            inputs.append({"role": role, "content": content})
+            if content:
+                inputs.append({"role": role, "content": content})
         result: dict[str, object] = {
             "model": model.model,
             "input": inputs,
