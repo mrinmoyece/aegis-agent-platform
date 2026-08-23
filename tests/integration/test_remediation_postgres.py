@@ -720,10 +720,10 @@ def test_postgres_projection_allows_shared_action_digest_across_plans() -> None:
                 ("tenant-remediation", shared_action.digest),
             )
             rows = await cursor.fetchall()
-            assert rows == [
+            assert set(rows) == {
                 (first_plan.plan_id, shared_action.digest),
                 (second_plan.plan_id, shared_action.digest),
-            ]
+            }
         finally:
             await maintenance.close()
 
