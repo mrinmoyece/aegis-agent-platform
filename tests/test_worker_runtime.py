@@ -883,7 +883,7 @@ class FakeOperationsRepository:
         *,
         status: WorkStatus | None = None,
         limit: int = 100,
-        cursor: datetime | None = None,
+        cursor: tuple[datetime, UUID] | None = None,
     ) -> tuple[Mapping[str, object], ...]:
         del context, status, limit, cursor
         return ({"status": "running"},)
@@ -893,7 +893,7 @@ class FakeOperationsRepository:
         context: TenantContext,
         *,
         limit: int = 100,
-        cursor: datetime | None = None,
+        cursor: tuple[datetime, UUID] | None = None,
     ) -> tuple[Mapping[str, object], ...]:
         del context, limit, cursor
         return ({"status": "claimed"},)
