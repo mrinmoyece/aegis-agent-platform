@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from typing import cast
 
 import pytest
 
@@ -473,7 +475,7 @@ def test_health_registry_validates_inputs_converts_failures_and_caches() -> None
         ComponentProbe(
             "not valid!",
             DependencyCriticality.CORRECTNESS,
-            lambda: asyncio.sleep(0),
+            cast(Callable[[], Awaitable[ProbeResult]], lambda: asyncio.sleep(0)),
         )
     with pytest.raises(ValueError, match="cache_seconds"):
         HealthRegistry((), cache_seconds=61)

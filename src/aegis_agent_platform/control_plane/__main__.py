@@ -5,14 +5,14 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from datetime import timedelta
 from hashlib import sha256
-from typing import Any
+from typing import Any, cast
 
 import psycopg
 import uvicorn
 
 from aegis_agent_platform.config import Environment, Settings
 from aegis_agent_platform.control_plane.api import ControlPlaneApp
-from aegis_agent_platform.event_store import EventPage
+from aegis_agent_platform.event_store import EventPage, EventStore
 from aegis_agent_platform.event_store.postgres import PostgresEventStore
 from aegis_agent_platform.identity import (
     AuthenticationService,
@@ -153,7 +153,7 @@ def _observability_operations(
 ) -> ObservabilityOperations | None:
     if not settings.database_url:
         return None
-    event_store = _AsyncPostgresReadStore(settings.database_url)
+    event_store = cast(EventStore, _AsyncPostgresReadStore(settings.database_url))
     identifier_hash_key = sha256(
         f"{settings.service_name}:{settings.database_url}".encode()
     ).digest()
@@ -184,7 +184,7 @@ def _application(settings: Settings) -> ControlPlaneApp:
         policies=policies,
         audit=audit,
         event_store=(
-            _AsyncPostgresReadStore(settings.database_url)
+            cast(EventStore, _AsyncPostgresReadStore(settings.database_url))
             if settings.database_url
             else None
         ),

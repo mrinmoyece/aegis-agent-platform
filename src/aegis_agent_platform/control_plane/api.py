@@ -63,6 +63,7 @@ from aegis_agent_platform.observability.context import (
 from aegis_agent_platform.observability.health import HealthRegistry
 from aegis_agent_platform.observability.operations import ObservabilityOperations
 from aegis_agent_platform.observability.replay import (
+    SupportReport,
     SupportReportRangeError,
     SupportReportTooLargeError,
 )
@@ -2228,7 +2229,7 @@ async def _respond(
 application = ControlPlaneApp()
 
 
-def _support_report_state(report: object) -> Mapping[str, JsonValue]:
+def _support_report_state(report: SupportReport) -> Mapping[str, JsonValue]:
     state = report.state
     return {
         "sequence": state.sequence,
@@ -2242,7 +2243,9 @@ def _support_report_state(report: object) -> Mapping[str, JsonValue]:
     }
 
 
-def _support_report_causal_chain(report: object) -> tuple[Mapping[str, JsonValue], ...]:
+def _support_report_causal_chain(
+    report: SupportReport,
+) -> tuple[Mapping[str, JsonValue], ...]:
     return tuple(
         {
             "sequence": item.sequence,

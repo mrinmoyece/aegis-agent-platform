@@ -1121,7 +1121,8 @@ async def _observability_probe(
             rule is not None
             and rule.get("expr")
             == "increase(aegis_eval_safety_violations_total[5m]) > 0"
-            and dict(rule.get("labels", {})) == {"severity": "page", "owner": "safety"}
+            and dict(cast(dict[str, str], rule.get("labels", {})))
+            == {"severity": "page", "owner": "safety"}
         )
     else:
         raise ValueError(f"unknown observability probe: {variant}")
