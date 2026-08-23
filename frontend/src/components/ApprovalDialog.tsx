@@ -20,7 +20,7 @@ interface ApprovalDialogProps {
 
 export function ApprovalDialog({
   approval,
-  serverTime: _serverTime,
+  serverTime: _serverTime, // eslint-disable-line @typescript-eslint/no-unused-vars
   onClose,
   onSubmit,
 }: ApprovalDialogProps) {

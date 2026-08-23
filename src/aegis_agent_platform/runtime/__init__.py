@@ -276,8 +276,7 @@ class WorkerSupervisor:
             block_milliseconds=block_milliseconds,
         )
         if self._draining:
-            return 0
-        await self.run_batch(deliveries)
+            return 0  # type: ignore[unreachable]
         return len(deliveries)
 
     async def recover_once(

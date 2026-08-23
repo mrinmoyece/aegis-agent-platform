@@ -93,17 +93,16 @@ export function App({ source = new DemoOperatorDataSource() }: AppProps) {
             const incoming = new Map(events.map((e) => [e.id, e]));
             const updated: OperatorSnapshot = {
               ...prev,
-              sections: {} as typeof prev.sections,
+              sections: {},
             };
             for (const [section, items] of Object.entries(prev.sections)) {
-              (updated.sections as Record<string, readonly OperatorItem[]>)[section] = (
-                items as OperatorItem[]
-              ).map((item) => incoming.get(item.id) ?? item);
+              (updated.sections as Record<string, readonly OperatorItem[]>)[section] =
+                items.map((item) => incoming.get(item.id) ?? item);
             }
             return updated;
           });
         },
-        (_state) => undefined,
+        () => undefined,
       );
       pollerRef.current?.stop();
       pollerRef.current = poller;

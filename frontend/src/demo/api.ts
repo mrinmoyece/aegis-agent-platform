@@ -71,7 +71,7 @@ export class DemoOperatorDataSource implements OperatorDataSource {
     const nextCursor =
       offset + page.length < items.length ? String(offset + page.length) : null;
     return {
-      events: page as OperatorItem[],
+      events: page,
       next_cursor: nextCursor,
       server_time: demoSession.server_time,
       stale: false,
