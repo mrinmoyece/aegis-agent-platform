@@ -46,7 +46,10 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from aegis_agent_platform.identity import (
-    JwtValidationConfig, JwtVerifier, StaticJwksProvider, VerificationKey,
+    JwtValidationConfig,
+    JwtVerifier,
+    StaticJwksProvider,
+    VerificationKey,
 )
 
 # A real deployment points RemoteJwksProvider at a Keycloak realm's JWKS URL
@@ -102,28 +105,36 @@ client-asserted tenant or role:
 
 ```python
 from aegis_agent_platform.identity import (
-    AuthenticationService, IdentityRecord, InMemoryIdentityDirectory,
-    PrincipalKind, Role, RoleBinding, TenantId, UserId,
+    AuthenticationService,
+    IdentityRecord,
+    InMemoryIdentityDirectory,
+    PrincipalKind,
+    Role,
+    RoleBinding,
+    TenantId,
+    UserId,
 )
 
 tenant = TenantId("acme")
-directory = InMemoryIdentityDirectory((
-    IdentityRecord(
-        issuer="https://idp.example/realms/aegis",
-        subject="user-1",
-        tenant_id=tenant,
-        kind=PrincipalKind.USER,
-        role_bindings=(
-            RoleBinding(
-                tenant_id=tenant,
-                role=Role.INVESTIGATOR,
-                assigned_by=UserId("admin"),
-                assigned_at=now - timedelta(days=1),
+directory = InMemoryIdentityDirectory(
+    (
+        IdentityRecord(
+            issuer="https://idp.example/realms/aegis",
+            subject="user-1",
+            tenant_id=tenant,
+            kind=PrincipalKind.USER,
+            role_bindings=(
+                RoleBinding(
+                    tenant_id=tenant,
+                    role=Role.INVESTIGATOR,
+                    assigned_by=UserId("admin"),
+                    assigned_at=now - timedelta(days=1),
+                ),
             ),
+            user_id=UserId("user-1"),
         ),
-        user_id=UserId("user-1"),
-    ),
-))
+    )
+)
 
 authentication = AuthenticationService(verifier, directory)
 principal = authentication.authenticate(f"Bearer {token}")
@@ -146,14 +157,18 @@ from aegis_agent_platform.identity import AuthorizationService, Permission
 authorization = AuthorizationService()
 
 decision = authorization.decide(
-    principal=principal, tenant_id=tenant,
-    permission=Permission.INVESTIGATION_CREATE, at=datetime.now(UTC),
+    principal=principal,
+    tenant_id=tenant,
+    permission=Permission.INVESTIGATION_CREATE,
+    at=datetime.now(UTC),
 )
 print(decision.allowed, decision.reason)  # True role_permission_granted
 
 cross_tenant = authorization.decide(
-    principal=principal, tenant_id=TenantId("other-tenant"),
-    permission=Permission.INVESTIGATION_CREATE, at=datetime.now(UTC),
+    principal=principal,
+    tenant_id=TenantId("other-tenant"),
+    permission=Permission.INVESTIGATION_CREATE,
+    at=datetime.now(UTC),
 )
 print(cross_tenant.allowed, cross_tenant.reason)  # False cross_tenant_access_denied
 ```
@@ -175,19 +190,28 @@ deterministic `PolicyDecision`:
 from decimal import Decimal
 
 from aegis_agent_platform.policy import (
-    PolicyEvaluator, PolicyRequest, QuotaLimits, QuotaUsage, RiskLevel,
+    PolicyEvaluator,
+    PolicyRequest,
+    QuotaLimits,
+    QuotaUsage,
+    RiskLevel,
     TenantPolicy,
 )
 
 policy = TenantPolicy(
-    tenant_id=tenant, version="v1",
-    allowed_models=frozenset({"gpt"}), allowed_tools=frozenset({"rollback"}),
-    allowed_connectors=frozenset({"dynatrace"}), allowed_environments=frozenset({"prod"}),
-    max_risk=RiskLevel.HIGH, approval_from_risk=RiskLevel.MEDIUM,
+    tenant_id=tenant,
+    version="v1",
+    allowed_models=frozenset({"gpt"}),
+    allowed_tools=frozenset({"rollback"}),
+    allowed_connectors=frozenset({"dynatrace"}),
+    allowed_environments=frozenset({"prod"}),
+    max_risk=RiskLevel.HIGH,
+    approval_from_risk=RiskLevel.MEDIUM,
     tools_requiring_approval=frozenset({"rollback"}),
     approver_roles=frozenset({Role.APPROVER}),
     quotas=QuotaLimits(
-        max_run_tokens=1000, max_run_cost_usd=Decimal("5"),
+        max_run_tokens=1000,
+        max_run_cost_usd=Decimal("5"),
         max_tenant_tokens_per_period=100_000,
         max_tenant_cost_usd_per_period=Decimal("500"),
         max_concurrent_runs=5,
@@ -195,9 +219,14 @@ policy = TenantPolicy(
 )
 
 request = PolicyRequest(
-    tenant_id=tenant, model="gpt", tool="rollback", connector="dynatrace",
-    environment="prod", risk=RiskLevel.HIGH,
-    estimated_tokens=200, estimated_cost_usd=Decimal("1"),
+    tenant_id=tenant,
+    model="gpt",
+    tool="rollback",
+    connector="dynatrace",
+    environment="prod",
+    risk=RiskLevel.HIGH,
+    estimated_tokens=200,
+    estimated_cost_usd=Decimal("1"),
 )
 usage = QuotaUsage(tenant_tokens_used=0, tenant_cost_usd=Decimal("0"), active_runs=0)
 
@@ -224,17 +253,24 @@ in its constructor — you cannot opt out:
 from uuid import uuid4
 
 from aegis_agent_platform.audit import (
-    AuditEvent, AuditEventType, AuditOutcome, InMemoryAuditStore,
+    AuditEvent,
+    AuditEventType,
+    AuditOutcome,
+    InMemoryAuditStore,
 )
 from aegis_agent_platform.tenancy import TenantContext
 
 store = InMemoryAuditStore()
 event = AuditEvent(
-    event_id=uuid4(), tenant_id=tenant,
+    event_id=uuid4(),
+    tenant_id=tenant,
     event_type=AuditEventType.AUTHORIZATION_DECISION,
-    occurred_at=datetime.now(UTC), outcome=AuditOutcome.SUCCESS,
-    actor_id=principal.actor_id, action="investigation:create",
-    resource="tenant/acme/investigation", correlation_id=uuid4(),
+    occurred_at=datetime.now(UTC),
+    outcome=AuditOutcome.SUCCESS,
+    actor_id=principal.actor_id,
+    action="investigation:create",
+    resource="tenant/acme/investigation",
+    correlation_id=uuid4(),
     details={"authorization_header": "Bearer sensitive-token-value"},
 )
 store.append(TenantContext(tenant), event)
@@ -256,12 +292,15 @@ them:
 
 ```python
 from aegis_agent_platform.secrets_boundary import (
-    EnvironmentSecretProvider, SecretReference,
+    EnvironmentSecretProvider,
+    SecretReference,
 )
 from aegis_agent_platform.identity import TenantId
 from aegis_agent_platform.tenancy import TenantContext
 
-provider = EnvironmentSecretProvider({"AEGIS_SECRET_DYNATRACE_TOKEN": "local-only-example"})
+provider = EnvironmentSecretProvider(
+    {"AEGIS_SECRET_DYNATRACE_TOKEN": "local-only-example"}
+)
 tenant_id = TenantId("tenant-alpha")
 context = TenantContext(tenant_id)
 reference = SecretReference(
@@ -270,9 +309,9 @@ reference = SecretReference(
     name="AEGIS_SECRET_DYNATRACE_TOKEN",
 )
 value = provider.resolve(context, reference)
-print(value)              # [REDACTED]
-print(repr(value))        # SecretValue([REDACTED])
-print(value.reveal())     # b'local-only-example'
+print(value)  # [REDACTED]
+print(repr(value))  # SecretValue([REDACTED])
+print(value.reveal())  # b'local-only-example'
 ```
 
 `EnvironmentSecretProvider` deliberately requires the `AEGIS_SECRET_` prefix so

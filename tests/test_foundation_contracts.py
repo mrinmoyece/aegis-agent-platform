@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal
 from math import inf, nan
 from typing import Any
 from uuid import uuid4
@@ -15,12 +16,18 @@ from scripts.check_manifests import (
 )
 
 from aegis_agent_platform.domain import EventEnvelope
+from aegis_agent_platform.domain.model import (
+    MessageRole,
+    ModelMessage,
+    ModelRequest,
+    TextPart,
+    TokenUsage,
+)
 from aegis_agent_platform.integrations.dynatrace import (
     SignalKind,
     TelemetryEvidence,
 )
 from aegis_agent_platform.integrations.github import ChangeEvidence, ChangeKind
-from aegis_agent_platform.providers import ModelMessage, ModelRequest, ModelResponse
 from aegis_agent_platform.queueing import Lease
 
 
@@ -124,16 +131,31 @@ def test_evidence_and_lease_timestamps_must_be_aware() -> None:
 
 
 def test_model_request_uses_validated_portable_options() -> None:
+    _rid = uuid4()
+    _run = uuid4()
     request = ModelRequest(
-        model="reasoning-model",
-        messages=(ModelMessage(role="user", content="Investigate"),),
-        temperature=0.2,
+        request_id=_rid,
+        tenant_id="tenant-1",
+        run_id=_run,
+        messages=(ModelMessage(MessageRole.USER, (TextPart("Investigate"),)),),
         max_output_tokens=1_000,
+        prompt_token_estimate=10,
+        idempotency_key="idem-1",
+        temperature=Decimal("0.2"),
     )
 
-    assert request.temperature == 0.2
+    assert request.temperature == Decimal("0.2")
     with pytest.raises(ValueError, match="temperature"):
-        ModelRequest(model="model", messages=(), temperature=3.0)
+        ModelRequest(
+            request_id=_rid,
+            tenant_id="tenant-1",
+            run_id=_run,
+            messages=(ModelMessage(MessageRole.USER, (TextPart("x"),)),),
+            max_output_tokens=1_000,
+            prompt_token_estimate=10,
+            idempotency_key="idem-1",
+            temperature=Decimal("3.0"),
+        )
 
 
 @pytest.mark.parametrize(
@@ -145,12 +167,7 @@ def test_model_response_rejects_negative_usage(
     output_tokens: int,
 ) -> None:
     with pytest.raises(ValueError, match="cannot be negative"):
-        ModelResponse(
-            content="result",
-            finish_reason="stop",
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-        )
+        TokenUsage(input_tokens=input_tokens, output_tokens=output_tokens)
 
 
 def test_final_docker_stage_user_parser_ignores_comments_and_prior_stages() -> None:
