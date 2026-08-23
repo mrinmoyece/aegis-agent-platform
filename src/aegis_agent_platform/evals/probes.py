@@ -783,7 +783,7 @@ async def _policy_probe(
         100,
         Decimal("0.01"),
     )
-    usage = QuotaUsage(0, Decimal(0), 0)
+    usage = QuotaUsage(TENANT_A, 0, Decimal(0), 0)
     if variant == "budget-denial":
         request = PolicyRequest(
             TENANT_A,
@@ -1514,7 +1514,7 @@ async def _gateway_cut_point_probe(
         if (
             await repository.completed(
                 TenantContext(TENANT_A),
-                request.idempotency_key,
+                request,
             )
             is None
         ):
@@ -1850,6 +1850,8 @@ def _tenant_policy() -> TenantPolicy:
             Decimal("10"),
             4,
         ),
+        allowed_providers=frozenset({"fake"}),
+        allowed_data_residencies=frozenset({"eu"}),
     )
 
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -133,8 +132,6 @@ class ModelGateway:
             if response is not None:
                 try:
                     self._validate_response(request, response)
-                    cost = candidate.pricing.cost(response.usage)
-                    response = replace(response, cost_usd=cost)
                     self._fault_hook("before_result_append")
                     await self._repository.succeed(
                         context,
@@ -148,7 +145,7 @@ class ModelGateway:
                     self._fault_hook("after_result_append")
                 except ModelGatewayError as error:
                     self._fault_hook("before_result_append")
-                    await self._repository.fail(
+                    await self._repository.record_usage_failure(
                         context,
                         request,
                         lease,
@@ -162,6 +159,7 @@ class ModelGateway:
                     raise
                 self._metrics.usage(candidate.identity, response.usage)
                 self._metrics.add("latency_ms", candidate.identity, response.latency_ms)
+                cost = candidate.pricing.cost(response.usage)
                 self._metrics.add("cost_usd", candidate.identity, float(cost))
                 self._metrics.add(
                     "reservation_drift_tokens",
@@ -273,45 +271,17 @@ class ModelGateway:
             )
         provider = self._providers[model.provider]
         last_error: ModelGatewayError | None = None
-        for attempt in range(1, self._retry_policy.max_attempts + 1):
-            if not self._controls.admit(
-                model,
-                request.prompt_token_estimate + request.max_output_tokens,
-            ):
-                last_error = ModelGatewayError(
-                    ModelErrorClass.RATE_LIMIT,
-                    "local_rate_limit",
-                    retryable=True,
-                )
-                self._metrics.add("rate_limits", model)
-                break
-            await self._repository.record_attempt(
-                context,
-                request,
-                lease,
-                reservation,
-                provider=model.provider,
-                model=model.model,
-                attempt=attempt,
-                fallback_index=fallback_index,
-                at=self._clock(),
-            )
-            self._metrics.add("attempts", model)
-            try:
-                async with self._controls.semaphore(model):
-                    with self._tracer.attempt(model):
-                        self._fault_hook("before_side_effect")
-                        response = await provider.complete(
-                            request,
-                            model,
-                            cancellation=cancellation,
-                        )
-                        self._fault_hook("after_side_effect")
-            except ModelGatewayError as error:
-                last_error = error
-                if error.error_class is ModelErrorClass.MALFORMED_RESPONSE:
-                    self._metrics.add("malformed_responses", model)
-                if error.error_class is ModelErrorClass.RATE_LIMIT:
+        try:
+            for attempt in range(1, self._retry_policy.max_attempts + 1):
+                if not self._controls.admit(
+                    model,
+                    request.prompt_token_estimate + request.max_output_tokens,
+                ):
+                    last_error = ModelGatewayError(
+                        ModelErrorClass.RATE_LIMIT,
+                        "local_rate_limit",
+                        retryable=True,
+                    )
                     self._metrics.add("rate_limits", model)
                     break
                 try:
@@ -329,11 +299,13 @@ class ModelGateway:
                         )
                         self._metrics.add("attempts", model)
                         with self._tracer.attempt(model):
+                            self._fault_hook("before_side_effect")
                             response = await provider.complete(
                                 request,
                                 model,
                                 cancellation=cancellation,
                             )
+                            self._fault_hook("after_side_effect")
                 except ModelGatewayError as error:
                     last_error = error
                     if error.error_class is ModelErrorClass.MALFORMED_RESPONSE:

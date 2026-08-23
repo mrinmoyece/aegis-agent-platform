@@ -62,7 +62,10 @@ def imported_modules(path: Path) -> set[str]:
 
 
 def _package_parts(path: Path) -> tuple[str, ...]:
-    relative = path.relative_to(ROOT / "src")
+    try:
+        relative = path.relative_to(ROOT / "src")
+    except ValueError:
+        return ()
     return relative.parts[:-1]
 
 
@@ -71,7 +74,11 @@ def _import_from_modules(
     package_parts: tuple[str, ...],
 ) -> set[str]:
     if node.level:
-        base_parts = package_parts[: len(package_parts) - (node.level - 1)]
+        levels_up = node.level - 1
+        if len(package_parts) < levels_up:
+            # Cannot resolve relative import against known package; return raw notation
+            return {"." * node.level + (node.module or "")}
+        base_parts = package_parts[: len(package_parts) - levels_up]
     else:
         base_parts = ()
     module_parts = tuple(node.module.split(".")) if node.module else ()
