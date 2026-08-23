@@ -330,7 +330,10 @@ class ModelGateway:
                     delay = (
                         error.retry_after_seconds
                         if error.retry_after_seconds is not None
-                        else self._retry_policy.backoff.delay(attempt).total_seconds()
+                        else (
+                            self._retry_policy.backoff.delay(attempt)
+                            .total_seconds()
+                        )
                     )
                     await self._sleep(delay)
                     continue

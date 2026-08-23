@@ -774,7 +774,7 @@ def test_report_outputs_are_bounded_redacted_and_replayable(
     compared_json = json.loads(compared_paths.json.read_text(encoding="utf-8"))
     assert compared_json["comparison"]["passed"] is False
     junit_comparison = compared_paths.junit.read_text(encoding="utf-8")
-    assert 'tests="92"' in junit_comparison
+    assert 'tests="98"' in junit_comparison
     assert 'failures="1"' in junit_comparison
     assert 'name="baseline_comparison"' in junit_comparison
     with pytest.raises(ValueError, match="sensitive"):

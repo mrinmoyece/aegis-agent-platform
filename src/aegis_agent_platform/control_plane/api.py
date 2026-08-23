@@ -38,7 +38,7 @@ from aegis_agent_platform.domain import (
     sandbox_request_from_payload,
 )
 from aegis_agent_platform.domain.events import thaw_json
-from aegis_agent_platform.event_store import EventStore
+from aegis_agent_platform.event_store import EventStore, TransientStorageError
 from aegis_agent_platform.evidence import EvidenceQuery
 from aegis_agent_platform.evidence.operations import EvidenceOperations
 from aegis_agent_platform.evidence.service import EvidenceIdempotencyConflictError
@@ -596,7 +596,9 @@ class ControlPlaneApp:
             principal,
             tenant_id,
             Permission.EVIDENCE_QUERY,
-            correlation_id=correlation_id,
+            correlation_id=(
+                UUID(propagation.trace_id) if propagation is not None else uuid4()
+            ),
             resource=f"tenant/{tenant_id}/evidence/queries",
         ):
             return

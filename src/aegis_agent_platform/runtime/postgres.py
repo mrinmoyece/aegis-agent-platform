@@ -39,6 +39,17 @@ from aegis_agent_platform.tenancy import TenantContext
 
 _MAX_UUID = UUID(int=(1 << 128) - 1)
 _KeysetCursor = tuple[datetime, UUID]
+
+
+def _descending_cursor(
+    cursor: _KeysetCursor | datetime | None,
+) -> tuple[datetime, UUID]:
+    """Normalise a keyset cursor into (before_ts, before_id) upper bounds."""
+    if cursor is None:
+        return datetime(9999, 12, 31, 23, 59, 59, tzinfo=UTC), _MAX_UUID
+    if isinstance(cursor, tuple):
+        return cursor
+    return cursor, _MAX_UUID
 _RedriveRow = tuple[UUID, UUID]
 _ExpiredLeaseRow = tuple[
     UUID,

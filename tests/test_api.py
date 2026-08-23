@@ -57,7 +57,7 @@ from aegis_agent_platform.gateway import (
     ModelCatalogEntry,
     ProviderControls,
 )
-from aegis_agent_platform.identity import PLATFORM_TENANT_ID
+from aegis_agent_platform.identity import PLATFORM_TENANT_ID, Principal
 from aegis_agent_platform.observability import (
     ObservabilityOperations,
     ReplayDebugger,
