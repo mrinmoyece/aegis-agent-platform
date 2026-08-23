@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
@@ -21,6 +22,7 @@ from aegis_agent_platform.evals.baseline import (
 from aegis_agent_platform.evals.catalog import build_suite
 from aegis_agent_platform.evals.cli import catalog_json, main
 from aegis_agent_platform.evals.contracts import (
+    EvaluationCase,
     EvaluationMode,
     EvaluationReport,
     ExecutionTraceReference,
@@ -920,10 +922,10 @@ def test_probe_observation_outcome_failure_is_classified_as_outcome_mismatch(
     selection = RunSelection(frozenset({"identity.cross-tenant"}))
 
     async def inconsistent_probe(
-        case: object,
+        case: EvaluationCase,
         *,
-        fault_injector: object = None,
-        fixture_documents: object = None,
+        fault_injector: DeterministicFaultInjector | None = None,
+        fixture_documents: Mapping[str, Mapping[str, object]] | None = None,
     ) -> ProbeResult:
         result = await execute_probe(
             case,

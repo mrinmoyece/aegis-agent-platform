@@ -8,6 +8,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
 from aegis_agent_platform.evals.baseline import BaselineComparison
 from aegis_agent_platform.evals.contracts import (
@@ -76,12 +77,12 @@ def write_report_bundle(
 ) -> ReportPaths:
     """Write bounded artifacts atomically after a content-safety check."""
     directory.mkdir(parents=True, exist_ok=True)
-    report_document = canonical_data(report)
+    report_document: dict[str, Any] = cast(dict[str, Any], canonical_data(report))
     if comparison is not None and not comparison.passed:
         report_document = {
             **report_document,
             "comparison": {
-                **canonical_data(comparison),
+                **cast(dict[str, Any], canonical_data(comparison)),
                 "passed": comparison.passed,
             },
         }
