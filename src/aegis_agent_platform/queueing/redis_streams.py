@@ -90,17 +90,21 @@ class RedisStreamQueue:
         await self.ensure_group()
         _validate_consumer_read(consumer, count, block_milliseconds)
         try:
-            kwargs: dict[str, object] = {
-                "count": count,
-            }
             if block_milliseconds > 0:
-                kwargs["block"] = block_milliseconds
-            rows = await self._client.xreadgroup(
-                self._group,
-                consumer,
-                {self._stream: ">"},
-                **kwargs,
-            )
+                rows = await self._client.xreadgroup(
+                    self._group,
+                    consumer,
+                    {self._stream: ">"},
+                    count=count,
+                    block=block_milliseconds,
+                )
+            else:
+                rows = await self._client.xreadgroup(
+                    self._group,
+                    consumer,
+                    {self._stream: ">"},
+                    count=count,
+                )
         except RedisError as error:
             raise _classify_redis_error(error) from error
         entries = _stream_entries(rows)
