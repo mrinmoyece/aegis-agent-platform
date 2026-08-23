@@ -797,6 +797,11 @@ def test_postgres_gateway_repository_rolls_back_failed_projection_mutation() -> 
                 DomainEventType.MODEL_BUDGET_RESERVED,
             ]
         finally:
+            # Clean up active reservations so the next test starts with 0 tokens.
+            with admin_connection() as admin:
+                admin.execute(
+                    "DELETE FROM model_budget_reservations WHERE tenant_id = 'tenant-a'"
+                )
             await connection.close()
 
     asyncio.run(scenario())
