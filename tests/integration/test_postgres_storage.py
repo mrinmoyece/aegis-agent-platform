@@ -77,6 +77,7 @@ pytestmark = [
 ]
 TENANT_A = TenantContext(TenantId("tenant-a"))
 TENANT_B = TenantContext(TenantId("tenant-b"))
+TENANT_GATEWAY = TenantContext(TenantId("tenant-gateway"))
 
 
 async def app_connection() -> psycopg.AsyncConnection[tuple[object, ...]]:
@@ -118,7 +119,7 @@ def gateway_route(run_id: UUID) -> tuple[ModelRequest, WorkLease, RouteDecision]
     pricing = gateway_pricing()
     request = ModelRequest(
         request_id=UUID(f"00000000-0000-4000-8000-{run_id.int % 10**12:012d}"),
-        tenant_id=str(TENANT_A.tenant_id),
+        tenant_id=str(TENANT_GATEWAY.tenant_id),
         run_id=run_id,
         messages=(ModelMessage(MessageRole.USER, (TextPart("hello"),)),),
         max_output_tokens=32,
@@ -129,14 +130,14 @@ def gateway_route(run_id: UUID) -> tuple[ModelRequest, WorkLease, RouteDecision]
     )
     lease = WorkLease(
         work_id=run_id,
-        tenant_id=str(TENANT_A.tenant_id),
+        tenant_id=str(TENANT_GATEWAY.tenant_id),
         token=UUID(f"10000000-0000-4000-8000-{run_id.int % 10**12:012d}"),
         generation=1,
         owner="integration-worker",
         attempt=1,
-        acquired_at=datetime(2026, 1, 1, tzinfo=UTC),
-        heartbeat_at=datetime(2026, 1, 1, tzinfo=UTC),
-        expires_at=datetime(2026, 1, 1, tzinfo=UTC) + timedelta(minutes=5),
+        acquired_at=datetime.now(UTC),
+        heartbeat_at=datetime.now(UTC),
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
     )
     entry = ModelCatalogEntry(
         identity=model,
@@ -173,7 +174,7 @@ def event(
 
 
 def seed_gateway_work(lease: WorkLease) -> None:
-    request_event = event(str(lease.work_id), tenant_id=str(TENANT_A.tenant_id))
+    request_event = event(str(lease.work_id), tenant_id=str(TENANT_GATEWAY.tenant_id))
     with admin_connection() as connection:
         connection.execute(
             """
@@ -212,7 +213,7 @@ def seed_gateway_work(lease: WorkLease) -> None:
                 tenant_id, max_run_tokens, max_run_cost_usd,
                 max_tenant_tokens_per_period, max_tenant_cost_usd_per_period,
                 max_concurrent_runs, updated_at
-            ) VALUES ('tenant-a', 100, 1, 100, 1, 10, transaction_timestamp())
+            ) VALUES ('tenant-gateway', 100, 1, 100, 1, 10, transaction_timestamp())
             ON CONFLICT (tenant_id) DO UPDATE
             SET max_run_tokens = EXCLUDED.max_run_tokens,
                 max_run_cost_usd = EXCLUDED.max_run_cost_usd,
@@ -237,7 +238,7 @@ def seed_gateway_work(lease: WorkLease) -> None:
             ON CONFLICT (tenant_id, work_id) DO NOTHING
             """,
             (
-                str(TENANT_A.tenant_id),
+                str(TENANT_GATEWAY.tenant_id),
                 lease.work_id,
                 f"work-{lease.work_id}",
                 lease.acquired_at,
@@ -263,7 +264,7 @@ def seed_gateway_work(lease: WorkLease) -> None:
                 release_reason = NULL
             """,
             (
-                str(TENANT_A.tenant_id),
+                str(TENANT_GATEWAY.tenant_id),
                 lease.work_id,
                 lease.token,
                 lease.generation,
@@ -662,7 +663,7 @@ def test_postgres_gateway_repository_reservation_race_and_fence_rejection() -> N
                         connection,
                         PostgresEventStore(connection),
                     ).reserve(
-                        TENANT_A,
+                        TENANT_GATEWAY,
                         request,
                         lease,
                         route,
@@ -711,7 +712,7 @@ def test_postgres_gateway_repository_reservation_race_and_fence_rejection() -> N
                     first_connection,
                     PostgresEventStore(first_connection),
                 ).reserve(
-                    TENANT_A,
+                    TENANT_GATEWAY,
                     first_request,
                     stale_lease,
                     first_route,
@@ -741,7 +742,7 @@ def test_postgres_gateway_repository_rolls_back_failed_projection_mutation() -> 
                 PostgresEventStore(connection),
             )
             reservation = await repository.reserve(
-                TENANT_A,
+                TENANT_GATEWAY,
                 request,
                 lease,
                 route,
@@ -777,7 +778,7 @@ def test_postgres_gateway_repository_rolls_back_failed_projection_mutation() -> 
             )
             with pytest.raises(PermanentStorageError):
                 await repository.succeed(
-                    TENANT_A,
+                    TENANT_GATEWAY,
                     request,
                     lease,
                     reservation,
@@ -786,7 +787,9 @@ def test_postgres_gateway_repository_rolls_back_failed_projection_mutation() -> 
                     at=lease.acquired_at + timedelta(seconds=1),
                 )
             stream = await collect(
-                PostgresEventStore(connection).read_stream(TENANT_A, str(lease.work_id))
+                PostgresEventStore(connection).read_stream(
+                    TENANT_GATEWAY, str(lease.work_id)
+                )
             )
             assert [item.event_type for item in stream] == [
                 DomainEventType.MODEL_ROUTE_DECIDED,
@@ -814,7 +817,7 @@ def test_postgres_gateway_repository_rebuilds_model_usage_projection_under_rls()
                 PostgresEventStore(connection),
             )
             reservation = await repository.reserve(
-                TENANT_A,
+                TENANT_GATEWAY,
                 request,
                 lease,
                 route,
@@ -825,7 +828,7 @@ def test_postgres_gateway_repository_rebuilds_model_usage_projection_under_rls()
                 at=lease.acquired_at,
             )
             await repository.succeed(
-                TENANT_A,
+                TENANT_GATEWAY,
                 request,
                 lease,
                 reservation,
@@ -843,8 +846,8 @@ def test_postgres_gateway_repository_rebuilds_model_usage_projection_under_rls()
             )
             projection = PostgresProjectionRepository(connection)
             engine = ProjectionEngine(PostgresEventStore(connection), projection)
-            await projection.reset(TENANT_A, "model-usage")
-            checkpoint = await engine.rebuild(TENANT_A, "model-usage")
+            await projection.reset(TENANT_GATEWAY, "model-usage")
+            checkpoint = await engine.rebuild(TENANT_GATEWAY, "model-usage")
             assert checkpoint.last_global_position > 0
             async with connection.transaction():
                 await connection.execute(
