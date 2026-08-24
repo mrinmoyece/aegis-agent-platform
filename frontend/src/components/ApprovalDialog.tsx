@@ -51,7 +51,11 @@ export function ApprovalDialog({
   const [remaining, setRemaining] = useState(serverRemaining);
 
   useEffect(() => {
-    if (!Number.isFinite(expiresAtMs) || !Number.isFinite(serverTimeMs) || remaining <= 0)
+    if (
+      !Number.isFinite(expiresAtMs) ||
+      !Number.isFinite(serverTimeMs) ||
+      remaining <= 0
+    )
       return;
     const id = window.setInterval(() => {
       setRemaining((prev) => Math.max(0, prev - 1_000));
