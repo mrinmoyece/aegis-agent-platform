@@ -534,12 +534,16 @@ def test_a2a_remediation_skill_returns_artifact_not_local_approval() -> None:
 
 def test_a2a_client_discovers_calls_observes_and_cancels_pinned_peer() -> None:
     original_peer = canonical_protocol_peer(ProtocolFamily.A2A)
-    _jws_header = base64.urlsafe_b64encode(
-        json.dumps(
-            {"alg": "EdDSA", "kid": original_peer.signing_key_digest},
-            separators=(",", ":"),
-        ).encode()
-    ).rstrip(b"=").decode()
+    _jws_header = (
+        base64.urlsafe_b64encode(
+            json.dumps(
+                {"alg": "EdDSA", "kid": original_peer.signing_key_digest},
+                separators=(",", ":"),
+            ).encode()
+        )
+        .rstrip(b"=")
+        .decode()
+    )
     card: Mapping[str, JsonValue] = {
         "name": "fixture-agent",
         "protocolVersion": A2A_PROTOCOL_VERSION,

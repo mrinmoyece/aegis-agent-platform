@@ -32,9 +32,7 @@ _BYTE_BUCKETS = (1_024, 4_096, 16_384, 65_536, 262_144, 1_048_576)
 # The only legal bucket labels are the byte-bucket sizes, the overflow sentinel,
 # and "none" (the default for non-byte metrics).  Accepting arbitrary caller-
 # supplied strings would create unbounded metric series.
-_BUCKETS = frozenset(
-    {"none", "overflow"} | {str(limit) for limit in _BYTE_BUCKETS}
-)
+_BUCKETS = frozenset({"none", "overflow"} | {str(limit) for limit in _BYTE_BUCKETS})
 
 
 @dataclass(frozen=True, slots=True)
