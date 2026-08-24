@@ -111,7 +111,6 @@ def write_report_bundle(
     return paths
 
 
-
 def render_markdown(
     report: EvaluationReport,
     *,
