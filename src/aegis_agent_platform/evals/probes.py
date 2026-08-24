@@ -1756,7 +1756,7 @@ class _DeploymentOutbox:
         lease_expires_at: datetime,
         now: datetime,
         limit: int,
-        destination: str = "aegis.work",
+        destination: str | None = None,
     ) -> Sequence[object]:
         del context, lease_owner, lease_expires_at, now, limit, destination
         return () if self.published else (self.claim,)

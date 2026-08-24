@@ -51,6 +51,7 @@ async def _run(database_url: str, redis_url: str, output: Path) -> None:
             queue,
             publisher_id="restore-drill-redrive",
             batch_size=10,
+            destination="aegis:work:v1",
         )
         result = await publisher.publish_batch(
             context,
