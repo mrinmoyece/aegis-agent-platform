@@ -85,6 +85,7 @@ services:
       - >-
         python /opt/aegis/scripts/migrate.py
         --applied-by local-compose
+        --adopt-existing
         && python /opt/aegis/scripts/bootstrap_local_compose.py
     environment:
       AEGIS_ENVIRONMENT: development
