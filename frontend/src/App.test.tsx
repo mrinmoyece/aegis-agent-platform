@@ -121,6 +121,7 @@ describe('operator application', () => {
       loadSnapshot: baseSource.loadSnapshot.bind(baseSource),
       loadEvents: () => Promise.reject(new Error('network')),
       decideApproval: baseSource.decideApproval.bind(baseSource),
+      changePeerTrust: baseSource.changePeerTrust.bind(baseSource),
     };
     const user = userEvent.setup();
     render(<App source={source} />);
