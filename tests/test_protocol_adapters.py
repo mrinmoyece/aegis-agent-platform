@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import timedelta
@@ -532,10 +533,18 @@ def test_a2a_remediation_skill_returns_artifact_not_local_approval() -> None:
 
 
 def test_a2a_client_discovers_calls_observes_and_cancels_pinned_peer() -> None:
+    original_peer = canonical_protocol_peer(ProtocolFamily.A2A)
+    _jws_header = base64.urlsafe_b64encode(
+        json.dumps(
+            {"alg": "EdDSA", "kid": original_peer.signing_key_digest},
+            separators=(",", ":"),
+        ).encode()
+    ).rstrip(b"=").decode()
     card: Mapping[str, JsonValue] = {
         "name": "fixture-agent",
         "protocolVersion": A2A_PROTOCOL_VERSION,
         "skills": (),
+        "signatures": [{"protected": _jws_header, "signature": "dGVzdA"}],
     }
     task: Mapping[str, JsonValue] = {
         "result": {
@@ -561,7 +570,6 @@ def test_a2a_client_discovers_calls_observes_and_cancels_pinned_peer() -> None:
             ),
         }
     }
-    original_peer = canonical_protocol_peer(ProtocolFamily.A2A)
     peer = replace(original_peer, card_digest=content_digest(card))
     capabilities = canonical_protocol_capabilities()
     policy = canonical_protocol_policy((peer,))

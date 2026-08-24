@@ -306,7 +306,7 @@ class A2aClientAdapter:
         except Exception as exc:
             raise ProtocolSecurityError("a2a_card_signature_invalid") from exc
         kid = header.get("kid", "")
-        if content_digest(kid.encode()) != peer.signing_key_digest:
+        if kid != peer.signing_key_digest:
             raise ProtocolSecurityError("a2a_card_signing_key_mismatch")
         capabilities = tuple(
             capability
@@ -373,20 +373,10 @@ class A2aClientAdapter:
         request: ProtocolRequest,
     ) -> TransportResponse | None:
         self._validate_peer(peer)
-        # Use the server-assigned task ID from provider_reference when available.
-        # provider_reference is stored as "a2a:{server_task_id}" after a successful
-        # send(). For async tasks where _require_completed raised on ACCEPTED, this
-        # falls back to the local operation_id (which may not be found by the server).
-        server_task_id: str = str(request.operation_id)
-        if (
-            request.provider_reference is not None
-            and request.provider_reference.startswith("a2a:")
-        ):
-            server_task_id = request.provider_reference[len("a2a:"):]
         task = await self._transport.get_task(
             peer.endpoint_origin,
             self._headers(),
-            server_task_id,
+            str(request.operation_id),
         )
         if task is None:
             return None
