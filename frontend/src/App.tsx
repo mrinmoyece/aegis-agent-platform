@@ -106,7 +106,7 @@ export function App({ source = new DemoOperatorDataSource() }: AppProps) {
       );
       pollerRef.current?.stop();
       pollerRef.current = poller;
-      poller.start(nextSession.tenant_id);
+      poller.start(nextSession.tenant_id, nextSnapshot.source_cursor);
       setAnnouncement('Synthetic operator session started.');
     } catch {
       setSession(null);

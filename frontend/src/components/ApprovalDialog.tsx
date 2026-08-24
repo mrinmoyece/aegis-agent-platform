@@ -28,7 +28,6 @@ export function ApprovalDialog({
   const descriptionId = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
-  const mountClientTimeRef = useRef<number>(Date.now());
   const [decision, setDecision] = useState<'grant' | 'deny'>('grant');
   const [confirmation, setConfirmation] = useState('');
   const [comment, setComment] = useState('');
@@ -43,25 +42,22 @@ export function ApprovalDialog({
   const expiresAt = String(metadata.expires_at ?? '');
   const expiresAtMs = Date.parse(expiresAt);
   const serverTimeMs = Date.parse(serverTime);
-  const computeRemaining = () => {
-    if (!Number.isFinite(expiresAtMs) || !Number.isFinite(serverTimeMs)) return 0;
-    const elapsed = Date.now() - mountClientTimeRef.current;
-    return Math.max(0, expiresAtMs - (serverTimeMs + elapsed));
-  };
-  const [remaining, setRemaining] = useState(computeRemaining);
+  // Compute initial remaining from the gap between server time and expiry.
+  // This avoids impure Date.now() calls during render.
+  const serverRemaining =
+    Number.isFinite(expiresAtMs) && Number.isFinite(serverTimeMs)
+      ? Math.max(0, expiresAtMs - serverTimeMs)
+      : 0;
+  const [remaining, setRemaining] = useState(serverRemaining);
 
   useEffect(() => {
-    if (
-      !Number.isFinite(expiresAtMs) ||
-      !Number.isFinite(serverTimeMs) ||
-      remaining <= 0
-    )
+    if (!Number.isFinite(expiresAtMs) || !Number.isFinite(serverTimeMs) || remaining <= 0)
       return;
     const id = window.setInterval(() => {
-      setRemaining(computeRemaining());
+      setRemaining((prev) => Math.max(0, prev - 1_000));
     }, 1_000);
     return () => window.clearInterval(id);
-  }, [expiresAtMs, serverTimeMs, remaining]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [expiresAtMs, serverTimeMs, remaining]);
 
   useEffect(() => {
     const dialog = dialogRef.current;

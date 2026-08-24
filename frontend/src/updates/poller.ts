@@ -29,10 +29,12 @@ export class TenantEventPoller {
     private readonly options: PollerOptions = {},
   ) {}
 
-  public start(tenantId: string): void {
+  public start(tenantId: string, sourceCursor?: string): void {
     this.stop();
     this.tenantId = tenantId;
-    this.cursor = null;
+    // Start from the snapshot source cursor so the initial poll skips
+    // already-displayed history and only fetches genuinely new events.
+    this.cursor = sourceCursor ?? null;
     this.seen.clear();
     this.failures = 0;
     this.controller = new AbortController();
@@ -80,13 +82,7 @@ export class TenantEventPoller {
         return true;
       });
       this.trimSeen();
-      if (page.next_cursor !== null) {
-        this.cursor = page.next_cursor;
-      } else if (ordered.length > 0) {
-        // End of stream — advance cursor to the last event's source_cursor so
-        // subsequent polls only fetch events added after this point.
-        this.cursor = ordered[ordered.length - 1].source_cursor;
-      }
+      this.cursor = page.next_cursor ?? this.cursor;
       this.failures = 0;
       this.onState(page.stale ? 'degraded' : 'connected');
       if (fresh.length > 0) {

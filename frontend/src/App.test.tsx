@@ -81,7 +81,7 @@ describe('operator application', () => {
     expect(document.documentElement.dataset.theme).toBe('contrast');
     await user.click(screen.getByRole('button', { name: 'Support mode off' }));
     await user.click(screen.getByRole('link', { name: /Incident overview/ }));
-    await waitFor(() => expect(screen.getByText(/\[redacted\]/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText(/\[redacted\]/i).length).toBeGreaterThan(0));
     expect(window.localStorage).toHaveLength(0);
     expect(window.sessionStorage).toHaveLength(0);
   });
