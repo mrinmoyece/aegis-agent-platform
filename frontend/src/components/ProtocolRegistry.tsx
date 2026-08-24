@@ -48,13 +48,14 @@ export function ProtocolRegistry({
     if (event.key !== 'Tab') return;
     // Trap focus within the dialog by cycling through focusable elements.
     const focusable = Array.from(
-      dialogRef.current?.querySelectorAll<HTMLElement>(
-        'button, input, select, [tabindex]:not([tabindex="-1"])',
+      dialogRef.current?.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>(
+        'button, input, select',
       ) ?? [],
     ).filter((el) => !el.disabled);
     if (focusable.length === 0) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
+    const first = focusable.at(0);
+    const last = focusable.at(-1);
+    if (first === undefined || last === undefined) return;
     if (event.shiftKey && document.activeElement === first) {
       event.preventDefault();
       last.focus();
