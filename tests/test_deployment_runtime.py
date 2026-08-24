@@ -313,7 +313,7 @@ async def test_outbox_publisher_processes_tenant_and_closes(
     tmp_path: Path,
 ) -> None:
     stop = asyncio.Event()
-    connection = SimpleNamespace(close=AsyncMock())
+    connection = SimpleNamespace(close=AsyncMock(), rollback=AsyncMock())
     redis = SimpleNamespace(aclose=AsyncMock())
     queue = SimpleNamespace(health=AsyncMock(return_value=True))
 
@@ -343,6 +343,11 @@ async def test_outbox_publisher_processes_tenant_and_closes(
         deployment,
         "_writer_fences_match_database",
         AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        deployment,
+        "PostgresSchemaVersionProbe",
+        lambda _: AsyncMock(return_value=1),
     )
     monkeypatch.setattr(deployment, "_wait", AsyncMock())
 
@@ -388,7 +393,7 @@ async def test_reconciler_processes_tenant_and_closes(
     tmp_path: Path,
 ) -> None:
     stop = asyncio.Event()
-    connection = SimpleNamespace(close=AsyncMock())
+    connection = SimpleNamespace(close=AsyncMock(), rollback=AsyncMock())
 
     async def reconcile(*_: object, **_kwargs: object) -> None:
         stop.set()
@@ -418,6 +423,11 @@ async def test_reconciler_processes_tenant_and_closes(
         deployment,
         "_writer_fences_match_database",
         AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        deployment,
+        "PostgresSchemaVersionProbe",
+        lambda _: AsyncMock(return_value=1),
     )
     monkeypatch.setattr(deployment, "_wait", AsyncMock())
 

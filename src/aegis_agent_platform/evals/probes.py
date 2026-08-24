@@ -1756,8 +1756,9 @@ class _DeploymentOutbox:
         lease_expires_at: datetime,
         now: datetime,
         limit: int,
+        destination: str = "aegis.work",
     ) -> Sequence[object]:
-        del context, lease_owner, lease_expires_at, now, limit
+        del context, lease_owner, lease_expires_at, now, limit, destination
         return () if self.published else (self.claim,)
 
     async def mark_outbox_published(

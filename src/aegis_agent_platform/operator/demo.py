@@ -13,12 +13,15 @@ from aegis_agent_platform.operator.contracts import (
     OperatorEventPage,
     OperatorItem,
     OperatorSnapshot,
+    PeerTrustCommand,
+    PeerTrustResult,
 )
 from aegis_agent_platform.tenancy import TenantContext
 
 DEMO_TENANT_ID = "tenant-alpha"
 DEMO_PLAN_DIGEST = sha256(b"aegis-canonical-checkout-plan-v1").hexdigest()
 DEMO_POLICY_DIGEST = sha256(b"aegis-canonical-checkout-policy-v1").hexdigest()
+DEMO_MCP_PEER_DIGEST = sha256(b"aegis-canonical-mcp-peer-deterministic-v1").hexdigest()
 
 
 def _item(
@@ -263,6 +266,23 @@ def canonical_operator_snapshot(*, at: datetime) -> OperatorSnapshot:
                 metadata={"redacted": True, "support_bundle": "available"},
             ),
         ),
+        "protocols": (
+            _item(
+                "peer-mcp-deterministic",
+                "protocol-peer",
+                "Deterministic MCP peer",
+                "Canonical read-only MCP peer used for integration verification.",
+                "active",
+                DataAuthority.DERIVED_STATE,
+                base + timedelta(minutes=5),
+                metadata={
+                    "peer_digest": DEMO_MCP_PEER_DIGEST,
+                    "version": "peer-v1",
+                    "trust_tier": "verified",
+                    "transport": "https",
+                },
+            ),
+        ),
     }
     return OperatorSnapshot(
         1,
@@ -326,6 +346,10 @@ class DemoOperatorCommands:
         # Track current approval version for optimistic concurrency checks.
         self._current_approval_version: str = "approval-v3"
         self._approval_terminal: bool = False
+        # Track peer trust versions.
+        self._peer_trust_results: dict[str, PeerTrustResult] = {}
+        self._peer_trust_fingerprints: dict[str, str] = {}
+        self._peer_versions: dict[str, str] = {"peer-mcp-deterministic": "peer-v1"}
 
     async def decide_approval(
         self,
@@ -392,8 +416,70 @@ class DemoOperatorCommands:
         self._approval_terminal = True
         return result
 
+    async def change_peer_trust(
+        self,
+        principal: Principal,
+        context: TenantContext,
+        command: PeerTrustCommand,
+        *,
+        at: datetime,
+    ) -> PeerTrustResult:
+        if (
+            principal.tenant_id != context.tenant_id
+            or str(context.tenant_id) != DEMO_TENANT_ID
+        ):
+            raise PermissionError("operator tenant mismatch")
+        duplicate = self._peer_trust_results.get(command.idempotency_key)
+        if duplicate is not None:
+            fingerprint = sha256(
+                f"{command.peer_id}:{command.peer_digest}:"
+                f"{command.decision}:{command.rationale_code}".encode()
+            ).hexdigest()
+            if fingerprint != self._peer_trust_fingerprints.get(
+                command.idempotency_key
+            ):
+                raise ValueError("idempotency_conflict: command fingerprint mismatch")
+            return PeerTrustResult(
+                duplicate.peer_id,
+                duplicate.status,
+                duplicate.version,
+                True,
+                at,
+            )
+        if command.peer_id not in self._peer_versions:
+            raise LookupError("peer not found")
+        if command.peer_digest != DEMO_MCP_PEER_DIGEST:
+            raise ValueError("peer digest is stale")
+        current_version = self._peer_versions[command.peer_id]
+        if command.expected_version != current_version:
+            raise RuntimeError("peer version conflict")
+        # Increment version: "peer-v1" → "peer-v2"
+        version_num = int(current_version.split("-v")[-1]) + 1
+        new_version = f"peer-v{version_num}"
+        decision_to_status = {
+            "activate": "active",
+            "quarantine": "quarantined",
+            "revoke": "revoked",
+        }
+        result = PeerTrustResult(
+            command.peer_id,
+            decision_to_status[command.decision],
+            new_version,
+            False,
+            at,
+        )
+        fingerprint = sha256(
+            f"{command.peer_id}:{command.peer_digest}:"
+            f"{command.decision}:{command.rationale_code}".encode()
+        ).hexdigest()
+        self._peer_trust_results[command.idempotency_key] = result
+        self._peer_trust_fingerprints[command.idempotency_key] = fingerprint
+        self._peer_versions[command.peer_id] = new_version
+        return result
+
 
 __all__ = [
+    "DEMO_MCP_PEER_DIGEST",
     "DEMO_PLAN_DIGEST",
     "DEMO_POLICY_DIGEST",
     "DEMO_TENANT_ID",
