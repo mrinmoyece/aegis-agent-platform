@@ -1,8 +1,9 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
+import { DemoOperatorDataSource } from './demo/api';
 
 beforeEach(() => {
   window.history.replaceState(null, '', '#health');
@@ -86,5 +87,28 @@ describe('operator application', () => {
     );
     expect(window.localStorage).toHaveLength(0);
     expect(window.sessionStorage).toHaveLength(0);
+  });
+
+  it('blocks approval decisions when the poller has expired', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const baseSource = new DemoOperatorDataSource();
+    const source = {
+      signIn: baseSource.signIn.bind(baseSource),
+      loadSnapshot: baseSource.loadSnapshot.bind(baseSource),
+      loadEvents: () => Promise.reject(new Error('network')),
+      decideApproval: baseSource.decideApproval.bind(baseSource),
+    };
+    const user = userEvent.setup();
+    render(<App source={source} />);
+    await user.click(screen.getByRole('button', { name: 'Start synthetic demo' }));
+    await screen.findByRole('heading', { name: 'Health & SLOs' }, { timeout: 5_000 });
+    // Advance through the 5 polling failure backoffs so pollerState becomes 'expired'.
+    await vi.advanceTimersByTimeAsync(2_000 + 4_000 + 8_000 + 16_000 + 32_000 + 1_000);
+    // After 5 failures the poller is expired; decideApproval will be guarded.
+    await user.click(screen.getByRole('link', { name: /Approval inbox/ }));
+  }, 15_000);
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 });

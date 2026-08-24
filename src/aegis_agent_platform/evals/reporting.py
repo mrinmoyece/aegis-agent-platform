@@ -76,9 +76,26 @@ def write_report_bundle(
 ) -> ReportPaths:
     """Write bounded artifacts atomically after a content-safety check."""
     directory.mkdir(parents=True, exist_ok=True)
-    json_text = json.dumps(canonical_data(report), indent=2, sort_keys=True) + "\n"
+    report_data: object = canonical_data(report)
+    if comparison is not None and isinstance(report_data, dict):
+        report_data = dict(report_data)
+        report_data["baseline_comparison"] = {
+            "passed": comparison.passed,
+            "evaluated_at": comparison.evaluated_at.isoformat(),
+            "findings": [
+                {
+                    "case_id": finding.case_id,
+                    "metric_name": finding.metric_name,
+                    "reason_code": finding.reason_code,
+                    "waived": finding.waived,
+                    **({"waiver_id": finding.waiver_id} if finding.waiver_id else {}),
+                }
+                for finding in comparison.findings
+            ],
+        }
+    json_text = json.dumps(report_data, indent=2, sort_keys=True) + "\n"
     markdown_text = render_markdown(report, comparison=comparison)
-    junit_text = render_junit(report)
+    junit_text = render_junit(report, comparison=comparison)
     for content in (json_text, markdown_text, junit_text):
         validate_report_content(content)
         if len(content.encode()) > MAX_REPORT_BYTES:
@@ -92,6 +109,7 @@ def write_report_bundle(
     _write_atomic(paths.markdown, markdown_text)
     _write_atomic(paths.junit, junit_text)
     return paths
+
 
 
 def render_markdown(
@@ -170,19 +188,26 @@ def render_markdown(
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_junit(report: EvaluationReport) -> str:
+def render_junit(
+    report: EvaluationReport,
+    *,
+    comparison: BaselineComparison | None = None,
+) -> str:
     """Render stable JUnit XML for CI annotations."""
     failures = sum(
         result.status in {ResultStatus.FAILED, ResultStatus.EVALUATOR_ERROR}
         for result in report.results
+    )
+    comparison_failures = (
+        sum(not f.waived for f in comparison.findings) if comparison is not None else 0
     )
     skipped = sum(result.status is ResultStatus.CANCELLED for result in report.results)
     suite = ET.Element(
         "testsuite",
         {
             "name": "aegis-layer12-evaluations",
-            "tests": str(len(report.results)),
-            "failures": str(failures),
+            "tests": str(len(report.results) + comparison_failures),
+            "failures": str(failures + comparison_failures),
             "errors": "0",
             "skipped": str(skipped),
             "time": "0",
@@ -212,6 +237,27 @@ def render_junit(report: EvaluationReport) -> str:
             )
         elif result.status is ResultStatus.CANCELLED:
             ET.SubElement(case, "skipped", {"message": "evaluation_cancelled"})
+    if comparison is not None:
+        for finding in comparison.findings:
+            if finding.waived:
+                continue
+            case = ET.SubElement(
+                suite,
+                "testcase",
+                {
+                    "classname": "aegis.evals.baseline",
+                    "name": f"{finding.case_id}/{finding.metric_name}",
+                    "time": "0",
+                },
+            )
+            ET.SubElement(
+                case,
+                "failure",
+                {
+                    "type": finding.reason_code,
+                    "message": finding.reason_code,
+                },
+            )
     ET.indent(suite, space="  ")
     return ET.tostring(suite, encoding="unicode", xml_declaration=True) + "\n"
 

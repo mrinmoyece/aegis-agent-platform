@@ -13,6 +13,9 @@ import { DemoOperatorDataSource, type OperatorDataSource } from './demo/api';
 import { recordTelemetry } from './telemetry';
 import { TenantEventPoller } from './updates/poller';
 
+// Module-level singleton to avoid recreating the stateful source on every render.
+const _defaultSource = new DemoOperatorDataSource();
+
 const views = [
   ['health', 'Health & SLOs'],
   ['incidents', 'Incident queue'],
@@ -35,7 +38,7 @@ interface AppProps {
   readonly source?: OperatorDataSource;
 }
 
-export function App({ source = new DemoOperatorDataSource() }: AppProps) {
+export function App({ source = _defaultSource }: AppProps) {
   const [session, setSession] = useState<SessionBootstrap | null>(null);
   const [snapshot, setSnapshot] = useState<OperatorSnapshot | null>(null);
   const [view, setView] = useState<ViewKey>(() => routeFromHash());
@@ -46,6 +49,9 @@ export function App({ source = new DemoOperatorDataSource() }: AppProps) {
   const [approval, setApproval] = useState<OperatorItem | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [online, setOnline] = useState(navigator.onLine);
+  const [pollerState, setPollerState] = useState<
+    'connected' | 'degraded' | 'expired' | 'stopped'
+  >('stopped');
   const mainRef = useRef<HTMLElement>(null);
   const pollerRef = useRef<TenantEventPoller | null>(null);
 
@@ -91,6 +97,23 @@ export function App({ source = new DemoOperatorDataSource() }: AppProps) {
           setSnapshot((prev) => {
             if (prev === null) return prev;
             const incoming = new Map(events.map((e) => [e.id, e]));
+            const existingIds = new Set<string>();
+            for (const sectionItems of Object.values(prev.sections)) {
+              for (const item of sectionItems) {
+                existingIds.add(item.id);
+              }
+            }
+            let hasNew = false;
+            for (const e of events) {
+              if (!existingIds.has(e.id)) {
+                hasNew = true;
+                break;
+              }
+            }
+            if (hasNew) {
+              // New items cannot be section-placed without a fresh snapshot.
+              void source.loadSnapshot(prev.tenant_id).then(setSnapshot);
+            }
             const updated: OperatorSnapshot = {
               ...prev,
               sections: {},
@@ -102,7 +125,7 @@ export function App({ source = new DemoOperatorDataSource() }: AppProps) {
             return updated;
           });
         },
-        () => undefined,
+        (state) => setPollerState(state),
       );
       pollerRef.current?.stop();
       pollerRef.current = poller;
@@ -131,6 +154,7 @@ export function App({ source = new DemoOperatorDataSource() }: AppProps) {
     setSnapshot(null);
     setSession(null);
     setApproval(null);
+    setPollerState('stopped');
     setAnnouncement('Tenant session cleared. Prior tenant data removed.');
     recordTelemetry('tenant_changed', { status: 'session_cleared' });
   }
@@ -142,6 +166,9 @@ export function App({ source = new DemoOperatorDataSource() }: AppProps) {
   ): Promise<ApprovalDecisionResponse> {
     if (session === null) {
       throw new Error('session_expired');
+    }
+    if (pollerState === 'expired') {
+      throw new Error('session_stale');
     }
     return source.decideApproval(
       session.tenant_id,

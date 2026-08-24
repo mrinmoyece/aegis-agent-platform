@@ -63,6 +63,7 @@ class OutboxPublisher:
         queue: WorkQueue,
         *,
         publisher_id: str,
+        destination: str = "aegis.work",
         batch_size: int = 50,
         lease_duration: timedelta = timedelta(seconds=30),
         retry_delay: Callable[[int], timedelta] | None = None,
@@ -72,6 +73,8 @@ class OutboxPublisher:
     ) -> None:
         if not publisher_id:
             raise ValueError("publisher_id is required")
+        if not destination:
+            raise ValueError("destination is required")
         if not 1 <= batch_size <= 100:
             raise ValueError("batch_size must be between 1 and 100")
         if lease_duration <= timedelta(0):
@@ -79,6 +82,7 @@ class OutboxPublisher:
         self._repository = repository
         self._queue = queue
         self._publisher_id = publisher_id
+        self._destination = destination
         self._batch_size = batch_size
         self._lease_duration = lease_duration
         self._retry_delay = retry_delay or _default_retry_delay
@@ -102,6 +106,7 @@ class OutboxPublisher:
             lease_expires_at=now + self._lease_duration,
             now=now,
             limit=self._batch_size,
+            destination=self._destination,
         )
         published = failed = 0
         for raw_claim in claims:

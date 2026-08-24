@@ -108,4 +108,18 @@ describe('operator API client', () => {
       new OperatorApiClient(base).session(controller.signal),
     ).rejects.toHaveProperty('name', 'AbortError');
   });
+
+  it('rejects responses that declare an oversized Content-Length', async () => {
+    server.use(
+      http.get(`${base}/session`, () =>
+        new HttpResponse('{}', {
+          headers: { 'content-length': String(3 * 1024 * 1024) },
+        }),
+      ),
+    );
+    await expect(new OperatorApiClient(base).session()).rejects.toMatchObject({
+      kind: 'invalid_response',
+      code: 'response_too_large',
+    });
+  });
 });

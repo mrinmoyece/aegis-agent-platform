@@ -185,15 +185,39 @@ export class OperatorApiClient {
             false,
           );
         }
-        const text = await response.text();
-        if (new TextEncoder().encode(text).byteLength > MAX_RESPONSE_BYTES) {
-          throw new ApiError(
-            'invalid_response',
-            'response_too_large',
-            response.status,
-            response.headers.get('x-request-id'),
-            false,
-          );
+        // Consume incrementally so an absent or dishonest Content-Length
+        // cannot bypass the memory bound by buffering an unbounded body.
+        let text = '';
+        const reader = response.body?.getReader();
+        if (reader) {
+          const decoder = new TextDecoder();
+          let bytesRead = 0;
+          try {
+            for (;;) {
+              const { done, value } = await reader.read();
+              if (done) {
+                text += decoder.decode();
+                break;
+              }
+              bytesRead += value.byteLength;
+              if (bytesRead > MAX_RESPONSE_BYTES) {
+                await reader.cancel();
+                throw new ApiError(
+                  'invalid_response',
+                  'response_too_large',
+                  response.status,
+                  response.headers.get('x-request-id'),
+                  false,
+                );
+              }
+              text += decoder.decode(value, { stream: true });
+            }
+          } catch (err) {
+            await reader.cancel();
+            throw err;
+          }
+        } else {
+          text = await response.text();
         }
         let json: unknown;
         try {

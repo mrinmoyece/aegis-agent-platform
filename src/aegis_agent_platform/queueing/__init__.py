@@ -150,6 +150,7 @@ class OutboxRepository(Protocol):
         lease_expires_at: datetime,
         now: datetime,
         limit: int,
+        destination: str | None = None,
     ) -> Sequence[object]:
         """Claim a bounded batch."""
         ...

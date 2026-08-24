@@ -185,7 +185,13 @@ async def run_demo() -> dict[str, object]:
             "excluded_after_purge": all(
                 hit.chunk.memory_id != prior.memory_id for hit in after_purge.hits
             ),
-            "immutable_ledger_retained": True,
+            "immutable_ledger_retained": len(
+            await ledger.load(
+                TenantContext(TenantId("tenant-a")),
+                prior.memory_id,
+            )
+        )
+        > 0,
         },
         "tenant_isolation": {
             "tenant_b_excluded": all(
