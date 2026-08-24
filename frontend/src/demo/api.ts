@@ -4,6 +4,8 @@ import type {
   OperatorEventPage,
   OperatorItem,
   OperatorSnapshot,
+  PeerTrustRequest,
+  PeerTrustResponse,
   SessionBootstrap,
 } from '../api/schema';
 import {
@@ -28,14 +30,26 @@ export interface OperatorDataSource {
     idempotencyKey: string,
     signal?: AbortSignal,
   ): Promise<ApprovalDecisionResponse>;
+  changePeerTrust(
+    tenantId: string,
+    request: PeerTrustRequest,
+    expectedVersion: string,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ): Promise<PeerTrustResponse>;
 }
 
 export class DemoOperatorDataSource implements OperatorDataSource {
   private readonly decisions = new Map<string, ApprovalDecisionResponse>();
   private readonly fingerprints = new Map<string, string>();
+  private readonly trustDecisions = new Map<string, PeerTrustResponse>();
+  private readonly trustFingerprints = new Map<string, string>();
   // Optimistic concurrency: track the current version and terminal status.
   private currentApprovalVersion = 'approval-v3';
   private approvalTerminal = false;
+  private peerVersions = new Map<string, string>([
+    ['peer-mcp-deterministic', 'peer-v1'],
+  ]);
 
   public async signIn(signal?: AbortSignal): Promise<SessionBootstrap> {
     await Promise.resolve();
@@ -124,6 +138,50 @@ export class DemoOperatorDataSource implements OperatorDataSource {
     this.fingerprints.set(idempotencyKey, fp);
     this.currentApprovalVersion = newVersion;
     this.approvalTerminal = true;
+    return response;
+  }
+
+  public async changePeerTrust(
+    tenantId: string,
+    request: PeerTrustRequest,
+    expectedVersion: string,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ): Promise<PeerTrustResponse> {
+    await Promise.resolve();
+    assertNotAborted(signal);
+    if (tenantId !== demoSession.tenant_id) {
+      throw new Error('not_found');
+    }
+    const duplicate = this.trustDecisions.get(idempotencyKey);
+    if (duplicate !== undefined) {
+      const fp = `${request.peer_id}:${request.peer_digest}:${request.decision}`;
+      if (fp !== this.trustFingerprints.get(idempotencyKey)) {
+        throw new Error('idempotency_conflict');
+      }
+      return { ...duplicate, duplicate: true };
+    }
+    const currentVersion = this.peerVersions.get(request.peer_id);
+    if (currentVersion === undefined || currentVersion !== expectedVersion) {
+      throw new Error('concurrency_conflict');
+    }
+    const statusMap = {
+      activate: 'active',
+      quarantine: 'quarantined',
+      revoke: 'revoked',
+    } as const;
+    const newVersion = `peer-v${String(Date.now())}`;
+    const response: PeerTrustResponse = {
+      peer_id: request.peer_id,
+      status: statusMap[request.decision],
+      version: newVersion,
+      duplicate: false,
+      server_time: demoSession.server_time,
+    };
+    const fp = `${request.peer_id}:${request.peer_digest}:${request.decision}`;
+    this.trustDecisions.set(idempotencyKey, response);
+    this.trustFingerprints.set(idempotencyKey, fp);
+    this.peerVersions.set(request.peer_id, newVersion);
     return response;
   }
 }
