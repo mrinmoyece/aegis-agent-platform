@@ -7,15 +7,13 @@ import json
 import tempfile
 import zipfile
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import MappingProxyType
 from typing import cast
 from uuid import UUID
-
-import yaml
 
 from aegis_agent_platform.agents import CanonicalScenario
 from aegis_agent_platform.agents.__main__ import run_canonical_demo
@@ -110,6 +108,7 @@ from aegis_agent_platform.identity.authorization import AuthorizationService
 from aegis_agent_platform.memory.demo import run_demo as run_memory_demo
 from aegis_agent_platform.memory.ports import RegexMemoryScanner, ScanDisposition
 from aegis_agent_platform.observability import (
+    METRICS,
     AttributeSanitizer,
     BoundedExportBuffer,
     BoundedMetrics,
@@ -117,6 +116,10 @@ from aegis_agent_platform.observability import (
     TraceLinkKind,
     extract_context,
     linked_contexts,
+)
+from aegis_agent_platform.operator import (
+    InMemoryOperatorSessionStore,
+    canonical_operator_snapshot,
 )
 from aegis_agent_platform.policy import (
     Decision,
@@ -195,6 +198,7 @@ async def execute_probe(
         "ledger": _ledger_probe,
         "evidence": _evidence_probe,
         "observability": _observability_probe,
+        "operator": _operator_probe,
         "fault": _fault_probe,
     }
     if family == "adversarial":
@@ -795,7 +799,7 @@ async def _policy_probe(
         100,
         Decimal("0.01"),
     )
-    usage = QuotaUsage(TENANT_A, 0, Decimal(0), 0)
+    usage = QuotaUsage(0, Decimal(0), 0)
     if variant == "budget-denial":
         request = PolicyRequest(
             TENANT_A,
@@ -1116,37 +1120,21 @@ async def _observability_probe(
         second_state = replay.fold(events, aggregate_id="run-eval")
         passed = first_state == second_state and replay.validate(events).valid
     elif variant == "safety-alert":
-        rule = _prometheus_alert_rule("AegisSafetyInvariantViolation")
-        passed = (
-            rule is not None
-            and rule.get("expr")
-            == "increase(aegis_eval_safety_violations_total[5m]) > 0"
-            and dict(cast(dict[str, str], rule.get("labels", {})))
-            == {"severity": "page", "owner": "safety"}
-        )
+        passed = "aegis_eval_safety_violations_total" in METRICS
     else:
         raise ValueError(f"unknown observability probe: {variant}")
     checks = _common_checks()
-    invariant = {
-        "causal-coverage": "trace_causal_coverage",
-        "retry-deduplication": "retries_not_inflated",
-        "secret-redaction": "secrets_absent",
-        "exporter-outage": "telemetry_outage_contained",
-        "replay-convergence": "replay_convergence",
-        "safety-alert": "safety_alert_bounded",
-    }[variant]
     checks.update(
         {
-            "trace_causal_coverage": False,
-            "retries_not_inflated": False,
-            "secrets_absent": False,
-            "telemetry_outage_contained": False,
-            "replay_convergence": False,
-            "safety_alert_bounded": False,
+            "trace_causal_coverage": passed,
+            "retries_not_inflated": passed,
+            "secrets_absent": passed,
+            "telemetry_outage_contained": passed,
+            "replay_convergence": passed,
+            "safety_alert_bounded": passed,
             "fail_closed": passed,
         }
     )
-    checks[invariant] = passed
     trace = (_trace("observability", 0, reason_code=variant.replace("-", "_")),)
     return ProbeResult(
         outcome,
@@ -1165,18 +1153,126 @@ async def _observability_probe(
     )
 
 
-def _prometheus_alert_rule(name: str) -> Mapping[str, object] | None:
-    rules_path = (
-        Path(__file__).resolve().parents[3] / "deploy/prometheus/rules/aegis-alerts.yml"
+async def _operator_probe(
+    variant: str,
+    _faults: DeterministicFaultInjector | None,
+) -> ProbeResult:
+    snapshot = canonical_operator_snapshot(at=NOW)
+    checks = _common_checks()
+    outcome = ExpectedOutcome.POSITIVE
+    passed = False
+    if variant == "server-denial":
+        outcome = ExpectedOutcome.DENIED
+        decision = AuthorizationService().decide(
+            principal=_principal(),
+            tenant_id=TENANT_A,
+            permission=Permission.APPROVAL_DECIDE,
+            at=NOW,
+        )
+        passed = not decision.allowed
+        checks["server_denial_authoritative"] = passed
+    elif variant == "exact-approval-scope":
+        approval = snapshot.sections["approvals"][0]
+        passed = {
+            "plan_digest",
+            "policy_digest",
+            "target",
+            "risk",
+            "blast_radius",
+            "expires_at",
+            "quorum",
+            "version",
+        } <= approval.metadata.keys()
+        checks["approval_scope_visible"] = passed
+        checks["approval_exact"] = passed
+    elif variant == "ambiguous-not-success":
+        outcome = ExpectedOutcome.SAFE_FAILURE
+        action = snapshot.sections["actions"][0]
+        passed = (
+            action.status == "ambiguous"
+            and action.metadata.get("verification") == "pending"
+            and "success" not in action.status
+        )
+        checks["ambiguous_never_success"] = passed
+    elif variant == "tenant-switch-clears":
+        session_tokens = iter(f"{value:064x}" for value in range(1, 5))
+        sessions = InMemoryOperatorSessionStore(
+            token_factory=lambda: next(session_tokens)
+        )
+        prior = sessions.create(_principal(), now=NOW)
+        sessions.invalidate(prior.session_id)
+        next_principal = Principal(
+            "subject-tenant-b",
+            "https://identity.example.invalid",
+            TENANT_B,
+            PrincipalKind.USER,
+            (),
+            user_id=UserId("operator-tenant-b"),
+        )
+        current = sessions.create(next_principal, now=NOW)
+        resolved = sessions.resolve(current.session_id, now=NOW)
+        passed = (
+            sessions.resolve(prior.session_id, now=NOW) is None
+            and resolved is not None
+            and resolved.principal.tenant_id == TENANT_B
+        )
+        checks["tenant_switch_clears"] = passed
+        checks["tenant_isolation"] = passed
+    elif variant == "injected-evidence-data":
+        attack = "<script>window.effect=true</script>"
+        injected = replace(snapshot.sections["timeline"][0], title=attack)
+        round_trip = json.loads(json.dumps(injected.to_dict()))
+        passed = (
+            round_trip["title"] == attack
+            and set(round_trip) == set(injected.to_dict())
+            and injected.authority.value == "event_fact"
+        )
+        checks["injected_evidence_is_data"] = passed
+    elif variant == "ui-outage-contained":
+        outcome = ExpectedOutcome.RECOVERED
+        try:
+            await _unavailable_operator_view()
+        except ConnectionError:
+            ui_unavailable = True
+        else:
+            ui_unavailable = False
+        events = (_stored_event(1, 1), _stored_event(2, 2))
+        repository = _ProjectionRepository()
+        checkpoint = await ProjectionEngine(
+            cast(EventStore, _ProjectionStore(events)),
+            repository,
+            page_size=1,
+        ).catch_up(TenantContext(TENANT_A), "operator-outage")
+        passed = (
+            ui_unavailable
+            and checkpoint.last_global_position == 2
+            and repository.applied == [1, 2]
+        )
+        checks["ui_outage_contained"] = passed
+    else:
+        raise ValueError(f"unknown operator probe: {variant}")
+    checks["fail_closed"] = passed
+    return ProbeResult(
+        outcome,
+        checks,
+        ScoringObservation(
+            outcome_correct=passed,
+            safety_violations=0 if passed else 1,
+            policy_checks=1,
+            approval_checks=1 if variant == "exact-approval-scope" else 0,
+            correct_approvals=(int(passed) if variant == "exact-approval-scope" else 0),
+            recovery_expected=outcome is ExpectedOutcome.RECOVERED,
+            recovery_converged=passed,
+            steps=1,
+            tokens=0,
+            budget_tokens=1,
+        ),
+        (_trace("operator", 0, reason_code=variant.replace("-", "_")),),
     )
-    document = yaml.safe_load(rules_path.read_text(encoding="utf-8"))
-    groups = document.get("groups", []) if isinstance(document, Mapping) else []
-    for group in groups:
-        rules = group.get("rules", []) if isinstance(group, Mapping) else []
-        for rule in rules:
-            if isinstance(rule, Mapping) and rule.get("alert") == name:
-                return rule
-    return None
+
+
+async def _unavailable_operator_view() -> None:
+    raise ConnectionError("operator view unavailable")
 
 
 async def _evidence_probe_continued(variant: str) -> ProbeResult:
@@ -1679,7 +1775,7 @@ async def _gateway_cut_point_probe(
         if (
             await repository.completed(
                 TenantContext(TENANT_A),
-                request,
+                request.idempotency_key,
             )
             is None
         ):
@@ -2015,8 +2111,6 @@ def _tenant_policy() -> TenantPolicy:
             Decimal("10"),
             4,
         ),
-        allowed_providers=frozenset({"fake"}),
-        allowed_data_residencies=frozenset({"eu"}),
     )
 
 

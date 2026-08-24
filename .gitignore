@@ -13,6 +13,13 @@ venv/
 dist/
 build/
 
+# Frontend
+node_modules/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
 # Local configuration and secrets
 .env
 .env.*

@@ -86,9 +86,9 @@ Each slice is intended to be a reviewable PR with one primary acceptance gate.
 Layer 2 implements the EP-01 verification/principal core and the EP-02
 application authorization model, tenant-scoped repository contracts, SQL
 schema, RLS policies, and negative application tests. The live Keycloak
-rotation/revocation drill still remains before the full EP-01/EP-02 operational
-exit gate can be claimed. PostgreSQL-backed adapters, separate database roles,
-and the database-level cross-tenant denial suite are implemented in this layer.
+rotation/revocation drill, PostgreSQL-backed adapters, separate database roles,
+and database-level cross-tenant denial suite remain required before the full
+EP-01/EP-02 operational exit gate can be claimed.
 
 ### Implementation
 
@@ -547,8 +547,8 @@ quarantine/tamper handling, repeatability, sharding, redacted reporting, and
 guarded live configuration have evaluator meta-test coverage.
 
 Full production model/connector qualification, independent penetration testing,
-large-scale human labeling, operator UI, MCP/A2A, observability/SLOs, HA/DR,
-multi-region operation, and final load/chaos certification remain outside
+large-scale human labeling, production-qualified operator UI, MCP/A2A,
+observability/SLOs, HA/DR, multi-region operation, and final load/chaos certification remain outside
 EP-13.
 
 ## EP-14: Observability, SLOs, and cost
@@ -688,6 +688,29 @@ ledger-grounded replay. Acceptance requires `make check`,
 `make observability-check`, deterministic replay demonstrations, Compose
 configuration, container build, environment-gated PostgreSQL/pgvector/Redis
 tests, and CI. These validate implementation/configuration, not production
-attainment. Production qualification, external backends, React operator UI,
+attainment. Production qualification, external backends, live production identity/browser qualification,
 MCP/A2A, 24/7 operations, HA/DR/multi-region, final load/chaos, and compliance
 remain later gates.
+
+## EP-15: Secure operator UI and BFF
+
+**Layer 13 status: Implemented with deterministic/local evidence.** The
+`aegis_agent_platform.operator` package owns provider-neutral bounded view/command
+ports, server-side sessions, the OIDC PKCE/state/nonce boundary, CSRF/origin checks,
+anti-enumerating tenant behavior, exact-scope decision handling, cursor pages, and
+privileged audit. `contracts/operator-api.openapi.json` is the API source;
+`frontend/` contains the strict React workspace, runtime validation, synthetic
+adapter, security/accessibility controls, tests, and hardened static image.
+
+Acceptance requires backend security/contract tests; six operator invariant evals;
+locked install; format/lint/type/unit/axe/build/contract/audit/license/bundle/CSP/
+SBOM gates; Chromium approval/tenant/replay journeys; Compose render; non-root
+read-only container smoke; and complete repository checks. UI/cache/telemetry
+remain derived, authorization remains server-side, and no mutation becomes success
+before reconciliation and verification.
+
+Production readiness remains false until live OIDC exchange/logout/key rotation,
+encrypted distributed sessions, reverse-proxy/TLS deployment, supported browser
+and assistive-technology qualification, managed rollout/rollback, load/chaos,
+independent security/accessibility audits, HA/DR/multi-region, and compliance
+evidence are reviewed.

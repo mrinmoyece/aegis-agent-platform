@@ -27,8 +27,11 @@ coordination, safe effects, evaluation, and operations.
 > compaction, retention lifecycle, fake evals, and a deterministic demo. Layer
 > 11 implements the unified deterministic harness, governed 91-case corpus,
 > release gates, bounded reports/telemetry, baseline/waiver and fixture
-> governance, CLI, and focused `make eval-*` targets.
-> Live environments and production operations remain unverified or planned.
+> governance, CLI, and focused `make eval-*` targets. Layer 12 adds safe
+> observability, SLO configuration, dashboards, and ledger replay. Layer 13 adds
+> the secure derived operator BFF, strict React workspace, exact-scope approval
+> UX, accessibility/security/supply-chain gates, and six operator invariants.
+> Live identity/browser environments and production operations remain unverified.
 
 The curriculum is backed by the concrete delivery slices and acceptance
 evidence in `enterprise-implementation-plan.md`; the roadmap is not merely a
@@ -90,3 +93,14 @@ at-least-once work, design measurable SLIs and burn alerts, provision dashboards
 that treat no-data honestly, contain exporter failure, and debug from immutable
 ledger facts. The demo explicitly distinguishes configured/local objectives
 from production-measured attainment.
+
+## Layer 13 learning outcomes
+
+Learners can defend a BFF/HttpOnly session architecture over browser bearer tokens,
+explain why UI and caches are derived, design anti-enumerating tenant/RBAC flows,
+validate OpenAPI responses at runtime, and keep exact approval scope visible without
+moving authority client-side. They can test ambiguous action semantics, cursor
+resume/deduplication/tenant teardown, XSS/download/CSV/clipboard defenses, WCAG 2.2
+AA patterns, CSP/static serving, dependency policy, SBOM, and honest readiness
+gaps. Use [operator-ui.md](operator-ui.md),
+[operator-accessibility.md](operator-accessibility.md), and ADR 0021.

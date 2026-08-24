@@ -130,7 +130,6 @@ ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyTy
                 Permission.TENANT_READ,
                 Permission.PLATFORM_TENANT_CREATE,
                 Permission.PLATFORM_AUDIT_READ,
-                Permission.WORK_RECONCILE,
             }
         ),
     }

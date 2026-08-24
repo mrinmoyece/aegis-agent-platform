@@ -234,3 +234,25 @@ Use [on-call-observability.md](on-call-observability.md) for alerts,
 repair truth from a dashboard, trace, or support report. Preserve ledger
 evidence, reconcile through controlled adapters, and rebuild only disposable
 projections.
+
+## Layer 13 operator UI operations
+
+1. Treat a blank, stale, offline, or failed UI as presentation degradation. Confirm
+   the API/runtime and ledger independently; do not infer runtime failure.
+2. On `401`, end the browser session and re-authenticate. On `403`, confirm current
+   tenant role/purpose without broadening it. On anti-enumerating `404`, do not probe
+   other tenant/resource identifiers.
+3. On approval conflict or expiry, reload the exact immutable scope and repeat
+   review. Never copy an old digest or bypass typed confirmation.
+4. On ambiguous action, inspect reconciliation and verification event facts. Do not
+   retry or report success from adapter acknowledgement.
+5. On suspected cross-tenant state, stop serving the UI, preserve immutable access
+   audit, invalidate sessions, and investigate BFF/cache keys. Runtime work remains
+   governed independently.
+6. On static-image rollback, deploy the prior immutable image, keep index responses
+   no-store, and leave hashed assets immutable. Verify `/healthz`, CSP/security
+   headers, non-root UID, read-only filesystem, and one deterministic approval path.
+
+The local synthetic image has no live login or production data. Deployment-specific
+identity/session, TLS, browser/assistive-technology, security, load, and recovery
+runbooks remain required. See [operator-ui.md](operator-ui.md).

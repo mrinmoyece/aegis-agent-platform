@@ -82,22 +82,6 @@ def test_specialist_projection_fencing_rls_and_rebuild() -> None:
                 idempotency_key=f"agent-integration:{run_id}",
             )
             assert requested.created
-            dispatches = await event_store.claim_outbox(
-                CONTEXT,
-                lease_owner="agent-integration-delivery",
-                lease_expires_at=now + timedelta(minutes=1),
-                now=now,
-                limit=1,
-            )
-            assert len(dispatches) == 1
-            assert dispatches[0].message.payload["work_id"] == str(run_id)
-            await event_store.mark_outbox_published(
-                CONTEXT,
-                dispatches[0].message.message_id,
-                lease_owner="agent-integration-delivery",
-                lease_expires_at=dispatches[0].lease_expires_at,
-                published_at=now,
-            )
             async with connection.transaction():
                 await connection.execute(
                     "SELECT set_config('aegis.tenant_id', %s, true)",
@@ -192,6 +176,11 @@ def test_specialist_projection_fencing_rls_and_rebuild() -> None:
             )
             assert len(rebuilt_artifacts) == len(state.artifacts)
         finally:
+            await maintenance.execute(
+                "DELETE FROM outbox_messages WHERE tenant_id = %s"
+                " AND status = 'pending' AND destination = 'aegis.work'",
+                ("tenant-a",),
+            )
             await maintenance.close()
 
     asyncio.run(scenario())

@@ -24,7 +24,6 @@ from aegis_agent_platform.domain import (
     PartialResult,
     ServiceIdentity,
     TrustStatus,
-    require_aware_datetime,
 )
 from aegis_agent_platform.evidence import (
     CancellationSignal,
@@ -68,17 +67,17 @@ class ChangeEvidence:
     summary: str
 
     def __post_init__(self) -> None:
-        """Require a timestamp safe for cross-source incident correlation."""
-        require_aware_datetime(self.observed_at, field_name="observed_at")
+        if self.observed_at.tzinfo is None:
+            raise ValueError("observed_at must be timezone-aware")
 
 
 class GitHubEvidenceReader(Protocol):
-    """Tenant-scoped read port; implementations arrive in a later layer."""
+    """Tenant-scoped read port for delivery change evidence."""
 
     async def changes_between(
         self,
         *,
-        tenant: TenantContext,
+        tenant_id: str,
         repository: str,
         start: datetime,
         end: datetime,

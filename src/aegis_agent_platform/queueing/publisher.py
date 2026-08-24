@@ -17,11 +17,7 @@ from aegis_agent_platform.observability.context import (
     extract_context,
     linked_contexts,
 )
-from aegis_agent_platform.observability.runtime import (
-    RuntimeMetrics,
-    RuntimeTracer,
-    shared_runtime_metrics,
-)
+from aegis_agent_platform.observability.runtime import RuntimeTracer
 from aegis_agent_platform.queueing import (
     MessageEnvelope,
     OutboxRepository,
@@ -35,18 +31,14 @@ from aegis_agent_platform.tenancy import TenantContext
 class PublisherTelemetry:
     """Bounded-cardinality publisher metrics interface."""
 
-    def __init__(self, metrics: RuntimeMetrics | None = None) -> None:
-        self._metrics = metrics or shared_runtime_metrics()
-
     def outbox_lag(self, seconds: float) -> None:
-        self._metrics.set_gauge("outbox_lag", seconds)
+        del seconds
 
     def published(self) -> None:
         pass
 
     def failed(self, *, retryable: bool) -> None:
         del retryable
-        self._metrics.add("publish_failures")
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +63,7 @@ class OutboxPublisher:
         queue: WorkQueue,
         *,
         publisher_id: str,
+        destination: str = "aegis.work",
         batch_size: int = 50,
         lease_duration: timedelta = timedelta(seconds=30),
         retry_delay: Callable[[int], timedelta] | None = None,
@@ -80,6 +73,8 @@ class OutboxPublisher:
     ) -> None:
         if not publisher_id:
             raise ValueError("publisher_id is required")
+        if not destination:
+            raise ValueError("destination is required")
         if not 1 <= batch_size <= 100:
             raise ValueError("batch_size must be between 1 and 100")
         if lease_duration <= timedelta(0):
@@ -87,6 +82,7 @@ class OutboxPublisher:
         self._repository = repository
         self._queue = queue
         self._publisher_id = publisher_id
+        self._destination = destination
         self._batch_size = batch_size
         self._lease_duration = lease_duration
         self._retry_delay = retry_delay or _default_retry_delay
@@ -110,7 +106,7 @@ class OutboxPublisher:
             lease_expires_at=now + self._lease_duration,
             now=now,
             limit=self._batch_size,
-            destination="aegis.work",
+            destination=self._destination,
         )
         published = failed = 0
         for raw_claim in claims:
@@ -140,7 +136,6 @@ class OutboxPublisher:
                         context,
                         claim.message.message_id,
                         lease_owner=claim.lease_owner,
-                        lease_expires_at=claim.lease_expires_at,
                         published_at=now,
                     )
             except RetryableQueueError:
@@ -176,7 +171,6 @@ class OutboxPublisher:
             context,
             claim.message.message_id,
             lease_owner=claim.lease_owner,
-            lease_expires_at=claim.lease_expires_at,
             retry_at=now + self._retry_delay(claim.attempt_count),
             error_code=error_code,
         )
@@ -219,9 +213,6 @@ def _default_retry_delay(attempt: int) -> timedelta:
     return timedelta(seconds=min(300, 2 ** min(attempt, 8)))
 
 
-# NOTE: durable propagation headers are only present when the producer boundary
-# explicitly threaded validated trace context into the outbox request. Internal
-# producers that omit that handoff remain unlinked until they plumb trace context.
 def _propagation_context(envelope: MessageEnvelope) -> PropagationContext | None:
     headers = {
         key: value

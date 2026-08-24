@@ -46,7 +46,6 @@ class Settings:
     telemetry_sample_rate: float = 0.1
 
     def __post_init__(self) -> None:
-        """Enforce invariants for every construction path."""
         self.validate()
 
     @classmethod
@@ -103,7 +102,7 @@ class Settings:
                 "Redis and worker numeric settings must be numbers"
             ) from error
 
-        return cls(
+        settings = cls(
             environment=environment,
             service_name=values.get(
                 "AEGIS_SERVICE_NAME",
@@ -119,10 +118,7 @@ class Settings:
             redis_url=values.get("AEGIS_REDIS_URL", ""),
             oidc_issuer=values.get("AEGIS_OIDC_ISSUER", ""),
             oidc_jwks_url=values.get("AEGIS_OIDC_JWKS_URL", ""),
-            oidc_audience=values.get(
-                "AEGIS_OIDC_AUDIENCE",
-                "",
-            ),
+            oidc_audience=values.get("AEGIS_OIDC_AUDIENCE", ""),
             oidc_clock_skew_seconds=clock_skew_seconds,
             redis_max_connections=redis_max_connections,
             redis_connect_timeout_seconds=redis_connect_timeout_seconds,
@@ -134,6 +130,8 @@ class Settings:
             telemetry_buffer_capacity=telemetry_buffer_capacity,
             telemetry_sample_rate=telemetry_sample_rate,
         )
+        settings.validate()
+        return settings
 
     def validate(self) -> None:
         """Reject settings that would make process behavior ambiguous or unsafe."""

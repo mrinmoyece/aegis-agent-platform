@@ -5,83 +5,40 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import StrEnum
 from types import MappingProxyType
-from typing import ClassVar, Self
 from uuid import UUID
 
 from aegis_agent_platform.domain.events import (
     DomainEventType,
     EventEnvelope,
     JsonValue,
-    TraceContext,
     freeze_json_mapping,
 )
 
 
-class _StringConstant(str):
-    _values: ClassVar[dict[str, Self]]
-
-    def __init_subclass__(cls) -> None:
-        super().__init_subclass__()
-        cls._values = {}
-
-    def __new__(cls, value: str) -> Self:
-        try:
-            return cls._values[value]
-        except KeyError as error:
-            raise ValueError(f"{value!r} is not a valid {cls.__name__}") from error
-
-    @classmethod
-    def _define(cls, value: str) -> Self:
-        member: Self = str.__new__(cls, value)
-        cls._values[value] = member
-        return member
-
-    @property
-    def value(self) -> str:
-        return str(self)
-
-
-class WorkStatus(_StringConstant):
+class WorkStatus(StrEnum):
     """Authoritative lifecycle states reconstructed from work events."""
 
-    REQUESTED: ClassVar[WorkStatus]
-    PUBLISHED: ClassVar[WorkStatus]
-    CLAIMED: ClassVar[WorkStatus]
-    RUNNING: ClassVar[WorkStatus]
-    RETRY_WAIT: ClassVar[WorkStatus]
-    SUCCEEDED: ClassVar[WorkStatus]
-    FAILED: ClassVar[WorkStatus]
-    CANCELLED: ClassVar[WorkStatus]
-    DEAD_LETTER: ClassVar[WorkStatus]
+    REQUESTED = "requested"
+    PUBLISHED = "published"
+    CLAIMED = "claimed"
+    RUNNING = "running"
+    RETRY_WAIT = "retry_wait"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    DEAD_LETTER = "dead_letter"
 
 
-WorkStatus.REQUESTED = WorkStatus._define("requested")
-WorkStatus.PUBLISHED = WorkStatus._define("published")
-WorkStatus.CLAIMED = WorkStatus._define("claimed")
-WorkStatus.RUNNING = WorkStatus._define("running")
-WorkStatus.RETRY_WAIT = WorkStatus._define("retry_wait")
-WorkStatus.SUCCEEDED = WorkStatus._define("succeeded")
-WorkStatus.FAILED = WorkStatus._define("failed")
-WorkStatus.CANCELLED = WorkStatus._define("cancelled")
-WorkStatus.DEAD_LETTER = WorkStatus._define("dead_letter")
-
-
-class FailureClass(_StringConstant):
+class FailureClass(StrEnum):
     """Stable retry policy classification, independent of exception classes."""
 
-    RETRYABLE: ClassVar[FailureClass]
-    PERMANENT: ClassVar[FailureClass]
-    CANCELLED: ClassVar[FailureClass]
-    TIMEOUT: ClassVar[FailureClass]
-    WORKER_BUG: ClassVar[FailureClass]
-
-
-FailureClass.RETRYABLE = FailureClass._define("retryable")
-FailureClass.PERMANENT = FailureClass._define("permanent")
-FailureClass.CANCELLED = FailureClass._define("cancelled")
-FailureClass.TIMEOUT = FailureClass._define("timeout")
-FailureClass.WORKER_BUG = FailureClass._define("worker_bug")
+    RETRYABLE = "retryable"
+    PERMANENT = "permanent"
+    CANCELLED = "cancelled"
+    TIMEOUT = "timeout"
+    WORKER_BUG = "worker_bug"
 
 
 TERMINAL_WORK_STATUSES = frozenset(
@@ -106,7 +63,6 @@ class WorkRequest:
     requested_at: datetime
     payload: Mapping[str, JsonValue]
     causation_id: UUID | None = None
-    trace_context: TraceContext | None = None
     max_attempts: int = 5
     timeout_seconds: int = 300
     schema_version: int = 1
@@ -163,7 +119,7 @@ class WorkTransition:
     lease: WorkLease | None = None
 
     def __post_init__(self) -> None:
-        if not str(self.event_type).startswith("work."):
+        if not self.event_type.value.startswith("work."):
             raise ValueError("work transition requires a work event type")
         if self.occurred_at.tzinfo is None:
             raise ValueError("transition time must be timezone-aware")
@@ -210,7 +166,6 @@ class WorkTransition:
             idempotency_key=(
                 f"{request.idempotency_key}:{self.event_type.value}:{event_id}"
             ),
-            trace_context=request.trace_context,
         )
 
 
@@ -267,12 +222,12 @@ def next_status(current: WorkStatus | None, event_type: DomainEventType) -> Work
         DomainEventType.WORK_RECONCILED,
     }:
         if current is None or current in TERMINAL_WORK_STATUSES:
-            raise ValueError(f"{event_type} is invalid from {current}")
+            raise ValueError(f"{event_type.value} is invalid from {current}")
         return current
     try:
         return transitions[(current, event_type)]
     except KeyError as error:
-        raise ValueError(f"{event_type} is invalid from {current}") from error
+        raise ValueError(f"{event_type.value} is invalid from {current}") from error
 
 
 __all__ = [

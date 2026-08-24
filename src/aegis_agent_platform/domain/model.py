@@ -88,7 +88,7 @@ class ImagePart:
             "image/webp",
         }:
             raise ValueError("unsupported image media type")
-        if not self.uri.startswith("https://"):
+        if not self.uri.startswith(("https://", "aegis-object://")):
             raise ValueError("image uri must use an approved scheme")
 
 
@@ -336,13 +336,10 @@ class ModelResponse:
     latency_ms: int
     provider_request_id: str | None = None
     structured_output: Mapping[str, JsonValue] | None = None
-    cost_usd: Decimal = Decimal("0")
 
     def __post_init__(self) -> None:
         if self.latency_ms < 0:
             raise ValueError("latency cannot be negative")
-        if self.cost_usd < 0:
-            raise ValueError("model response cost cannot be negative")
         if self.provider_request_id is not None and not self.provider_request_id:
             raise ValueError("provider request id cannot be empty")
         object.__setattr__(self, "content", tuple(self.content))

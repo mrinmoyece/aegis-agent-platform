@@ -264,8 +264,8 @@ credential rotation, and operator escalation.
 At-least-once delivery means a provider effect may remain ambiguous after a
 network partition or crash. Stable idempotency and reconciliation reduce blind
 duplicates but cannot prove exactly once. Unrestricted interactive sandboxing,
-arbitrary production commands, memory/RAG, operator UI, MCP/A2A, broad autonomous
-remediation, live external verification, production deployment, HA/DR, and
+arbitrary production commands, production-qualified operator UI, MCP/A2A, broad
+autonomous remediation, live external verification, production deployment, HA/DR, and
 multi-region operation remain absent.
 
 ## Layer 9 residual risk
@@ -320,7 +320,19 @@ read-only adapters. Residual risks include hash-key compromise, backend access
 policy, collector spoofing without production mTLS/auth, and incomplete
 production telemetry qualification.
 
+Layer 13 addresses browser token theft, CSRF, cross-tenant cache bleed,
+client-authority confusion, response/schema smuggling, XSS/unsafe URLs, CSV formula
+injection, unsafe downloads/clipboard, mutation replay, stale scope, framing,
+support-mode disclosure, and telemetry payload leakage. Controls include HttpOnly
+server sessions, PKCE/state/nonce, origin-bound CSRF, server authorization,
+anti-enumeration, tenant/purpose cache teardown, runtime schemas, React text
+rendering, allowlists/bounds, idempotency/concurrency, CSP/frame denial, redaction,
+and immutable audit. Residual risks include a compromised BFF/session store,
+reverse-proxy header mistakes, malicious browser extensions, and unqualified
+production identity/browser behavior.
+
 Full production model/connector and telemetry qualification, independent
-penetration testing, large-scale human labeling, operator React UI, MCP/A2A,
-external managed backends, 24/7 on-call evidence, HA/DR, multi-region operation,
-final load/chaos certification, and compliance certification remain deferred.
+penetration/accessibility testing, large-scale human labeling, live production
+identity/browser qualification, MCP/A2A, external managed backends, 24/7 on-call
+evidence, HA/DR, multi-region operation, final load/chaos certification, and
+compliance certification remain deferred.

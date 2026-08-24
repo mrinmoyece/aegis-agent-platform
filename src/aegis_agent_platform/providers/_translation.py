@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-import math
 from collections.abc import Awaitable, Mapping, Sequence
 from contextlib import suppress
+from math import isfinite
 
 from aegis_agent_platform.domain import (
     ImagePart,
@@ -138,7 +138,7 @@ def classify_sdk_error(error: Exception) -> ModelGatewayError:
             ModelErrorClass.PROVIDER_UNAVAILABLE,
             "provider_unavailable",
             retryable=True,
-            billing_ambiguous=True,
+            billing_ambiguous=status is not None,
         )
     return ModelGatewayError(
         ModelErrorClass.PROVIDER_BUG,
@@ -146,6 +146,9 @@ def classify_sdk_error(error: Exception) -> ModelGatewayError:
         retryable=False,
         billing_ambiguous=True,
     )
+
+
+_MAX_RETRY_AFTER_SECONDS = 300
 
 
 def _retry_after(error: Exception) -> float | None:
@@ -158,9 +161,11 @@ def _retry_after(error: Exception) -> float | None:
         value = float(raw) if raw is not None else None
     except (TypeError, ValueError):
         return None
-    if value is None or not math.isfinite(value) or value < 0:
+    if value is None:
         return None
-    return min(value, 300.0)
+    if not isfinite(value) or value < 0:
+        return None
+    return min(value, _MAX_RETRY_AFTER_SECONDS)
 
 
 def all_parts(messages: Sequence[ModelMessage]) -> tuple[object, ...]:

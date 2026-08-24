@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -37,53 +37,9 @@ from aegis_agent_platform.queueing import QueueDelivery
 from aegis_agent_platform.runtime.operations import RequeueApproval
 from aegis_agent_platform.tenancy import TenantContext
 
-_MAX_UUID = UUID(int=(1 << 128) - 1)
-_KeysetCursor = tuple[datetime, UUID]
-
-
-def _descending_cursor(
-    cursor: _KeysetCursor | datetime | None,
-) -> tuple[datetime, UUID]:
-    """Normalise a keyset cursor into (before_ts, before_id) upper bounds."""
-    if cursor is None:
-        return datetime(9999, 12, 31, 23, 59, 59, tzinfo=UTC), _MAX_UUID
-    if isinstance(cursor, tuple):
-        return cursor
-    return cursor, _MAX_UUID
-
-
-_RedriveRow = tuple[UUID, UUID]
-_ExpiredLeaseRow = tuple[
-    UUID,
-    UUID,
-    int,
-    str,
-    int,
-    datetime,
-    datetime,
-    datetime,
-    datetime | None,
-    int,
-]
-
 
 class _ClaimUnavailableError(Exception):
     pass
-
-
-def _outbox_headers(request: WorkRequest) -> Mapping[str, JsonValue]:
-    headers: dict[str, JsonValue] = {
-        "tenant_id": request.tenant_id,
-        "schema_version": 1,
-    }
-    if request.trace_context is not None:
-        headers["traceparent"] = request.trace_context.traceparent
-        if request.trace_context.tracestate is not None:
-            headers["tracestate"] = request.trace_context.tracestate
-    # NOTE: only ingress-validated request trace context is made durable here. Any
-    # internal producer path that bypasses the boundary still needs explicit plumbing
-    # before API → ledger/outbox → queue continuity can be relied upon.
-    return headers
 
 
 class PostgresWorkRepository:
@@ -135,7 +91,7 @@ class PostgresWorkRepository:
             available_at=request.requested_at,
             max_attempts=request.max_attempts,
             payload=_request_payload(request),
-            headers=_outbox_headers(request),
+            headers={"tenant_id": request.tenant_id, "schema_version": 1},
         )
 
         async def insert_work(connection: psycopg.AsyncConnection[Any]) -> None:
@@ -298,7 +254,7 @@ class PostgresWorkRepository:
                     SELECT attempt_count, max_attempts
                     FROM work_items
                     WHERE tenant_id = %s AND work_id = %s
-                      AND status IN ('published', 'retry_wait')
+                      AND status IN ('requested', 'published', 'retry_wait')
                       AND cancel_requested_at IS NULL
                     """,
                     (request.tenant_id, request.work_id),
@@ -372,7 +328,7 @@ class PostgresWorkRepository:
                 SET status = 'claimed', attempt_count = %s
                 WHERE tenant_id = %s AND work_id = %s
                   AND attempt_count = %s
-                  AND status IN ('published', 'retry_wait')
+                  AND status IN ('requested', 'published', 'retry_wait')
                   AND available_at <= clock_timestamp()
                   AND cancel_requested_at IS NULL
                 """,
@@ -816,7 +772,6 @@ class PostgresWorkRepository:
                 at=at,
                 reason="retry_scheduled",
                 retry_at=retry_at,
-                running_only=True,
             )
 
         await self._events.append_fenced(
@@ -901,34 +856,31 @@ class PostgresWorkRepository:
                     """,
                     (str(context.tenant_id), limit),
                 )
-                redrive_rows = cast(list[_RedriveRow], await redrive_cursor.fetchall())
-                remaining = max(limit - len(redrive_rows), 0)
-                rows: list[_ExpiredLeaseRow] = []
-                if remaining > 0:
-                    cursor = await self._connection.execute(
-                        """
-                        SELECT l.work_id, l.lease_token, l.generation, l.owner,
-                            w.attempt_count, l.acquired_at, l.heartbeat_at,
-                            l.expires_at, w.cancel_requested_at, w.max_attempts
-                        FROM work_leases AS l
-                        JOIN work_items AS w
-                          ON w.tenant_id = l.tenant_id
-                         AND w.work_id = l.work_id
-                        WHERE l.tenant_id = %s AND l.released_at IS NULL
-                          AND l.expires_at <= %s
-                        ORDER BY l.expires_at, l.work_id
-                        LIMIT %s
-                        """,
-                        (str(context.tenant_id), now, remaining),
-                    )
-                    rows = cast(list[_ExpiredLeaseRow], await cursor.fetchall())
+                redrive_rows = await redrive_cursor.fetchall()
+                cursor = await self._connection.execute(
+                    """
+                    SELECT l.work_id, l.lease_token, l.generation, l.owner,
+                        w.attempt_count, l.acquired_at, l.heartbeat_at,
+                        l.expires_at, w.cancel_requested_at, w.max_attempts
+                    FROM work_leases AS l
+                    JOIN work_items AS w
+                      ON w.tenant_id = l.tenant_id
+                     AND w.work_id = l.work_id
+                    WHERE l.tenant_id = %s AND l.released_at IS NULL
+                      AND l.expires_at <= %s
+                    ORDER BY l.expires_at, l.work_id
+                    LIMIT %s
+                    """,
+                    (str(context.tenant_id), now, limit),
+                )
+                rows = await cursor.fetchall()
         except psycopg.Error as error:
             raise classify_storage_error(error) from error
 
         reconciled: list[UUID] = []
-        for redrive_row in redrive_rows:
-            work_id = UUID(str(redrive_row[0]))
-            message_id = UUID(str(redrive_row[1]))
+        for row in redrive_rows:
+            work_id = UUID(str(row[0]))
+            message_id = UUID(str(row[1]))
             request = await self._load_request(context, work_id)
             event = WorkTransition(
                 DomainEventType.WORK_RECONCILED,
@@ -985,22 +937,22 @@ class PostgresWorkRepository:
                 continue
             reconciled.append(work_id)
 
-        for expired_row in rows:
-            work_id = UUID(str(expired_row[0]))
+        for row in rows:
+            work_id = UUID(str(row[0]))
             lease = WorkLease(
                 work_id=work_id,
                 tenant_id=str(context.tenant_id),
-                token=expired_row[1],
-                generation=int(expired_row[2]),
-                owner=str(expired_row[3]),
-                attempt=int(expired_row[4]),
-                acquired_at=expired_row[5],
-                heartbeat_at=expired_row[6],
-                expires_at=expired_row[7],
+                token=row[1],
+                generation=int(row[2]),
+                owner=str(row[3]),
+                attempt=int(row[4]),
+                acquired_at=row[5],
+                heartbeat_at=row[6],
+                expires_at=row[7],
             )
-            cancel_requested_at = expired_row[8]
+            cancel_requested_at = row[8]
             cancel_requested = cancel_requested_at is not None
-            exhausted = int(expired_row[4]) >= int(expired_row[9])
+            exhausted = int(row[4]) >= int(row[9])
             request = await self._load_request(context, work_id)
             expired = WorkTransition(
                 DomainEventType.WORK_LEASE_EXPIRED,
@@ -1288,12 +1240,11 @@ class PostgresWorkRepository:
         *,
         status: WorkStatus | None = None,
         limit: int = 100,
-        cursor: _KeysetCursor | datetime | None = None,
+        cursor: tuple[datetime, UUID] | None = None,
     ) -> tuple[Mapping[str, JsonValue], ...]:
         """Return a bounded payload-free tenant status page."""
         if not 1 <= limit <= 200:
             raise ValueError("status limit must be between 1 and 200")
-        before_requested_at, before_work_id = _descending_cursor(cursor)
         try:
             async with _tenant_transaction(self._connection, self._lock, context):
                 query = """
@@ -1302,17 +1253,15 @@ class PostgresWorkRepository:
                         last_error_code
                     FROM work_items
                     WHERE tenant_id = %s
-                      AND (requested_at, work_id) < (%s, %s)
                 """
-                parameters: list[object] = [
-                    str(context.tenant_id),
-                    before_requested_at,
-                    before_work_id,
-                ]
+                parameters: list[object] = [str(context.tenant_id)]
+                if cursor is not None:
+                    query += " AND (requested_at, work_id) < (%s, %s)"
+                    parameters.extend([cursor[0], str(cursor[1])])
                 if status is not None:
                     query += " AND status = %s"
                     parameters.append(status.value)
-                query += " ORDER BY requested_at DESC, work_id DESC LIMIT %s"
+                query += " ORDER BY requested_at DESC, work_id LIMIT %s"
                 parameters.append(limit)
                 rows = await (
                     await self._connection.execute(query, tuple(parameters))
@@ -1339,40 +1288,45 @@ class PostgresWorkRepository:
         context: TenantContext,
         *,
         limit: int = 100,
-        cursor: _KeysetCursor | datetime | None = None,
+        cursor: tuple[datetime, UUID] | None = None,
     ) -> tuple[Mapping[str, JsonValue], ...]:
         """Return tenant-scoped pending state from PostgreSQL, never the global PEL."""
         if not 1 <= limit <= 200:
             raise ValueError("pending limit must be between 1 and 200")
-        before_available_at, before_work_id = _descending_cursor(cursor)
+        cursor_params: tuple[object, ...] = (
+            (cursor[0], str(cursor[1])) if cursor else ()
+        )
+        _base_pending = """
+            SELECT w.work_id, w.work_kind, w.status, w.available_at,
+                w.attempt_count, w.max_attempts, l.owner,
+                l.heartbeat_at, l.expires_at
+            FROM work_items AS w
+            LEFT JOIN work_leases AS l
+              ON l.tenant_id = w.tenant_id
+             AND l.work_id = w.work_id
+             AND l.released_at IS NULL
+            WHERE w.tenant_id = %s
+              AND w.status IN (
+                  'requested', 'published', 'claimed',
+                  'running', 'retry_wait'
+              )
+        """
+        if cursor:
+            pending_query = (
+                _base_pending
+                + " AND (w.available_at, w.work_id) < (%s, %s)"
+                + " ORDER BY w.available_at DESC, w.work_id LIMIT %s"
+            )
+        else:
+            pending_query = (
+                _base_pending + " ORDER BY w.available_at DESC, w.work_id LIMIT %s"
+            )
         try:
             async with _tenant_transaction(self._connection, self._lock, context):
                 rows = await (
                     await self._connection.execute(
-                        """
-                        SELECT w.work_id, w.work_kind, w.status, w.available_at,
-                            w.attempt_count, w.max_attempts, l.owner,
-                            l.heartbeat_at, l.expires_at
-                        FROM work_items AS w
-                        LEFT JOIN work_leases AS l
-                          ON l.tenant_id = w.tenant_id
-                         AND l.work_id = w.work_id
-                         AND l.released_at IS NULL
-                        WHERE w.tenant_id = %s
-                          AND w.status IN (
-                              'requested', 'published', 'claimed',
-                              'running', 'retry_wait'
-                          )
-                          AND (w.available_at, w.work_id) < (%s, %s)
-                        ORDER BY w.available_at DESC, w.work_id DESC
-                        LIMIT %s
-                        """,
-                        (
-                            str(context.tenant_id),
-                            before_available_at,
-                            before_work_id,
-                            limit,
-                        ),
+                        pending_query,
+                        (str(context.tenant_id), *cursor_params, limit),
                     )
                 ).fetchall()
         except psycopg.Error as error:
@@ -1733,14 +1687,7 @@ class PostgresWorkRepository:
         at: datetime,
         reason: str,
         retry_at: datetime,
-        running_only: bool = False,
     ) -> None:
-        """Release a lease back to retry_wait.
-
-        Set ``running_only=True`` when called from ``fail()`` to restrict the
-        eligible status to ``running``, preventing an invalid ``CLAIMED →
-        RETRY_WAIT`` transition that ``next_status()`` would reject on replay.
-        """
         cursor = await connection.execute(
             """
             UPDATE work_leases
@@ -1760,24 +1707,14 @@ class PostgresWorkRepository:
         )
         if cursor.rowcount != 1:
             raise FencingError(lease.generation, 0)
-        if running_only:
-            status_sql = """
-            UPDATE work_items
-            SET status = 'retry_wait', available_at = %s
-            WHERE tenant_id = %s AND work_id = %s
-              AND status = 'running'
-              AND cancel_requested_at IS NULL
+        cursor = await connection.execute(
             """
-        else:
-            status_sql = """
             UPDATE work_items
             SET status = 'retry_wait', available_at = %s
             WHERE tenant_id = %s AND work_id = %s
               AND status IN ('claimed', 'running')
               AND cancel_requested_at IS NULL
-            """
-        cursor = await connection.execute(
-            status_sql,
+            """,
             (retry_at, lease.tenant_id, lease.work_id),
         )
         if cursor.rowcount != 1:

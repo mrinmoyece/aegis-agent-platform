@@ -162,16 +162,6 @@ class InMemoryArtifactStore:
             return None
         return record, self._content[(record.tenant_id, record.digest)]
 
-    def get_quarantined(
-        self,
-        context: TenantContext,
-        artifact_id: UUID,
-    ) -> tuple[StoredArtifact, bytes] | None:
-        record = self._records.get((str(context.tenant_id), artifact_id))
-        if record is None or record.scan_outcome is not ScanOutcome.QUARANTINE:
-            return None
-        return record, self._content[(record.tenant_id, record.digest)]
-
 
 @dataclass(frozen=True, slots=True)
 class ArchiveLimits:

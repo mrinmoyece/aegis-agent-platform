@@ -344,7 +344,6 @@ def _decode_fields(fields: Mapping[object, object]) -> MessageEnvelope:
         KeyError,
         RecursionError,
         TypeError,
-        UnicodeDecodeError,
         ValueError,
         json.JSONDecodeError,
     ) as error:

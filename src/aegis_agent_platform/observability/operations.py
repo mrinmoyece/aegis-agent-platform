@@ -20,11 +20,9 @@ from aegis_agent_platform.identity import (
     Principal,
 )
 from aegis_agent_platform.observability.replay import (
-    MAX_REPLAY_EVENTS,
     ReplayDebugger,
     ReplayQuery,
     SupportReport,
-    SupportReportRangeError,
 )
 from aegis_agent_platform.observability.safety import hash_identifier
 from aegis_agent_platform.tenancy import TenantContext
@@ -153,23 +151,12 @@ class ObservabilityOperations:
     ) -> SupportReport:
         """Export a bounded report only for explicitly privileged operators."""
         self._require(principal, context, Permission.SUPPORT_EXPORT, at)
-        events = await self._replay.load(
-            context,
-            ReplayQuery(aggregate_id, max_events=MAX_REPLAY_EVENTS),
-        )
-        if len(events) == MAX_REPLAY_EVENTS:
-            overflow = await self._replay.load(
-                context,
-                ReplayQuery(
-                    aggregate_id,
-                    after_sequence=events[-1].aggregate_sequence,
-                    max_events=1,
-                ),
+        query = ReplayQuery(aggregate_id)
+        events = await self._replay.load(context, query)
+        if len(events) >= query.max_events:
+            raise OverflowError(
+                "support report exceeds the replay limit; export would be truncated"
             )
-            if overflow:
-                raise SupportReportRangeError(
-                    "support report exceeds the bounded replay range"
-                )
         report = self._replay.support_report(
             context,
             events,

@@ -21,26 +21,7 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Detect dependency review support
-        id: dependency-review-support
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          endpoint="repos/${GITHUB_REPOSITORY}/dependency-graph/compare/${BASE_SHA}...${HEAD_SHA}"
-          if response="$(gh api --silent "${endpoint}" 2>&1)"; then
-            echo "enabled=true" >> "${GITHUB_OUTPUT}"
-          elif printf '%s\n' "${response}" | grep --quiet "HTTP 403"; then
-            echo "::warning::Dependency graph is unavailable; dependency review is skipped."
-            echo "enabled=false" >> "${GITHUB_OUTPUT}"
-          else
-            echo "::error::Dependency graph capability probe failed."
-            printf '%s\n' "${response}" >&2
-            exit 1
-          fi
       - name: Review dependency changes
-        if: steps.dependency-review-support.outputs.enabled == 'true'
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
 
   quality:
@@ -93,6 +74,47 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 7
+
+  operator-ui:
+    name: Operator UI security, accessibility, and journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24.10.0"
+      - name: Install pinned package manager
+        run: npm install --global pnpm@11.21.0
+      - name: Install locked dependencies
+        run: pnpm --dir frontend install --frozen-lockfile
+      - name: Run frontend gates
+        run: pnpm --dir frontend check
+      - name: Audit production dependencies
+        run: pnpm --dir frontend audit
+      - name: Install bounded browser runtime
+        run: pnpm --dir frontend exec playwright install --with-deps chromium
+      - name: Run deterministic operator journeys
+        run: pnpm --dir frontend e2e
+      - name: Retain failure-only browser evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: operator-ui-playwright-failures
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Retain frontend SBOM
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: operator-ui-sbom
+          path: frontend/dist/operator-ui.sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 14
 
   compose:
     name: Compose configuration
@@ -161,3 +183,35 @@ jobs:
         run: docker build --check .
       - name: Build application image
         run: docker build --tag aegis-agent-platform:${{ github.sha }} .
+      - name: Validate operator Dockerfile
+        run: docker build --check frontend
+      - name: Build operator image
+        run: docker build --tag aegis-operator-ui:${{ github.sha }} frontend
+      - name: Smoke non-root operator image
+        run: |
+          container_id="$(
+            docker run --detach --rm \
+              --read-only \
+              --tmpfs /tmp:size=16m \
+              --cap-drop ALL \
+              --security-opt no-new-privileges \
+              --publish 127.0.0.1:4173:8080 \
+              "aegis-operator-ui:${GITHUB_SHA}"
+          )"
+          trap 'docker stop "${container_id}" >/dev/null' EXIT
+          test "$(docker inspect --format '{{.Config.User}}' "${container_id}")" = "101:101"
+          ready=false
+          for _ in 1 2 3 4 5 6; do
+            if curl --fail --silent http://127.0.0.1:4173/healthz | grep --quiet ready; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "${ready}" != "true" ]; then
+            docker logs "${container_id}"
+            exit 1
+          fi
+          headers="$(curl --fail --silent --head http://127.0.0.1:4173/)"
+          printf '%s\n' "${headers}" | grep --ignore-case --quiet '^Content-Security-Policy:'
+          printf '%s\n' "${headers}" | grep --ignore-case --quiet '^Cache-Control: no-store'

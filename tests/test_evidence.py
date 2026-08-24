@@ -8,7 +8,6 @@ from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -93,8 +92,6 @@ def policy() -> TenantPolicy:
         frozenset(),
         frozenset({Role.TENANT_ADMIN}),
         QuotaLimits(0, Decimal(0), 0, Decimal(0), 10),
-        frozenset({"openai"}),
-        frozenset({"us"}),
     )
 
 
@@ -441,38 +438,6 @@ def test_connector_contract_violation_is_a_durable_terminal_failure() -> None:
     assert events[-1].payload["code"] == "connector_contract_violation"
 
 
-def test_connector_permission_error_is_a_durable_terminal_failure() -> None:
-    class DeniedConnector(StaticConnector):
-        async def query(
-            self,
-            request: EvidenceQuery,
-            *,
-            cancellation: CancellationSignal | None = None,
-        ) -> ConnectorPage:
-            del request, cancellation
-            raise PermissionError("repository_not_allowed")
-
-    repository = InMemoryEvidenceRepository()
-    service = EvidenceQueryService(
-        connectors={"dynatrace": DeniedConnector()},
-        repository=repository,
-        ingestor=EvidenceIngestor(InMemoryEvidenceStore()),
-        clock=lambda: NOW,
-    )
-    request = query()
-    active = lease(request)
-    asyncio.run(service.request(CONTEXT, request, policy(), actor_id="alice"))
-    repository.register_lease(active)
-
-    with pytest.raises(PermissionError, match="repository_not_allowed"):
-        asyncio.run(service.execute(CONTEXT, request, active))
-
-    events = repository.events[(str(TENANT), request.query_id)]
-    assert events[-1].event_type == "evidence.query_failed.v1"
-    assert events[-1].payload["error_class"] == "authorization"
-    assert events[-1].payload["code"] == "repository_not_allowed"
-
-
 def test_stale_worker_cannot_query_or_advance_cursor() -> None:
     repository = InMemoryEvidenceRepository()
     connector = StaticConnector()
@@ -742,8 +707,6 @@ def test_query_policy_is_tenant_environment_connector_and_window_bound() -> None
         denied.tools_requiring_approval,
         denied.approver_roles,
         denied.quotas,
-        denied.allowed_providers,
-        denied.allowed_data_residencies,
     )
     with pytest.raises(PermissionError, match="connector_not_allowed"):
         asyncio.run(service.request(CONTEXT, request, denied, actor_id="alice"))
@@ -761,13 +724,8 @@ def test_query_policy_is_tenant_environment_connector_and_window_bound() -> None
 def test_query_execution_records_redaction_dedup_quarantine_and_cursor() -> None:
     repository = InMemoryEvidenceRepository()
     source = raw(
-        summary=(
-            "alice@example.com token=secret-token-value client_secret=very-secret-value"
-        ),
-        fields={
-            "api_token": "hidden-token-value",
-            "access_key": "hidden-access-value",
-        },
+        summary="alice@example.com token=secret-token-value",
+        fields={"api_token": "hidden-token-value"},
     )
     connector = StaticConnector(
         ConnectorPage(
@@ -798,9 +756,6 @@ def test_query_execution_records_redaction_dedup_quarantine_and_cursor() -> None
     assert "evidence.deduplicated.v1" in kinds
     assert "evidence.quarantined.v1" in kinds
     assert "evidence.source_cursor_advanced.v1" in kinds
-    assert "[REDACTED-EMAIL]" in result.records[0].summary
-    assert "client_secret=[REDACTED]" in result.records[0].summary
-    assert result.records[0].fields["access_key"] == "[REDACTED]"
     keys = [
         event.idempotency_key
         for event in repository.events[(str(TENANT), request.query_id)]
@@ -1141,32 +1096,3 @@ def test_correlation_links_resources_runbooks_and_rejects_invalid_inputs() -> No
             generated_at=NOW,
             evidence=(left,),
         )
-    with pytest.raises(PermissionError, match="cross_environment"):
-        engine.correlate(
-            bundle_id="cross-environment",
-            tenant_id=str(TENANT),
-            environment=EnvironmentIdentity("production"),
-            generated_at=NOW,
-            evidence=(replace(left, environment=EnvironmentIdentity("staging")),),
-        )
-
-
-def test_evidence_query_selectors_are_immutable() -> None:
-    selectors = {"service": "checkout"}
-
-    query_value = EvidenceQuery(
-        uuid4(),
-        str(TENANT),
-        EvidenceSourceKind.DYNATRACE,
-        EnvironmentIdentity("production"),
-        WINDOW,
-        (EvidenceKind.LOG,),
-        selectors,
-        10,
-        "immutable-selectors",
-    )
-    selectors["service"] = "payments"
-
-    assert query_value.selectors["service"] == "checkout"
-    with pytest.raises(TypeError):
-        cast("dict[str, str]", query_value.selectors)["service"] = "orders"

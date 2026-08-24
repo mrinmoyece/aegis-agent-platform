@@ -11,13 +11,6 @@ from aegis_agent_platform.identity import Role, TenantId
 from aegis_agent_platform.tenancy import TenantContext
 
 
-def _require_finite_non_negative_decimal(value: Decimal, name: str) -> None:
-    if not value.is_finite():
-        raise ValueError(f"{name} must be finite")
-    if value < 0:
-        raise ValueError(f"{name} cannot be negative")
-
-
 class Decision(StrEnum):
     """Possible governance outcomes before a side effect is attempted."""
 
@@ -53,14 +46,13 @@ class QuotaLimits:
         )
         if any(value < 0 for value in numeric):
             raise ValueError("quota integer limits cannot be negative")
-        _require_finite_non_negative_decimal(
-            self.max_run_cost_usd,
-            "max_run_cost_usd",
-        )
-        _require_finite_non_negative_decimal(
-            self.max_tenant_cost_usd_per_period,
-            "max_tenant_cost_usd_per_period",
-        )
+        if self.max_run_cost_usd < 0 or self.max_tenant_cost_usd_per_period < 0:
+            raise ValueError("quota cost limits cannot be negative")
+        if (
+            not self.max_run_cost_usd.is_finite()
+            or not self.max_tenant_cost_usd_per_period.is_finite()
+        ):
+            raise ValueError("quota cost limits must be finite")
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,10 +79,6 @@ class TenantPolicy:
             raise ValueError("policy version is required")
         if not self.approver_roles:
             raise ValueError("at least one approver role is required")
-        if not self.allowed_providers:
-            raise ValueError("at least one allowed provider is required")
-        if not self.allowed_data_residencies:
-            raise ValueError("at least one allowed data residency is required")
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,30 +98,25 @@ class PolicyRequest:
         names = (self.model, self.tool, self.connector, self.environment)
         if any(not value for value in names):
             raise ValueError("policy request selectors are required")
-        if self.estimated_tokens < 0:
-            raise ValueError("estimated tokens cannot be negative")
-        _require_finite_non_negative_decimal(
-            self.estimated_cost_usd,
-            "estimated_cost_usd",
-        )
+        if self.estimated_tokens < 0 or self.estimated_cost_usd < 0:
+            raise ValueError("estimated quota consumption cannot be negative")
 
 
 @dataclass(frozen=True, slots=True)
 class QuotaUsage:
     """Authoritative tenant-period usage supplied by a later runtime adapter."""
 
-    tenant_id: TenantId
     tenant_tokens_used: int
     tenant_cost_usd: Decimal
     active_runs: int
 
     def __post_init__(self) -> None:
-        if self.tenant_tokens_used < 0 or self.active_runs < 0:
+        if (
+            self.tenant_tokens_used < 0
+            or self.tenant_cost_usd < 0
+            or self.active_runs < 0
+        ):
             raise ValueError("quota usage cannot be negative")
-        _require_finite_non_negative_decimal(
-            self.tenant_cost_usd,
-            "tenant_cost_usd",
-        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,18 +139,9 @@ class PolicyEvaluator:
         request: PolicyRequest,
         usage: QuotaUsage,
     ) -> PolicyDecision:
-        if (
-            request.tenant_id != policy.tenant_id
-            or usage.tenant_id != policy.tenant_id
-            or usage.tenant_id != request.tenant_id
-        ):
-            return PolicyDecision(
-                decision=Decision.DENY,
-                reasons=("cross_tenant_policy",),
-                policy_version=policy.version,
-                tenant_id=policy.tenant_id,
-            )
         reasons: list[str] = []
+        if request.tenant_id != policy.tenant_id:
+            reasons.append("cross_tenant_policy")
         selectors = (
             ("model_not_allowed", request.model, policy.allowed_models),
             ("tool_not_allowed", request.tool, policy.allowed_tools),
@@ -240,11 +214,15 @@ class InMemoryPolicyRepository:
     """Deterministic policy store for tests and the local API slice."""
 
     def __init__(self, policies: tuple[TenantPolicy, ...]) -> None:
-        self._policies: dict[TenantId, TenantPolicy] = {}
-        for policy in policies:
-            if policy.tenant_id in self._policies:
-                raise ValueError("duplicate tenant policy is not allowed")
-            self._policies[policy.tenant_id] = policy
+        seen: dict[TenantId, int] = {}
+        for i, policy in enumerate(policies):
+            if policy.tenant_id in seen:
+                raise ValueError(
+                    f"duplicate policy for tenant {policy.tenant_id!r} at positions "
+                    f"{seen[policy.tenant_id]} and {i}"
+                )
+            seen[policy.tenant_id] = i
+        self._policies = {policy.tenant_id: policy for policy in policies}
 
     def get(self, context: TenantContext) -> TenantPolicy | None:
         return self._policies.get(context.tenant_id)

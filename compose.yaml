@@ -1,6 +1,23 @@
 name: aegis-agent-platform
 
 services:
+  operator-ui:
+    profiles: ["operator-demo"]
+    build:
+      context: ./frontend
+    ports:
+      - "127.0.0.1:${AEGIS_OPERATOR_UI_PORT:-4173}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    networks:
+      - operator-ui
+
   api:
     build:
       context: .
@@ -29,7 +46,7 @@ services:
       OTEL_TRACES_SAMPLER: parentbased_traceidratio
       OTEL_TRACES_SAMPLER_ARG: ${AEGIS_TELEMETRY_SAMPLE_RATE:-0.10}
       OTEL_BSP_MAX_QUEUE_SIZE: ${AEGIS_TELEMETRY_BUFFER_CAPACITY:-4096}
-      OTEL_BSP_EXPORT_TIMEOUT: "2000"
+      OTEL_BSP_EXPORT_TIMEOUT: ${AEGIS_TELEMETRY_EXPORT_TIMEOUT_MS:-2000}
       OTEL_METRIC_EXPORT_INTERVAL: "15000"
     ports:
       - "127.0.0.1:${AEGIS_API_PORT:-8080}:8080"
@@ -183,7 +200,6 @@ services:
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
-      - --storage.tsdb.retention.time=31d
     volumes:
       - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./deploy/prometheus/rules:/etc/prometheus/rules:ro
@@ -223,4 +239,5 @@ volumes:
 
 networks:
   backend:
+  operator-ui:
   telemetry:

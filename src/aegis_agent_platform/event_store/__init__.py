@@ -68,7 +68,7 @@ class OutboxMessage:
     def __post_init__(self) -> None:
         if not self.destination:
             raise ValueError("outbox destination is required")
-        if self.available_at.tzinfo is None or self.available_at.utcoffset() is None:
+        if self.available_at.tzinfo is None:
             raise ValueError("outbox available_at must be timezone-aware")
         if self.max_attempts < 1:
             raise ValueError("outbox max_attempts must be positive")

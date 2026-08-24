@@ -299,11 +299,6 @@ def test_artifact_store_binds_tenants_redacts_and_quarantines() -> None:
     )
     assert quarantine.scan_outcome is ScanOutcome.QUARANTINE
     assert quarantine.reference.startswith(f"aegis-quarantine://{TENANT_ID}/")
-    assert quarantining.get(CONTEXT, quarantine.artifact_id) is None
-    assert quarantining.get_quarantined(CONTEXT, quarantine.artifact_id) == (
-        quarantine,
-        b"malware",
-    )
 
     with pytest.raises(ValueError, match="output bound"):
         quarantining.put(

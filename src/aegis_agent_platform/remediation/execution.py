@@ -27,7 +27,6 @@ from aegis_agent_platform.domain import (
     JsonValue,
     ReconciliationOutcome,
     ReconciliationRecord,
-    RemediationReplayError,
     RemediationState,
     VerificationOutcome,
     WorkLease,
@@ -1279,16 +1278,9 @@ class ControlledActionExecutor:
             )
         else:
             state = await self._state(context, state.plan.plan_id)
-        events = await self._repository.load(context, state.plan.plan_id)
-        not_before = _verification_observation_not_before(
-            events,
-            action.action_id,
-            attempt=index,
-        )
         try:
             with self._tracer.operation("verify", action.kind):
                 observation = await self._observe(context, action)
-            _require_fresh_observation(observation, not_before)
             outcome = _conditions(action.postconditions, observation)
         except ControlledActionError:
             outcome = VerificationOutcome.UNKNOWN
@@ -1451,8 +1443,8 @@ class ControlledActionExecutor:
             expected_version=state.version,
         )
         if any(
-            event.event_type is DomainEventType.ACTION_DISPATCH_CLAIMED
-            for event in prepared
+            event_type is DomainEventType.ACTION_DISPATCH_CLAIMED
+            for event_type, _, _ in events
         ):
             self._metrics.add("actions_dispatched", action_kind=action.kind)
         return await self._state(context, state.plan.plan_id)
@@ -1502,56 +1494,6 @@ def _reconciliation_for(
         if reconciliation.action_id == action_id and reconciliation.attempt == attempt:
             return reconciliation
     return None
-
-
-def _verification_observation_not_before(
-    events: Sequence[EventEnvelope],
-    action_id: UUID,
-    *,
-    attempt: int,
-) -> datetime:
-    relevant = str(action_id)
-    verification_requested_at = next(
-        (
-            event.occurred_at
-            for event in reversed(events)
-            if event.event_type == DomainEventType.ACTION_VERIFICATION_REQUESTED
-            and event.payload.get("action_id") == relevant
-            and event.payload.get("attempt") == attempt
-        ),
-        None,
-    )
-    if verification_requested_at is None:
-        raise RemediationReplayError("verification request is missing")
-    effect_at = max(
-        (
-            event.occurred_at
-            for event in events
-            if event.payload.get("action_id") == relevant
-            and (
-                event.event_type == DomainEventType.ACTION_EXECUTION_SUCCEEDED
-                or (
-                    event.event_type == DomainEventType.ACTION_RECONCILIATION_COMPLETED
-                    and event.payload.get("outcome")
-                    == ReconciliationOutcome.APPLIED.value
-                )
-            )
-        ),
-        default=verification_requested_at,
-    )
-    return max(verification_requested_at, effect_at)
-
-
-def _require_fresh_observation(
-    observation: ActionObservation,
-    not_before: datetime,
-) -> None:
-    if observation.observed_at < not_before:
-        raise ControlledActionError(
-            ActionErrorClass.CONFLICT,
-            "stale_verification_observation",
-            retryable=True,
-        )
 
 
 def _conditions(

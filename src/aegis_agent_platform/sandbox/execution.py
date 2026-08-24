@@ -40,10 +40,6 @@ from aegis_agent_platform.identity import (
     Permission,
     Principal,
 )
-from aegis_agent_platform.observability.context import (
-    PropagationContext,
-    durable_trace_context,
-)
 from aegis_agent_platform.sandbox.egress import EgressBroker
 from aegis_agent_platform.sandbox.policy import (
     SandboxPolicy,
@@ -456,7 +452,6 @@ class SandboxRequestService:
         request: SandboxRequest,
         policy: SandboxPolicy,
         binding: SandboxApprovalBinding,
-        propagation: PropagationContext | None = None,
     ) -> SandboxRequestDecision:
         at = self._clock()
         _authorize(
@@ -547,7 +542,6 @@ class SandboxRequestService:
                 "spec_digest": request.spec.digest,
                 "task_id": str(request.linkage.task_id),
             },
-            trace_context=durable_trace_context(propagation),
             max_attempts=request.spec.retry_policy.max_attempts,
             timeout_seconds=request.spec.resources.timeout_seconds,
         )
@@ -614,10 +608,6 @@ class SandboxOrchestrator:
             policy,
             binding,
         )
-        egress_events: tuple[
-            tuple[DomainEventType, Mapping[str, JsonValue], str],
-            ...,
-        ] = ()
         if state.status in {
             SandboxStatus.POLICY_DENIED,
             SandboxStatus.CLEANED,
@@ -647,36 +637,25 @@ class SandboxOrchestrator:
                 )
             except Exception as error:
                 raise PermissionError("sandbox_egress_decision_failed") from error
-            for requested_rule, decision in zip(
-                state.request.spec.egress_rules,
-                decisions,
-                strict=True,
-            ):
-                if (
-                    decision.rule != requested_rule
-                    or decision.policy_digest != policy.digest
-                ):
-                    raise PermissionError("sandbox_egress_decision_mismatch")
-            egress_events = tuple(
-                (
-                    DomainEventType.SANDBOX_EGRESS_DECIDED,
-                    {
-                        "allowed": decision.allowed,
-                        "policy_digest": decision.policy_digest,
-                        "reason": decision.reason,
-                        "rule_digest": _egress_rule_digest(decision.rule),
-                    },
-                    f"egress-{index}",
-                )
-                for index, decision in enumerate(decisions)
+            state = await self._append(
+                context,
+                state,
+                lease,
+                tuple(
+                    (
+                        DomainEventType.SANDBOX_EGRESS_DECIDED,
+                        {
+                            "allowed": decision.allowed,
+                            "policy_digest": decision.policy_digest,
+                            "reason": decision.reason,
+                            "rule_digest": _egress_rule_digest(decision.rule),
+                        },
+                        f"egress-{index}",
+                    )
+                    for index, decision in enumerate(decisions)
+                ),
             )
             if any(not decision.allowed for decision in decisions):
-                state = await self._append(
-                    context,
-                    state,
-                    lease,
-                    egress_events,
-                )
                 return await self._append(
                     context,
                     state,
@@ -725,53 +704,41 @@ class SandboxOrchestrator:
             raise PermissionError(f"sandbox_backend_not_ready:{readiness.reason}")
         if state.status is SandboxStatus.APPROVED:
             await self._assert_fence(context, state, lease)
-            dispatch_events: tuple[
-                tuple[DomainEventType, Mapping[str, JsonValue], str],
-                ...,
-            ] = (
+            state = await self._append(
+                context,
+                state,
+                lease,
                 (
-                    DomainEventType.SANDBOX_DISPATCH_CLAIMED,
-                    {
-                        "attempt": lease.attempt,
-                        "estimated_artifact_bytes": sum(
-                            output.max_bytes
-                            for output in state.request.spec.expected_outputs
-                        ),
-                        "estimated_cpu_millis_seconds": (
-                            state.request.spec.resources.cpu_millis
-                            * state.request.spec.resources.timeout_seconds
-                        ),
-                        "max_artifact_bytes_per_period": (
-                            policy.max_artifact_bytes_per_period
-                        ),
-                        "max_concurrent_runs": policy.max_concurrent_runs,
-                        "max_cpu_millis_seconds_per_period": (
-                            policy.max_cpu_millis_seconds_per_period
-                        ),
-                        "max_runs_per_period": policy.max_runs_per_period,
-                    },
-                    "dispatch",
-                ),
-                (
-                    DomainEventType.SANDBOX_PROVISIONING_REQUESTED,
-                    {"attempt": lease.attempt},
-                    "provision-intent",
+                    (
+                        DomainEventType.SANDBOX_DISPATCH_CLAIMED,
+                        {
+                            "attempt": lease.attempt,
+                            "estimated_artifact_bytes": sum(
+                                output.max_bytes
+                                for output in state.request.spec.expected_outputs
+                            ),
+                            "estimated_cpu_millis_seconds": (
+                                state.request.spec.resources.cpu_millis
+                                * state.request.spec.resources.timeout_seconds
+                            ),
+                            "max_artifact_bytes_per_period": (
+                                policy.max_artifact_bytes_per_period
+                            ),
+                            "max_concurrent_runs": policy.max_concurrent_runs,
+                            "max_cpu_millis_seconds_per_period": (
+                                policy.max_cpu_millis_seconds_per_period
+                            ),
+                            "max_runs_per_period": policy.max_runs_per_period,
+                        },
+                        "dispatch",
+                    ),
+                    (
+                        DomainEventType.SANDBOX_PROVISIONING_REQUESTED,
+                        {"attempt": lease.attempt},
+                        "provision-intent",
+                    ),
                 ),
             )
-            if state.request.spec.egress_rules:
-                state = await self._append(
-                    context,
-                    state,
-                    lease,
-                    (*egress_events, *dispatch_events),
-                )
-            else:
-                state = await self._append(
-                    context,
-                    state,
-                    lease,
-                    dispatch_events,
-                )
             self._metrics.add("queue_claims", purpose=state.request.purpose)
         reference = state.backend_reference
         if state.status is SandboxStatus.PROVISIONING:

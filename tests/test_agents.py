@@ -67,9 +67,9 @@ def test_assignment_carries_explicit_limits_and_capabilities() -> None:
 @pytest.mark.parametrize(
     ("values", "message"),
     [
-        ({"max_steps": 0, "max_input_tokens": 1, "timeout_seconds": 1}, "positive"),
-        ({"max_steps": 1, "max_input_tokens": -1, "timeout_seconds": 1}, "positive"),
-        ({"max_steps": 1, "max_input_tokens": 1, "timeout_seconds": 0}, "positive"),
+        ({"max_steps": 0, "max_input_tokens": 1, "timeout_seconds": 1}, "between"),
+        ({"max_steps": 1, "max_input_tokens": -1, "timeout_seconds": 1}, "between"),
+        ({"max_steps": 1, "max_input_tokens": 1, "timeout_seconds": 0}, "between"),
     ],
 )
 def test_specialist_budget_requires_positive_limits(
@@ -92,7 +92,7 @@ def test_verification_requires_evidence_and_positive_window() -> None:
             evidence_ids=(),
             observation_window_seconds=60,
         )
-    with pytest.raises(ValueError, match="window must be positive"):
+    with pytest.raises(ValueError, match="window must be between"):
         VerificationArtifact(
             artifact_id=uuid4(),
             tenant_id="tenant-1",

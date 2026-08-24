@@ -46,7 +46,10 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from aegis_agent_platform.identity import (
-    JwtValidationConfig, JwtVerifier, StaticJwksProvider, VerificationKey,
+    JwtValidationConfig,
+    JwtVerifier,
+    StaticJwksProvider,
+    VerificationKey,
 )
 
 # A real deployment points RemoteJwksProvider at a Keycloak realm's JWKS URL
@@ -102,28 +105,36 @@ client-asserted tenant or role:
 
 ```python
 from aegis_agent_platform.identity import (
-    AuthenticationService, IdentityRecord, InMemoryIdentityDirectory,
-    PrincipalKind, Role, RoleBinding, TenantId, UserId,
+    AuthenticationService,
+    IdentityRecord,
+    InMemoryIdentityDirectory,
+    PrincipalKind,
+    Role,
+    RoleBinding,
+    TenantId,
+    UserId,
 )
 
 tenant = TenantId("acme")
-directory = InMemoryIdentityDirectory((
-    IdentityRecord(
-        issuer="https://idp.example/realms/aegis",
-        subject="user-1",
-        tenant_id=tenant,
-        kind=PrincipalKind.USER,
-        role_bindings=(
-            RoleBinding(
-                tenant_id=tenant,
-                role=Role.INVESTIGATOR,
-                assigned_by=UserId("admin"),
-                assigned_at=now - timedelta(days=1),
+directory = InMemoryIdentityDirectory(
+    (
+        IdentityRecord(
+            issuer="https://idp.example/realms/aegis",
+            subject="user-1",
+            tenant_id=tenant,
+            kind=PrincipalKind.USER,
+            role_bindings=(
+                RoleBinding(
+                    tenant_id=tenant,
+                    role=Role.INVESTIGATOR,
+                    assigned_by=UserId("admin"),
+                    assigned_at=now - timedelta(days=1),
+                ),
             ),
+            user_id=UserId("user-1"),
         ),
-        user_id=UserId("user-1"),
-    ),
-))
+    )
+)
 
 authentication = AuthenticationService(verifier, directory)
 principal = authentication.authenticate(f"Bearer {token}")
@@ -146,14 +157,18 @@ from aegis_agent_platform.identity import AuthorizationService, Permission
 authorization = AuthorizationService()
 
 decision = authorization.decide(
-    principal=principal, tenant_id=tenant,
-    permission=Permission.INVESTIGATION_CREATE, at=datetime.now(UTC),
+    principal=principal,
+    tenant_id=tenant,
+    permission=Permission.INVESTIGATION_CREATE,
+    at=datetime.now(UTC),
 )
 print(decision.allowed, decision.reason)  # True role_permission_granted
 
 cross_tenant = authorization.decide(
-    principal=principal, tenant_id=TenantId("other-tenant"),
-    permission=Permission.INVESTIGATION_CREATE, at=datetime.now(UTC),
+    principal=principal,
+    tenant_id=TenantId("other-tenant"),
+    permission=Permission.INVESTIGATION_CREATE,
+    at=datetime.now(UTC),
 )
 print(cross_tenant.allowed, cross_tenant.reason)  # False cross_tenant_access_denied
 ```
@@ -175,19 +190,28 @@ deterministic `PolicyDecision`:
 from decimal import Decimal
 
 from aegis_agent_platform.policy import (
-    PolicyEvaluator, PolicyRequest, QuotaLimits, QuotaUsage, RiskLevel,
+    PolicyEvaluator,
+    PolicyRequest,
+    QuotaLimits,
+    QuotaUsage,
+    RiskLevel,
     TenantPolicy,
 )
 
 policy = TenantPolicy(
-    tenant_id=tenant, version="v1",
-    allowed_models=frozenset({"gpt"}), allowed_tools=frozenset({"rollback"}),
-    allowed_connectors=frozenset({"dynatrace"}), allowed_environments=frozenset({"prod"}),
-    max_risk=RiskLevel.HIGH, approval_from_risk=RiskLevel.MEDIUM,
+    tenant_id=tenant,
+    version="v1",
+    allowed_models=frozenset({"gpt"}),
+    allowed_tools=frozenset({"rollback"}),
+    allowed_connectors=frozenset({"dynatrace"}),
+    allowed_environments=frozenset({"prod"}),
+    max_risk=RiskLevel.HIGH,
+    approval_from_risk=RiskLevel.MEDIUM,
     tools_requiring_approval=frozenset({"rollback"}),
     approver_roles=frozenset({Role.APPROVER}),
     quotas=QuotaLimits(
-        max_run_tokens=1000, max_run_cost_usd=Decimal("5"),
+        max_run_tokens=1000,
+        max_run_cost_usd=Decimal("5"),
         max_tenant_tokens_per_period=100_000,
         max_tenant_cost_usd_per_period=Decimal("500"),
         max_concurrent_runs=5,
@@ -195,16 +219,16 @@ policy = TenantPolicy(
 )
 
 request = PolicyRequest(
-    tenant_id=tenant, model="gpt", tool="rollback", connector="dynatrace",
-    environment="prod", risk=RiskLevel.HIGH,
-    estimated_tokens=200, estimated_cost_usd=Decimal("1"),
-)
-usage = QuotaUsage(
     tenant_id=tenant,
-    tenant_tokens_used=0,
-    tenant_cost_usd=Decimal("0"),
-    active_runs=0,
+    model="gpt",
+    tool="rollback",
+    connector="dynatrace",
+    environment="prod",
+    risk=RiskLevel.HIGH,
+    estimated_tokens=200,
+    estimated_cost_usd=Decimal("1"),
 )
+usage = QuotaUsage(tenant_tokens_used=0, tenant_cost_usd=Decimal("0"), active_runs=0)
 
 decision = PolicyEvaluator().evaluate(policy, request, usage)
 print(decision.decision, decision.reasons, decision.required_approver_roles)
@@ -229,17 +253,24 @@ in its constructor — you cannot opt out:
 from uuid import uuid4
 
 from aegis_agent_platform.audit import (
-    AuditEvent, AuditEventType, AuditOutcome, InMemoryAuditStore,
+    AuditEvent,
+    AuditEventType,
+    AuditOutcome,
+    InMemoryAuditStore,
 )
 from aegis_agent_platform.tenancy import TenantContext
 
 store = InMemoryAuditStore()
 event = AuditEvent(
-    event_id=uuid4(), tenant_id=tenant,
+    event_id=uuid4(),
+    tenant_id=tenant,
     event_type=AuditEventType.AUTHORIZATION_DECISION,
-    occurred_at=datetime.now(UTC), outcome=AuditOutcome.SUCCESS,
-    actor_id=principal.actor_id, action="investigation:create",
-    resource="tenant/acme/investigation", correlation_id=uuid4(),
+    occurred_at=datetime.now(UTC),
+    outcome=AuditOutcome.SUCCESS,
+    actor_id=principal.actor_id,
+    action="investigation:create",
+    resource="tenant/acme/investigation",
+    correlation_id=uuid4(),
     details={"authorization_header": "Bearer sensitive-token-value"},
 )
 store.append(TenantContext(tenant), event)
@@ -261,16 +292,16 @@ them:
 
 ```python
 from aegis_agent_platform.secrets_boundary import (
-    EnvironmentSecretProvider, SecretReference,
+    EnvironmentSecretProvider,
+    SecretReference,
 )
 from aegis_agent_platform.identity import TenantId
 from aegis_agent_platform.tenancy import TenantContext
 
-tenant_id = TenantId("tenant-alpha")
 provider = EnvironmentSecretProvider(
-    tenant_id,
-    {"AEGIS_SECRET_DYNATRACE_TOKEN": "local-only-example"},
+    {"AEGIS_SECRET_DYNATRACE_TOKEN": "local-only-example"}
 )
+tenant_id = TenantId("tenant-alpha")
 context = TenantContext(tenant_id)
 reference = SecretReference(
     tenant_id=tenant_id,
@@ -278,27 +309,24 @@ reference = SecretReference(
     name="AEGIS_SECRET_DYNATRACE_TOKEN",
 )
 value = provider.resolve(context, reference)
-print(value)              # [REDACTED]
-print(repr(value))        # SecretValue([REDACTED])
-print(value.reveal())     # b'local-only-example'
+print(value)  # [REDACTED]
+print(repr(value))  # SecretValue([REDACTED])
+print(value.reveal())  # b'local-only-example'
 ```
 
 `EnvironmentSecretProvider` deliberately requires the `AEGIS_SECRET_` prefix so
 a typo cannot accidentally resolve an unrelated environment variable. This is a
-local-development provider bound to one tenant's trusted `TenantContext`, so one
-tenant cannot resolve another tenant's captured process environment by guessing
-secret names. It is not a secret broker — there is no rotation,
+local-development provider; every resolution also requires a matching trusted
+`TenantContext`. It is not a secret broker — there is no rotation,
 versioning, or centralized access audit yet; see
 [Limitations](limitations.md).
 
 ## 8. The whole slice behind one API
 
-`control_plane.api.ControlPlaneApp` wires the authenticated identity directory,
-authorization service, tenant repository, policy repository, and audit store
-behind a small route set. `/healthz` and `/health/live` (liveness) and `/readyz`
-and `/health/ready` (configuration readiness) stay unauthenticated, matching
-Layer 1. Everything under `/v1/` requires a valid bearer token, but `/v1/me`
-returns directly after authentication without an authorization decision:
+`control_plane.api.ControlPlaneApp` wires every piece above behind a small
+route set. `/healthz` and `/health/live` (liveness) and `/readyz` and
+`/health/ready` (configuration readiness) stay unauthenticated, matching Layer
+1. Everything under `/v1/` requires a valid bearer token:
 
 | Route | Requires | Returns |
 | --- | --- | --- |
@@ -306,12 +334,10 @@ returns directly after authentication without an authorization decision:
 | `/v1/tenants/{tenant_id}` | `tenant:read` in that tenant | the tenant record |
 | `/v1/tenants/{tenant_id}/policy` | `policy:read` in that tenant | the tenant's governance policy and quotas |
 
-Every authentication attempt and every authorization decision taken for a
-tenant-scoped route is recorded as an audit event before a response is returned
-— a 401 or 403 is not a silent failure. Construct a `ControlPlaneApp` with the
-pieces above; for protected routes you must inject a real
-`AuthenticationService`, because the in-memory defaults intentionally return
-`503 authentication_not_configured`. Drive it directly, the same way
+Every authentication attempt and every authorization decision is recorded as
+an audit event before a response is returned — a 401 or 403 is not a silent
+failure. Construct a `ControlPlaneApp` with the pieces above (or its
+in-memory defaults) and drive it directly, the same way
 `tests/test_api.py` drives the Layer 1 health surface, to see this end to end.
 
 ## What this tutorial does not prove
@@ -333,10 +359,8 @@ demonstrate, and you should not assume from it, any of the following:
   (`tests/test_identity_security.py`, `tests/test_policy_security.py`,
   `tests/test_audit_secrets.py`, `tests/test_migrations.py`) does prove
   cross-tenant denial, malformed/expired/rotated-key tokens, and revoked-role
-  handling — but the IdP path is still proven against deterministic fixtures and
-  a mocked JWKS transport rather than a running Keycloak instance. PostgreSQL
-  isolation is covered live in `tests/integration/test_postgres_storage.py`.
-  That remaining live-infrastructure proof
+  handling — but against deterministic fixtures and a mocked JWKS transport,
+  not a running Postgres or Keycloak instance. That live-infrastructure proof
   is the outstanding Layer 2 acceptance-gate work tracked in `roadmap.md`.
 
 ## Where to go next

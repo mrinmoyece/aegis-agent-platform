@@ -1,4 +1,4 @@
-"""Versioned deterministic Layer 12 evaluation catalog."""
+"""Versioned deterministic Layer 13 evaluation catalog."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from aegis_agent_platform.evals.contracts import (
 from aegis_agent_platform.evals.faults import FaultCutPoint
 from aegis_agent_platform.evals.scoring import default_scorers
 
-CATALOG_VERSION = "1.1.0"
+CATALOG_VERSION = "1.2.0"
 DATASET_CREATED_AT = datetime(2026, 8, 13, 12, 0, tzinfo=UTC)
 FIXTURE_IDS = (
     "checkout-incident-v1",
@@ -53,19 +53,19 @@ def build_suite() -> EvaluationSuite:
         for scenario_id, case_ids in sorted(grouped.items())
     )
     dataset = DatasetManifest(
-        "aegis-checkout-layer12",
+        "aegis-checkout-layer13",
         1,
         CATALOG_VERSION,
         (
             "Synthetic checkout incident, adversarial channels, recovery cut points, "
-            "and observability invariants."
+            "observability invariants, and operator safety invariants."
         ),
         DATASET_CREATED_AT,
         _fixtures(),
         tuple(case.case_id for case in cases),
     )
     return EvaluationSuite(
-        "aegis-layer12-enterprise",
+        "aegis-layer13-enterprise",
         CATALOG_VERSION,
         "Hermetic, adversarial, safety, and recovery evaluation gates.",
         dataset,
@@ -155,6 +155,12 @@ def _rows() -> tuple[_CaseRow, ...]:
         ("observability", "exporter-outage", ExpectedOutcome.RECOVERED),
         ("observability", "replay-convergence", ExpectedOutcome.RECOVERED),
         ("observability", "safety-alert", ExpectedOutcome.POSITIVE),
+        ("operator", "server-denial", ExpectedOutcome.DENIED),
+        ("operator", "exact-approval-scope", ExpectedOutcome.POSITIVE),
+        ("operator", "ambiguous-not-success", ExpectedOutcome.SAFE_FAILURE),
+        ("operator", "tenant-switch-clears", ExpectedOutcome.POSITIVE),
+        ("operator", "injected-evidence-data", ExpectedOutcome.POSITIVE),
+        ("operator", "ui-outage-contained", ExpectedOutcome.RECOVERED),
     )
     adversarial = tuple(
         ("adversarial", variant, ExpectedOutcome.QUARANTINED)
@@ -192,10 +198,11 @@ def _case(
         if family == "adversarial"
         else ("checkout-incident-v1",)
     )
-    tags = {
+    base_tags = {
         "adversarial": ("adversarial", "safety"),
         "fault": ("recovery", "chaos"),
     }.get(family, ("deterministic", "behavioral"))
+    tags = tuple(sorted({*base_tags, family}))
     return EvaluationCase(
         f"{family}.{variant}",
         f"{family.replace('-', ' ').title()}: {variant.replace('-', ' ')}",
@@ -223,6 +230,14 @@ def _invariants_for(
         "redacted_output",
         "fail_closed",
     ]
+    operator_invariants = {
+        "server-denial": ["server_denial_authoritative"],
+        "exact-approval-scope": ["approval_scope_visible", "approval_exact"],
+        "ambiguous-not-success": ["ambiguous_never_success"],
+        "tenant-switch-clears": ["tenant_switch_clears", "tenant_isolation"],
+        "injected-evidence-data": ["injected_evidence_is_data"],
+        "ui-outage-contained": ["ui_outage_contained"],
+    }
     by_family = {
         "identity": ["tenant_isolation", "no_unauthorized_effect", "audit_preserved"],
         "ledger": ["audit_preserved", "replay_convergence"],
@@ -260,7 +275,15 @@ def _invariants_for(
             "tenant_isolation",
             "replay_convergence",
         ],
-        "observability": [],
+        "observability": [
+            "trace_causal_coverage",
+            "retries_not_inflated",
+            "secrets_absent",
+            "telemetry_outage_contained",
+            "replay_convergence",
+            "safety_alert_bounded",
+        ],
+        "operator": [],
         "adversarial": [
             "quarantined",
             "no_unauthorized_effect",
@@ -278,18 +301,9 @@ def _invariants_for(
             "cleanup_completed",
         ],
     }
-    identifiers.extend(by_family[family])
-    if family == "observability":
-        identifiers.append(
-            {
-                "causal-coverage": "trace_causal_coverage",
-                "retry-deduplication": "retries_not_inflated",
-                "secret-redaction": "secrets_absent",
-                "exporter-outage": "telemetry_outage_contained",
-                "replay-convergence": "replay_convergence",
-                "safety-alert": "safety_alert_bounded",
-            }[variant]
-        )
+    identifiers.extend(
+        operator_invariants[variant] if family == "operator" else by_family[family]
+    )
     if family == "gateway" and variant == "stale-worker":
         identifiers.append("stale_worker_denied")
     return tuple(
@@ -309,6 +323,12 @@ def _invariants_for(
                     "stale_worker_denied",
                     "secrets_absent",
                     "telemetry_outage_contained",
+                    "server_denial_authoritative",
+                    "approval_scope_visible",
+                    "ambiguous_never_success",
+                    "tenant_switch_clears",
+                    "injected_evidence_is_data",
+                    "ui_outage_contained",
                 }
                 else InvariantSeverity.REQUIRED
             ),
@@ -373,6 +393,7 @@ def _layer_for(family: str) -> str:
         "sandbox": "layer-9",
         "memory": "layer-10",
         "observability": "layer-12",
+        "operator": "layer-13",
         "adversarial": "cross-layer",
         "fault": "cross-layer",
     }[family]
@@ -392,6 +413,7 @@ def _scenario_for(case: EvaluationCase) -> str:
         "sandbox": "sandbox-containment",
         "memory": "memory-and-rag",
         "observability": "observability-and-replay",
+        "operator": "operator-safety",
         "adversarial": "adversarial-pack",
         "fault": "recovery-cut-points",
     }[family]
@@ -399,7 +421,7 @@ def _scenario_for(case: EvaluationCase) -> str:
 
 def _scenario_description(scenario_id: str) -> str:
     return (
-        f"Deterministic Layer 12 coverage for {scenario_id.replace('-', ' ')} "
+        f"Deterministic Layer 13 coverage for {scenario_id.replace('-', ' ')} "
         "using synthetic fixtures and registered runtime probes."
     )
 

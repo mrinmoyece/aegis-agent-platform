@@ -161,16 +161,16 @@ class OpenAIAdapter:
                 else message.role.value
             )
             content: list[dict[str, object]] = []
-
             for part in message.content:
                 if isinstance(part, TextPart):
                     content.append({"type": "input_text", "text": part.text})
                 elif isinstance(part, ImagePart):
                     content.append({"type": "input_image", "image_url": part.uri})
                 elif isinstance(part, ToolCallPart):
+                    # function_call is a top-level input item, not a content part
                     if content:
-                        inputs.append({"role": role, "content": list(content)})
-                        content.clear()
+                        inputs.append({"role": role, "content": content})
+                        content = []
                     inputs.append(
                         {
                             "type": "function_call",
@@ -184,9 +184,10 @@ class OpenAIAdapter:
                         }
                     )
                 elif isinstance(part, ToolResultPart):
+                    # function_call_output is a top-level input item, not a content part
                     if content:
-                        inputs.append({"role": role, "content": list(content)})
-                        content.clear()
+                        inputs.append({"role": role, "content": content})
+                        content = []
                     inputs.append(
                         {
                             "type": "function_call_output",
@@ -201,7 +202,7 @@ class OpenAIAdapter:
                         retryable=False,
                     )
             if content:
-                inputs.append({"role": role, "content": list(content)})
+                inputs.append({"role": role, "content": content})
         result: dict[str, object] = {
             "model": model.model,
             "input": inputs,

@@ -1,8 +1,7 @@
 # Implementation status
 
-The repository currently implements **Layer 11: layered deterministic
-evaluation gates** on top of Layer 10 event-grounded memory, the Layer 7
-specialist DAG, Layer 8 exact approval/effect boundary, and Layer 9 sandbox.
+The repository currently implements **Layer 13: secure operator UI and BFF** on
+top of Layer 12 observability/replay and the existing durable runtime.
 
 Layer 10 adds immutable working/episodic/semantic contracts, additive lifecycle
 events and pure replay, authorized digest-bound ingestion, scanning/quarantine,
@@ -30,8 +29,9 @@ remain code-enforced.
 The implementation does not certify a production Kubernetes cluster, live model,
 production blob/key service, external DLP/malware scanner, HA/DR/multi-region
 deployment, or final load profile. The executable embedding profile is fixed at
-eight dimensions for deterministic evidence. Operator UI, MCP/A2A, and broad
-autonomous production mutation remain deferred. See
+eight dimensions for deterministic evidence. Live production operator
+qualification, MCP/A2A, and broad autonomous production mutation remain deferred.
+See
 [limitations](limitations.md), [memory and RAG](memory-and-rag.md), and
 [sandbox execution](sandbox-execution.md).
 
@@ -44,6 +44,22 @@ evaluation cases.
 
 This is configured/local evidence, not measured production SLO attainment.
 Production model/connector/telemetry qualification, external managed backends,
-independent penetration testing, large-scale human labeling, operator React UI,
-MCP/A2A, 24/7 on-call evidence, HA/DR, multi-region, final load/chaos, and
-compliance certification are deferred.
+independent penetration testing, large-scale human labeling, live production
+identity/browser qualification, MCP/A2A, 24/7 on-call evidence, HA/DR,
+multi-region, final load/chaos, and compliance certification are deferred.
+
+Layer 13 implements the provider-neutral operator contracts, secure server-side
+session/PKCE boundary, CSRF/origin protections, anti-enumerating tenant behavior,
+bounded derived view models and polling, immutable audit, exact-scope approval
+decisions, deterministic synthetic checkout data, and a React workspace covering
+all implemented operator surfaces. Frontend validation includes strict TypeScript,
+runtime response schemas, unit/component/security/polling tests, axe checks,
+deterministic Chromium journeys, contract drift, audit/license/bundle/CSP/SBOM
+gates, and a non-root read-only static image. See
+[operator-ui.md](operator-ui.md), [operator-accessibility.md](operator-accessibility.md),
+and [ADR 0021](adr/0021-bff-session-and-derived-operator-views.md).
+
+The BFF's live OIDC code exchange and distributed session repository are not
+configured, so production readiness remains false. Automated accessibility and
+browser tests are deterministic evidence, not independent audits or production
+qualification.

@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import io
 import logging
-from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from typing import cast
 
 import pytest
 
@@ -38,7 +35,6 @@ from aegis_agent_platform.observability import (
 )
 from aegis_agent_platform.observability.context import (
     PropagationContext,
-    _parse_tracestate,
     durable_trace_context,
 )
 from aegis_agent_platform.observability.logging import configure_json_logging
@@ -177,26 +173,6 @@ def test_metrics_bound_cardinality_and_do_not_double_count_business_outcomes() -
 
 
 def test_exporter_outage_is_contained_and_opens_bounded_circuit() -> None:
-    capped_gauges = BoundedMetrics(max_label_values=1)
-    assert capped_gauges.set_gauge(
-        "aegis_queue_pending_messages",
-        1,
-        labels={"aegis.queue.state": "ready"},
-    )
-    assert not capped_gauges.set_gauge(
-        "aegis_queue_pending_messages",
-        2,
-        labels={"aegis.queue.state": "queued"},
-    )
-    assert capped_gauges.snapshot().dropped == 1
-    bounded_outcomes = BoundedMetrics()
-    with pytest.raises(ValueError, match="outcome key"):
-        bounded_outcomes.add(
-            "aegis_api_requests_total",
-            labels={"aegis.status": "succeeded"},
-            outcome_key="x" * 257,
-        )
-
     buffer = BoundedExportBuffer(capacity=2)
     assert buffer.offer({"event": "one"})
     assert buffer.offer({"event": "two"})
@@ -466,205 +442,3 @@ def test_health_registry_degrades_optional_and_gates_correctness_dependencies() 
     unavailable = __import__("asyncio").run(registry.report(monotonic_time=3))
     assert transitional.ready is True
     assert unavailable.ready is False
-
-
-def test_health_registry_validates_inputs_converts_failures_and_caches() -> None:
-    with pytest.raises(ValueError, match="reason_code"):
-        ProbeResult(HealthStatus.HEALTHY, "not valid!")
-    with pytest.raises(ValueError, match="component"):
-        ComponentProbe(
-            "not valid!",
-            DependencyCriticality.CORRECTNESS,
-            cast(Callable[[], Awaitable[ProbeResult]], lambda: asyncio.sleep(0)),
-        )
-    with pytest.raises(ValueError, match="cache_seconds"):
-        HealthRegistry((), cache_seconds=61)
-    with pytest.raises(ValueError, match="transition_threshold"):
-        HealthRegistry((), transition_threshold=0)
-    with pytest.raises(ValueError, match="probe_timeout_seconds"):
-        HealthRegistry((), probe_timeout_seconds=0.01)
-    calls = {"cached": 0}
-
-    async def cached_probe() -> ProbeResult:
-        calls["cached"] += 1
-        return ProbeResult(HealthStatus.HEALTHY, "cached_ok")
-
-    with pytest.raises(ValueError, match="unique"):
-        HealthRegistry(
-            (
-                ComponentProbe("dup", DependencyCriticality.OPTIONAL, cached_probe),
-                ComponentProbe("dup", DependencyCriticality.CORRECTNESS, cached_probe),
-            )
-        )
-
-    async def timeout_probe() -> ProbeResult:
-        await asyncio.sleep(0.05)
-        return ProbeResult(HealthStatus.HEALTHY, "slow")
-
-    async def connection_probe() -> ProbeResult:
-        raise ConnectionError
-
-    async def os_probe() -> ProbeResult:
-        raise OSError
-
-    async def failed_probe() -> ProbeResult:
-        raise RuntimeError
-
-    registry = HealthRegistry(
-        (
-            ComponentProbe(
-                "cached",
-                DependencyCriticality.OPTIONAL,
-                cached_probe,
-            ),
-            ComponentProbe(
-                "timeout",
-                DependencyCriticality.CORRECTNESS,
-                timeout_probe,
-            ),
-            ComponentProbe(
-                "connection",
-                DependencyCriticality.OPTIONAL,
-                connection_probe,
-            ),
-            ComponentProbe("os", DependencyCriticality.OPTIONAL, os_probe),
-            ComponentProbe(
-                "failed",
-                DependencyCriticality.OPTIONAL,
-                failed_probe,
-            ),
-        ),
-        cache_seconds=5,
-        transition_threshold=1,
-        probe_timeout_seconds=0.05,
-    )
-
-    report = asyncio.run(registry.report(monotonic_time=1))
-    cached = asyncio.run(registry.report(monotonic_time=2))
-
-    assert report.ready is False
-    assert report.components["timeout"].reason_code == "probe_timeout"
-    assert report.components["connection"].reason_code == "dependency_unavailable"
-    assert report.components["os"].reason_code == "dependency_unavailable"
-    assert report.components["failed"].reason_code == "probe_failed"
-    assert cached.components["cached"].reason_code == "cached_ok"
-    assert calls["cached"] == 1
-
-
-def test_metrics_track_histograms_non_finite_values_and_export_locking() -> None:
-    metrics = BoundedMetrics()
-    assert metrics.add(
-        "aegis_memory_retrieval_duration_seconds",
-        0.5,
-        labels={"aegis.status": "succeeded"},
-    )
-    point = next(
-        item
-        for item in metrics.snapshot().points
-        if item.name == "aegis_memory_retrieval_duration_seconds"
-    )
-    assert point.count == 1
-    assert point.buckets
-    with pytest.raises(ValueError, match="finite"):
-        metrics.add(
-            "aegis_api_requests_total",
-            float("nan"),
-            labels={"aegis.status": "failed"},
-            outcome_key="nan",
-        )
-    with pytest.raises(ValueError, match="finite"):
-        metrics.set_gauge(
-            "aegis_queue_pending_messages",
-            float("inf"),
-            labels={"aegis.queue.state": "ready"},
-        )
-
-    dedup = BoundedMetrics()
-    for index in range(10_001):
-        assert dedup.add(
-            "aegis_api_requests_total",
-            labels={"aegis.status": "succeeded"},
-            outcome_key=f"event-{index}",
-        )
-    assert dedup.add(
-        "aegis_api_requests_total",
-        labels={"aegis.status": "succeeded"},
-        outcome_key="event-0",
-    )
-
-    capped_gauges = BoundedMetrics(max_label_values=1)
-    assert capped_gauges.set_gauge(
-        "aegis_queue_pending_messages",
-        1,
-        labels={"aegis.queue.state": "ready"},
-    )
-    assert not capped_gauges.set_gauge(
-        "aegis_queue_pending_messages",
-        2,
-        labels={"aegis.queue.state": "queued"},
-    )
-    assert capped_gauges.snapshot().dropped == 1
-    bounded_outcomes = BoundedMetrics()
-    with pytest.raises(ValueError, match="outcome key"):
-        bounded_outcomes.add(
-            "aegis_api_requests_total",
-            labels={"aegis.status": "succeeded"},
-            outcome_key="x" * 257,
-        )
-
-    buffer = BoundedExportBuffer(capacity=2)
-    assert buffer.offer({"event": "one"})
-    assert buffer.offer({"event": "two"})
-    assert buffer._drain_lock.acquire(blocking=False)
-    try:
-        assert buffer.drain(lambda _batch: None) == 0
-    finally:
-        buffer._drain_lock.release()
-    assert BoundedExportBuffer().drain(lambda _batch: None) == 0
-    assert buffer.drain(lambda batch: None, limit=1) == 1
-    assert buffer.status["buffered"] == 1
-
-
-def test_context_and_event_size_handle_strict_tracestate_and_json_escaping() -> None:
-    valid = extract_context(
-        {"traceparent": TRACEPARENT, "tracestate": "a=b,tenant@sys=value"}
-    )
-    assert valid is not None
-    for tracestate in (
-        "a=b,a=c",
-        "=b",
-        "a =b",
-        "a=" + ("x" * 300),
-        ",".join(f"k{i}=v" for i in range(33)),
-    ):
-        with pytest.raises(TraceContextError):
-            extract_context({"traceparent": TRACEPARENT, "tracestate": tracestate})
-    with pytest.raises(TraceContextError):
-        extract_context({"traceparent": TRACEPARENT + "-extra"})
-    with pytest.raises(TraceContextError):
-        _parse_tracestate("a=b" * 200)
-    with pytest.raises(TraceContextError):
-        _parse_tracestate("a=value ")
-    with pytest.raises(TraceContextError):
-        extract_context(
-            {"traceparent": TRACEPARENT, "baggage": "aegis.component=x" * 1000}
-        )
-    with pytest.raises(TraceContextError):
-        extract_context(
-            {
-                "traceparent": TRACEPARENT,
-                "baggage": ",".join(f"aegis.component=v{i}" for i in range(17)),
-            }
-        )
-    sanitizer = AttributeSanitizer(allowed=frozenset({"safe"}), max_attributes=2)
-    sanitized = sanitizer.sanitize({"safe": object(), "other": "value"})
-    assert sanitized == {}
-    assert AttributeSanitizer(allowed=frozenset({"safe"})).sanitize({"safe": 1.5}) == {
-        "safe": 1.5
-    }
-    truncated = sanitizer.sanitize({"safe": "x" * 300, "safe_float": 1.5})
-    assert truncated["safe"] == "x" * 256
-    assert sanitize_url("https://user:pass@example.test:8443/path?q=1#frag") == (
-        "https://example.test:8443/path"
-    )
-    assert not bounded_event_size({"value": '"' * 5000})

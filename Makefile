@@ -1,8 +1,8 @@
 .DEFAULT_GOAL := help
-.PHONY: help install format format-check lint type test evals eval-behavioral eval-deterministic eval-adversarial eval-recovery eval-baseline eval-fixtures eval-meta eval-integration postgres-test integration-test docs-check manifest-check migration-check observability-check check compose-config container-check
+.PHONY: help install format format-check lint type test evals eval-behavioral eval-deterministic eval-adversarial eval-recovery eval-baseline eval-fixtures eval-meta eval-integration postgres-test integration-test docs-check manifest-check migration-check observability-check frontend-install frontend-check frontend-e2e frontend-audit frontend-container-check check compose-config container-check
 
 PYTHON ?= python3
-export PYTHONPATH ?= src
+PNPM ?= pnpm
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*?##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -21,15 +21,15 @@ lint: ## Run static lint checks
 	$(PYTHON) -m ruff check src tests scripts
 
 type: ## Run strict type checks
-	PYTHONPATH=src $(PYTHON) -m mypy
+	$(PYTHON) -m mypy
 
 test: ## Run deterministic unit tests with coverage
-	PYTHONPATH=src:tests:$$PYTHONPATH $(PYTHON) -m pytest --cov --cov-report=term-missing
+	$(PYTHON) -m pytest --cov --cov-report=term-missing
 
 evals: eval-behavioral eval-deterministic eval-fixtures eval-baseline ## Run all required fake-only evaluation gates
 
 eval-behavioral: ## Preserve Layers 5 and 7-10 behavioral evaluation entrypoints
-	PYTHONPATH=src $(PYTHON) -m pytest tests/test_gateway_eval.py tests/test_agent_evals.py tests/test_remediation_evals.py tests/test_sandbox_evals.py tests/test_memory_evals.py
+	$(PYTHON) -m pytest tests/test_gateway_eval.py tests/test_agent_evals.py tests/test_remediation_evals.py tests/test_sandbox_evals.py tests/test_memory_evals.py
 
 eval-deterministic: ## Run the complete hermetic Layer 11 scenario catalog
 	$(PYTHON) -m aegis_agent_platform.evals run --output .aegis-evals/deterministic
@@ -53,10 +53,10 @@ eval-integration: ## Exercise evaluation-relevant PostgreSQL, pgvector, and Redi
 	$(PYTHON) -m pytest tests/integration/test_postgres_storage.py tests/integration/test_worker_delivery.py tests/integration/test_memory_postgres.py
 
 postgres-test: ## Run live PostgreSQL integration tests (requires AEGIS_TEST_DATABASE_URL)
-	PYTHONPATH=src:tests:$$PYTHONPATH $(PYTHON) -m pytest tests/integration
+	$(PYTHON) -m pytest tests/integration
 
 integration-test: ## Run live PostgreSQL and Redis integration tests
-	PYTHONPATH=src:tests:$$PYTHONPATH $(PYTHON) -m pytest tests/integration
+	$(PYTHON) -m pytest tests/integration
 
 docs-check: ## Validate documentation links and required content
 	$(PYTHON) scripts/check_docs.py
@@ -71,11 +71,27 @@ observability-check: ## Validate semantic conventions, rules, dashboards, and OT
 	$(PYTHON) scripts/check_observability.py
 	@if command -v promtool >/dev/null 2>&1; then promtool check rules deploy/prometheus/rules/*.yml; else echo "promtool unavailable; structural rule validation passed"; fi
 
+frontend-install: ## Install the exact frontend dependency graph
+	$(PNPM) --dir frontend install --frozen-lockfile
+
+frontend-check: ## Run frontend lint, types, unit, accessibility, contract, and build gates
+	$(PNPM) --dir frontend check
+
+frontend-e2e: ## Run deterministic Chromium operator journeys
+	$(PNPM) --dir frontend e2e
+
+frontend-audit: ## Audit production frontend dependencies
+	$(PNPM) --dir frontend audit
+
+frontend-container-check: ## Build the non-root static operator image
+	docker build --check frontend
+	docker build --tag aegis-operator-ui:local frontend
+
 check: format-check lint type test evals docs-check manifest-check migration-check observability-check ## Run all fast local checks
 
 compose-config: ## Render and validate the local Compose configuration
 	docker compose --env-file .env.example config --quiet
 
-container-check: ## Build the non-root application image
+container-check: frontend-container-check ## Build the non-root application images
 	docker build --check .
 	docker build --tag aegis-agent-platform:local .

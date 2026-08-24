@@ -11,7 +11,7 @@ from types import MappingProxyType
 from typing import Protocol
 from uuid import UUID
 
-from aegis_agent_platform.domain import JsonValue, require_aware_datetime
+from aegis_agent_platform.domain import JsonValue
 from aegis_agent_platform.identity import TenantId
 from aegis_agent_platform.tenancy import TenantContext
 
@@ -35,6 +35,8 @@ class AuditEventType(StrEnum):
     REMEDIATION_APPROVAL_DECISION = "security.remediation_approval_decision.v1"
     CONTROLLED_ACTION_OUTCOME = "security.controlled_action_outcome.v1"
     OBSERVABILITY_ACCESS = "security.observability_access.v1"
+    OPERATOR_PRIVILEGED_READ = "security.operator_privileged_read.v1"
+    OPERATOR_MUTATION = "security.operator_mutation.v1"
 
 
 class AuditOutcome(StrEnum):
@@ -82,7 +84,8 @@ class AuditEvent:
     schema_version: int = 1
 
     def __post_init__(self) -> None:
-        require_aware_datetime(self.occurred_at, field_name="occurred_at")
+        if self.occurred_at.tzinfo is None:
+            raise ValueError("occurred_at must be timezone-aware")
         if self.schema_version != 1:
             raise ValueError("audit schema changes must use a new additive event type")
         if not self.actor_id or not self.action or not self.resource:

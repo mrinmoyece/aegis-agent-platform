@@ -244,6 +244,7 @@ def test_inbox_deduplication_and_outbox_claim_race() -> None:
                     lease_expires_at=expiry,
                     now=now,
                     limit=1,
+                    destination="later-worker",
                 ),
                 PostgresEventStore(second_connection).claim_outbox(
                     TENANT_A,
@@ -251,6 +252,7 @@ def test_inbox_deduplication_and_outbox_claim_race() -> None:
                     lease_expires_at=expiry,
                     now=now,
                     limit=1,
+                    destination="later-worker",
                 ),
             )
             assert sum(len(claim) for claim in claims) == 1
@@ -264,7 +266,6 @@ def test_inbox_deduplication_and_outbox_claim_race() -> None:
                 TENANT_A,
                 message.message_id,
                 lease_owner=winning_claim.lease_owner,
-                lease_expires_at=winning_claim.lease_expires_at,
                 retry_at=now,
                 error_code="temporary_delivery_failure",
             )
@@ -280,7 +281,6 @@ def test_inbox_deduplication_and_outbox_claim_race() -> None:
                 TENANT_A,
                 message.message_id,
                 lease_owner="publisher-retry",
-                lease_expires_at=retry[0].lease_expires_at,
                 retry_at=now,
                 error_code="poison_message",
             )
@@ -347,7 +347,6 @@ def test_inbox_deduplication_and_outbox_claim_race() -> None:
                 TENANT_A,
                 crash_message.message_id,
                 lease_owner="reconciling-publisher",
-                lease_expires_at=reclaimed[0].lease_expires_at,
                 published_at=expiry + timedelta(minutes=1),
             )
             async with first_connection.transaction():
@@ -506,9 +505,6 @@ def test_durable_repositories_are_tenant_scoped_and_audit_is_redacted() -> None:
                         "approval_from_risk": 2,
                         "tools_requiring_approval": [],
                         "approver_roles": ["approver"],
-                        "allowed_providers": ["test-provider"],
-                        "allowed_data_residencies": ["us"],
-                        "allow_provider_retention": False,
                     }
                 ),
             ),

@@ -27,10 +27,6 @@ class SupportReportTooLargeError(ValueError):
     """A bounded support report cannot contain the selected event range."""
 
 
-class SupportReportRangeError(ValueError):
-    """The requested support export exceeds the reviewed event range."""
-
-
 @dataclass(frozen=True, slots=True)
 class ReplayQuery:
     """Tenant-bound event range selected by a trusted caller."""
@@ -545,6 +541,5 @@ __all__ = [
     "ReplayState",
     "ReplayValidation",
     "SupportReport",
-    "SupportReportRangeError",
     "SupportReportTooLargeError",
 ]

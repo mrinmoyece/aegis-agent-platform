@@ -540,7 +540,7 @@ def _normalize(values: Sequence[float]) -> tuple[float, ...]:
     minimum = min(values)
     maximum = max(values)
     if math.isclose(minimum, maximum):
-        return tuple(min(1.0, max(0.0, value)) for value in values)
+        return tuple(1.0 if value > 0 else 0.0 for value in values)
     return tuple((value - minimum) / (maximum - minimum) for value in values)
 
 

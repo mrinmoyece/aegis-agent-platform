@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import json
 from collections.abc import Awaitable, Callable, Mapping
@@ -38,7 +37,7 @@ from aegis_agent_platform.domain import (
     sandbox_request_from_payload,
 )
 from aegis_agent_platform.domain.events import thaw_json
-from aegis_agent_platform.event_store import EventStore, TransientStorageError
+from aegis_agent_platform.event_store import EventStore
 from aegis_agent_platform.evidence import EvidenceQuery
 from aegis_agent_platform.evidence.operations import EvidenceOperations
 from aegis_agent_platform.evidence.service import EvidenceIdempotencyConflictError
@@ -46,7 +45,7 @@ from aegis_agent_platform.gateway.operations import GatewayOperations
 from aegis_agent_platform.identity import (
     PLATFORM_TENANT_ID,
     AuthenticationError,
-    AuthenticationPort,
+    AuthenticationService,
     AuthorizationDecision,
     AuthorizationService,
     Permission,
@@ -56,17 +55,12 @@ from aegis_agent_platform.identity import (
 from aegis_agent_platform.memory.api import MemoryHttpApi
 from aegis_agent_platform.memory.operations import MemoryOperations
 from aegis_agent_platform.observability.context import (
-    PropagationContext,
     TraceContextError,
     extract_context,
 )
 from aegis_agent_platform.observability.health import HealthRegistry
 from aegis_agent_platform.observability.operations import ObservabilityOperations
-from aegis_agent_platform.observability.replay import (
-    SupportReport,
-    SupportReportRangeError,
-    SupportReportTooLargeError,
-)
+from aegis_agent_platform.observability.replay import SupportReportTooLargeError
 from aegis_agent_platform.observability.runtime import RuntimeTracer
 from aegis_agent_platform.policy import (
     InMemoryPolicyRepository,
@@ -113,7 +107,7 @@ class ControlPlaneApp:
     def __init__(
         self,
         *,
-        authentication: AuthenticationPort | None = None,
+        authentication: AuthenticationService | None = None,
         authorization: AuthorizationService | None = None,
         tenants: TenantRepository | None = None,
         policies: PolicyRepository | None = None,
@@ -171,15 +165,13 @@ class ControlPlaneApp:
             )
             return
         with self._tracer.span("api.request", parent=parent):
-            await self._handle(scope, receive, send, parent=parent)
+            await self._handle(scope, receive, send)
 
     async def _handle(
         self,
         scope: AsgiMessage,
         receive: Receive,
         send: Send,
-        *,
-        parent: PropagationContext | None,
     ) -> None:
         if scope.get("type") != "http":
             return
@@ -197,7 +189,6 @@ class ControlPlaneApp:
         if not isinstance(path, str) or not path.startswith("/v1/"):
             await _respond(send, 404, {"status": "not-found"})
             return
-        correlation_id = uuid4()
         if method == "POST":
             post_segments = [segment for segment in path.split("/") if segment]
             evidence_post = (
@@ -234,7 +225,7 @@ class ControlPlaneApp:
             ):
                 await _respond(send, 405, {"error": {"code": "method_not_allowed"}})
                 return
-        principal = await self._authenticate(scope, send, correlation_id)
+        principal = await self._authenticate(scope, send)
         if principal is None:
             return
         if path == "/v1/me":
@@ -254,7 +245,7 @@ class ControlPlaneApp:
             )
             return
         if len(segments) == 3:
-            await self._get_tenant(send, principal, tenant_id, correlation_id)
+            await self._get_tenant(send, principal, tenant_id)
             return
         if len(segments) >= 4 and segments[3] == "memories":
             if self._memory_api is None:
@@ -283,7 +274,7 @@ class ControlPlaneApp:
             await _respond(send, response.status, response.body)
             return
         if len(segments) == 4 and segments[3] == "policy":
-            await self._get_policy(send, principal, tenant_id, correlation_id)
+            await self._get_policy(send, principal, tenant_id)
             return
         if len(segments) == 4 and segments[3] in {
             "models",
@@ -294,7 +285,6 @@ class ControlPlaneApp:
                 send,
                 principal,
                 tenant_id,
-                correlation_id=correlation_id,
                 view=segments[3],
             )
             return
@@ -304,7 +294,6 @@ class ControlPlaneApp:
                 receive,
                 principal,
                 tenant_id,
-                propagation=parent,
             )
             return
         if method == "POST" and len(segments) == 4 and segments[3] == "sandboxes":
@@ -313,7 +302,6 @@ class ControlPlaneApp:
                 receive,
                 principal,
                 tenant_id,
-                propagation=parent,
             )
             return
         if method == "GET" and len(segments) == 4 and segments[3] == "sandboxes":
@@ -427,7 +415,6 @@ class ControlPlaneApp:
                 receive,
                 principal,
                 tenant_id,
-                propagation=parent,
             )
             return
         if (
@@ -446,7 +433,6 @@ class ControlPlaneApp:
                 principal,
                 tenant_id,
                 segments[4],
-                correlation_id=correlation_id,
                 cursor=cursor,
             )
             return
@@ -460,7 +446,6 @@ class ControlPlaneApp:
                 principal,
                 tenant_id,
                 segments[5],
-                correlation_id=correlation_id,
             )
             return
         if (
@@ -483,7 +468,6 @@ class ControlPlaneApp:
                 tenant_id,
                 segments[4],
                 view,
-                correlation_id=correlation_id,
                 cursor=investigation_cursor,
             )
             return
@@ -497,7 +481,6 @@ class ControlPlaneApp:
                 principal,
                 tenant_id,
                 segments[5],
-                correlation_id=correlation_id,
             )
             return
         if len(segments) == 4 and segments[3] == "ledger":
@@ -514,7 +497,6 @@ class ControlPlaneApp:
                 send,
                 principal,
                 tenant_id,
-                correlation_id=correlation_id,
                 after_position=after_position,
             )
             return
@@ -570,7 +552,6 @@ class ControlPlaneApp:
                 principal,
                 tenant_id,
                 segments[4],
-                correlation_id=correlation_id,
                 after_version=after_version,
             )
             return
@@ -579,7 +560,7 @@ class ControlPlaneApp:
             and segments[3] == "projections"
             and segments[4] == "run-status"
         ):
-            await self._get_run_status(send, principal, tenant_id, correlation_id)
+            await self._get_run_status(send, principal, tenant_id)
             return
         await _respond(send, 404, {"status": "not-found"})
 
@@ -589,17 +570,12 @@ class ControlPlaneApp:
         receive: Receive,
         principal: Principal,
         tenant_id: TenantId,
-        *,
-        propagation: PropagationContext | None,
     ) -> None:
         if not await self._authorize(
             send,
             principal,
             tenant_id,
             Permission.EVIDENCE_QUERY,
-            correlation_id=(
-                UUID(propagation.trace_id) if propagation is not None else uuid4()
-            ),
             resource=f"tenant/{tenant_id}/evidence/queries",
         ):
             return
@@ -619,7 +595,6 @@ class ControlPlaneApp:
                 query,
                 policy,
                 at=datetime.now(UTC),
-                propagation=propagation,
             )
         except EvidenceIdempotencyConflictError:
             await _respond(
@@ -654,8 +629,6 @@ class ControlPlaneApp:
         receive: Receive,
         principal: Principal,
         tenant_id: TenantId,
-        *,
-        propagation: PropagationContext | None,
     ) -> None:
         if self._sandbox_operations is None:
             await _respond(
@@ -686,7 +659,6 @@ class ControlPlaneApp:
                 TenantContext(tenant_id),
                 sandbox_request,
                 approval,
-                propagation=propagation,
             )
         except SandboxIdempotencyConflictError:
             await _respond(
@@ -885,8 +857,6 @@ class ControlPlaneApp:
         receive: Receive,
         principal: Principal,
         tenant_id: TenantId,
-        *,
-        propagation: PropagationContext | None,
     ) -> None:
         if self._remediation_operations is None:
             await _respond(
@@ -909,7 +879,6 @@ class ControlPlaneApp:
                 TenantContext(tenant_id),
                 plan,
                 idempotency_key=idempotency_key,
-                propagation=propagation,
             )
         except RemediationIdempotencyConflictError:
             await _respond(
@@ -1120,7 +1089,6 @@ class ControlPlaneApp:
         tenant_id: TenantId,
         view: str,
         *,
-        correlation_id: UUID,
         cursor: tuple[int, int] | None,
     ) -> None:
         if not await self._authorize(
@@ -1128,7 +1096,6 @@ class ControlPlaneApp:
             principal,
             tenant_id,
             Permission.EVIDENCE_READ,
-            correlation_id=correlation_id,
             resource=f"tenant/{tenant_id}/evidence/{view}",
         ):
             return
@@ -1182,15 +1149,12 @@ class ControlPlaneApp:
         principal: Principal,
         tenant_id: TenantId,
         query_id: str,
-        *,
-        correlation_id: UUID,
     ) -> None:
         if not await self._authorize(
             send,
             principal,
             tenant_id,
             Permission.EVIDENCE_READ,
-            correlation_id=correlation_id,
             resource=f"tenant/{tenant_id}/evidence/query",
         ):
             return
@@ -1224,15 +1188,12 @@ class ControlPlaneApp:
         principal: Principal,
         tenant_id: TenantId,
         bundle_id: str,
-        *,
-        correlation_id: UUID,
     ) -> None:
         if not await self._authorize(
             send,
             principal,
             tenant_id,
             Permission.EVIDENCE_READ,
-            correlation_id=correlation_id,
             resource=f"tenant/{tenant_id}/evidence/bundle",
         ):
             return
@@ -1263,7 +1224,6 @@ class ControlPlaneApp:
         run_id: str,
         view: str,
         *,
-        correlation_id: UUID,
         cursor: int,
     ) -> None:
         if not await self._authorize(
@@ -1271,7 +1231,6 @@ class ControlPlaneApp:
             principal,
             tenant_id,
             Permission.INVESTIGATION_READ,
-            correlation_id=correlation_id,
             resource=f"tenant/{tenant_id}/investigations/{view}",
         ):
             return
@@ -1416,8 +1375,8 @@ class ControlPlaneApp:
         self,
         scope: AsgiMessage,
         send: Send,
-        correlation_id: UUID,
     ) -> Principal | None:
+        correlation_id = uuid4()
         if self._authentication is None:
             await _respond(
                 send,
@@ -1427,11 +1386,7 @@ class ControlPlaneApp:
             return None
         authorization_header = _single_header(scope, b"authorization")
         try:
-            principal = await asyncio.get_event_loop().run_in_executor(
-                None,
-                self._authentication.authenticate,
-                authorization_header,
-            )
+            principal = self._authentication.authenticate(authorization_header)
         except AuthenticationError as error:
             self._audit_event(
                 tenant_id=PLATFORM_TENANT_ID,
@@ -1472,14 +1427,12 @@ class ControlPlaneApp:
         send: Send,
         principal: Principal,
         tenant_id: TenantId,
-        correlation_id: UUID,
     ) -> None:
         if not await self._authorize(
             send,
             principal,
             tenant_id,
             Permission.TENANT_READ,
-            correlation_id=correlation_id,
             resource=f"tenant/{tenant_id}",
         ):
             return
@@ -1502,14 +1455,12 @@ class ControlPlaneApp:
         send: Send,
         principal: Principal,
         tenant_id: TenantId,
-        correlation_id: UUID,
     ) -> None:
         if not await self._authorize(
             send,
             principal,
             tenant_id,
             Permission.POLICY_READ,
-            correlation_id=correlation_id,
             resource=f"tenant/{tenant_id}/policy",
         ):
             return
@@ -1525,7 +1476,6 @@ class ControlPlaneApp:
         principal: Principal,
         tenant_id: TenantId,
         *,
-        correlation_id: UUID,
         view: str,
     ) -> None:
         if not await self._authorize(
@@ -1533,7 +1483,6 @@ class ControlPlaneApp:
             principal,
             tenant_id,
             Permission.MODEL_READ,
-            correlation_id=correlation_id,
             resource=f"tenant/{tenant_id}/{view}",
         ):
             return
@@ -1578,7 +1527,6 @@ class ControlPlaneApp:
         principal: Principal,
         tenant_id: TenantId,
         *,
-        correlation_id: UUID,
         after_position: int,
     ) -> None:
         if not await self._authorize(
@@ -1586,22 +1534,17 @@ class ControlPlaneApp:
             principal,
             tenant_id,
             Permission.RESOURCE_READ,
-            correlation_id=correlation_id,
             resource=f"tenant/{tenant_id}/ledger",
         ):
             return
         if self._event_store is None:
             await _respond(send, 503, {"error": {"code": "storage_not_configured"}})
             return
-        try:
-            page = await self._event_store.read_all(
-                TenantContext(tenant_id),
-                after_position=after_position,
-                limit=100,
-            )
-        except TransientStorageError:
-            await _respond(send, 503, {"error": {"code": "storage_unavailable"}})
-            return
+        page = await self._event_store.read_all(
+            TenantContext(tenant_id),
+            after_position=after_position,
+            limit=100,
+        )
         await _respond(
             send,
             200,
@@ -1713,13 +1656,6 @@ class ControlPlaneApp:
                 {"error": {"code": "support_report_too_large"}},
             )
             return
-        except SupportReportRangeError:
-            await _respond(
-                send,
-                422,
-                {"error": {"code": "support_report_range_exceeded"}},
-            )
-            return
         await _respond(
             send,
             200,
@@ -1737,8 +1673,6 @@ class ControlPlaneApp:
                     "stream_digest": report.validation.stream_digest,
                     "reason_codes": list(report.validation.reason_codes),
                 },
-                "state": _support_report_state(report),
-                "causal_chain": _support_report_causal_chain(report),
                 "authoritative_source": "event_ledger",
             },
         )
@@ -1750,7 +1684,6 @@ class ControlPlaneApp:
         tenant_id: TenantId,
         run_id: str,
         *,
-        correlation_id: UUID,
         after_version: int,
     ) -> None:
         if not run_id:
@@ -1761,26 +1694,21 @@ class ControlPlaneApp:
             principal,
             tenant_id,
             Permission.RESOURCE_READ,
-            correlation_id=correlation_id,
             resource=f"tenant/{tenant_id}/runs/{run_id}/timeline",
         ):
             return
         if self._event_store is None:
             await _respond(send, 503, {"error": {"code": "storage_not_configured"}})
             return
-        try:
-            events = [
-                event
-                async for event in self._event_store.read_stream(
-                    TenantContext(tenant_id),
-                    run_id,
-                    after_version=after_version,
-                    limit=100,
-                )
-            ]
-        except TransientStorageError:
-            await _respond(send, 503, {"error": {"code": "storage_unavailable"}})
-            return
+        events = [
+            event
+            async for event in self._event_store.read_stream(
+                TenantContext(tenant_id),
+                run_id,
+                after_version=after_version,
+                limit=100,
+            )
+        ]
         await _respond(
             send,
             200,
@@ -1798,14 +1726,12 @@ class ControlPlaneApp:
         send: Send,
         principal: Principal,
         tenant_id: TenantId,
-        correlation_id: UUID,
     ) -> None:
         if not await self._authorize(
             send,
             principal,
             tenant_id,
             Permission.RESOURCE_READ,
-            correlation_id=correlation_id,
             resource=f"tenant/{tenant_id}/projections/run-status",
         ):
             return
@@ -1822,7 +1748,6 @@ class ControlPlaneApp:
         tenant_id: TenantId,
         permission: Permission,
         *,
-        correlation_id: UUID,
         resource: str,
     ) -> bool:
         decision = self._authorization.decide(
@@ -1831,7 +1756,7 @@ class ControlPlaneApp:
             permission=permission,
             at=datetime.now(UTC),
         )
-        self._audit_authorization(principal, resource, decision, correlation_id)
+        self._audit_authorization(principal, resource, decision)
         if decision.allowed:
             return True
         await _respond(
@@ -1851,7 +1776,6 @@ class ControlPlaneApp:
         principal: Principal,
         resource: str,
         decision: AuthorizationDecision,
-        correlation_id: UUID,
     ) -> None:
         self._audit_event(
             tenant_id=principal.tenant_id,
@@ -1860,7 +1784,7 @@ class ControlPlaneApp:
             actor_id=principal.actor_id,
             action=decision.permission,
             resource=resource,
-            correlation_id=correlation_id,
+            correlation_id=uuid4(),
             details={
                 "attempted_tenant_id": str(decision.tenant_id),
                 "reason": decision.reason,
@@ -2192,8 +2116,8 @@ def _event_body(event: EventEnvelope) -> dict[str, Any]:
         "correlation_id": (
             str(event.correlation_id) if event.correlation_id is not None else None
         ),
-        "payload": thaw_json(redact_details(event.payload)),
-        "metadata": thaw_json(redact_details(event.metadata)),
+        "payload": dict(redact_details(event.payload)),
+        "metadata": dict(redact_details(event.metadata)),
     }
 
 
@@ -2227,32 +2151,3 @@ async def _respond(
 
 
 application = ControlPlaneApp()
-
-
-def _support_report_state(report: SupportReport) -> Mapping[str, JsonValue]:
-    state = report.state
-    return {
-        "sequence": state.sequence,
-        "last_event_type": state.last_event_type,
-        "lifecycle_status": state.lifecycle_status,
-        "event_counts": dict(state.event_counts),
-        "blocked_reason_codes": list(state.blocked_reason_codes),
-        "failed_reason_codes": list(state.failed_reason_codes),
-        "facts": [dict(fact) for fact in state.facts],
-        "interpretations": list(state.interpretations),
-    }
-
-
-def _support_report_causal_chain(
-    report: SupportReport,
-) -> tuple[Mapping[str, JsonValue], ...]:
-    return tuple(
-        {
-            "sequence": item.sequence,
-            "event_type": item.event_type,
-            "occurred_at": item.occurred_at,
-            "causation_sequence": item.causation_sequence,
-            "trace_link_present": item.trace_link_present,
-        }
-        for item in report.causal_chain
-    )

@@ -50,7 +50,7 @@ Status meanings:
 | Live Keycloak network round-trip and key-rotation drills | Planned | Layer 2, deployment-dependent |
 | Cross-tenant, expired-token, revoked-role, and quota/policy negative-test suite | Implemented | `tests/test_identity_security.py`, `tests/test_policy_security.py`, `tests/test_audit_secrets.py`, `tests/test_api.py` |
 | EP-01 OIDC key-rotation and emergency-revocation drill | Planned | EP-01 operational exit evidence |
-| EP-02 durable Postgres RLS enforcement proven against a live database | Implemented | `tests/integration/test_postgres_storage.py` forced-RLS and append-only coverage |
+| EP-02 durable Postgres RLS enforcement proven against a live database | Planned | EP-02 database exit evidence |
 | Durable Postgres-backed identity/tenant/policy/audit adapters | Implemented | `persistence.postgres`, live RLS/audit tests |
 | Vault-backed secret broker with rotation | Planned | Layer 5 |
 | Quota usage accounting projection | Implemented | Model usage events plus rebuildable versioned-cost view |
@@ -96,8 +96,7 @@ Status meanings:
 | Tenant-safe memory and retrieval provenance | Implemented | `domain.memory`, `memory`, migration `0009`, deterministic and live pgvector/RLS tests |
 | Three-tier working/episodic/semantic memory | Implemented | `docs/memory-and-rag.md`, ADR 0017, replay and context tests |
 | PII-safe compaction, retention, and deletion | Implemented | scanner/redaction hooks, cited fallback, legal hold/tombstone/blob-erasure tests; production DLP/blob store unverified |
-| Data retention and erasure workflows | Implemented | TTL/legal hold/deletion/derived purge are implemented; production backup expiry remains planned |
-| Data export workflows | Planned | export endpoints and evidence packages remain planned |
+| Data retention, export, and erasure workflows | Implemented | TTL/legal hold/deletion/derived purge; export and backup expiry remain planned |
 | Deterministic hybrid pgvector RAG | Implemented | filtered lexical/vector ranking, MMR, exact citations, tenant-safe cache and live pgvector test |
 | Memory quotas and fenced lifecycle recovery | Implemented | atomic tenant-period reservations, durable intent/results, reconciliation and rebuild tests |
 | Deterministic specialist behavioral evaluations | Implemented | success, ambiguity, contradiction, budget, recovery; `make evals` |
@@ -142,4 +141,19 @@ delivery slices and exit gates in the enterprise implementation blueprint.
   collector/Prometheus/Grafana topology.
 - Not complete: production SLO attainment, live production telemetry
   qualification, external managed backends, 24/7 on-call evidence, operator
-  React UI, HA/DR/multi-region, final load/chaos, or compliance certification.
+  production qualification, HA/DR/multi-region, final load/chaos, or compliance
+  certification.
+
+## Layer 13 operator evidence
+
+| Control | Status | Evidence |
+| --- | --- | --- |
+| Secure BFF session/PKCE boundary | Implemented boundary | `operator.session`, secure-cookie/CSRF/origin tests; live exchange/shared sessions unverified |
+| Tenant/RBAC and anti-enumeration | Implemented | server authorization and audited `401`/`403`/`404` tests |
+| Bounded OpenAPI-derived contracts | Implemented | OpenAPI 3.1, deterministic TS generator, Zod rejection, drift gate |
+| Exact-scope safe mutation UX | Implemented | digest/expiry/quorum/SoD review, typed confirm, idempotency/concurrency tests |
+| Cursor updates and tenant teardown | Implemented polling | validation, resume, dedupe, ordering, reconnect and abort tests; SSE/WebSocket deferred |
+| Client privacy/security | Implemented | URL/download/CSV/clipboard/redaction/telemetry/error/CSP tests |
+| WCAG 2.2 AA target | Automated evidence | semantic tests, keyboard flows, themes/reduced motion, axe; independent/manual qualification deferred |
+| Supply chain/static serving | Implemented local/CI | pinned lock/toolchain/actions/images, audit/license/bundle/source-map/CSP/SBOM and non-root smoke |
+| Live production identity/browser/deployment | Planned | OIDC exchange, shared encrypted sessions, TLS proxy, browser/AT matrix, managed rollout |

@@ -234,19 +234,15 @@ class MemoryOperations:
     ) -> Mapping[str, JsonValue] | None:
         self._require(principal, context, Permission.MEMORY_READ, at)
         memory = await self._index.provenance(context, memory_id)
-        return (
-            _provenance(
-                memory,
-                include_locations=self._may_view_memory_locations(
-                    principal,
-                    context,
-                    memory,
-                    at=at,
-                ),
-            )
-            if memory is not None
-            else None
-        )
+        if memory is None:
+            return None
+        show_location = self._authorization.decide(
+            principal=principal,
+            tenant_id=context.tenant_id,
+            permission=Permission.MEMORY_ADMIN,
+            at=at,
+        ).allowed
+        return _provenance(memory, show_location=show_location)
 
     async def page(
         self,
@@ -258,24 +254,19 @@ class MemoryOperations:
         limit: int = 100,
     ) -> tuple[tuple[Mapping[str, JsonValue], ...], UUID | None]:
         self._require(principal, context, Permission.MEMORY_READ, at)
+        show_location = self._authorization.decide(
+            principal=principal,
+            tenant_id=context.tenant_id,
+            permission=Permission.MEMORY_ADMIN,
+            at=at,
+        ).allowed
         rows, cursor = await self._index.page(
             context,
             after_memory_id=after_memory_id,
             limit=limit,
         )
         return (
-            tuple(
-                _provenance(
-                    memory,
-                    include_locations=self._may_view_memory_locations(
-                        principal,
-                        context,
-                        memory,
-                        at=at,
-                    ),
-                )
-                for memory in rows
-            ),
+            tuple(_provenance(memory, show_location=show_location) for memory in rows),
             cursor,
         )
 
@@ -388,44 +379,9 @@ class MemoryOperations:
         if not decision.allowed:
             raise PermissionError(decision.reason)
 
-    def _may_view_memory_locations(
-        self,
-        principal: Principal,
-        context: TenantContext,
-        memory: SemanticMemory,
-        *,
-        at: datetime,
-    ) -> bool:
-        admin = self._authorization.decide(
-            principal=principal,
-            tenant_id=context.tenant_id,
-            permission=Permission.MEMORY_ADMIN,
-            at=at,
-        )
-        if admin.allowed:
-            return True
-        trusted_roles = frozenset(
-            binding.role.value
-            for binding in principal.role_bindings
-            if binding.is_active(at)
-        )
-        trusted_service = (
-            str(principal.service_identity)
-            if principal.service_identity is not None
-            else None
-        )
-        return memory.acl.allows(
-            principal_id=principal.actor_id,
-            service_id=trusted_service,
-            roles=trusted_roles,
-            purpose="incident-investigation",
-        )
-
 
 def _provenance(
-    memory: SemanticMemory,
-    *,
-    include_locations: bool = True,
+    memory: SemanticMemory, *, show_location: bool = False
 ) -> Mapping[str, JsonValue]:
     return {
         "accepted_by": memory.accepted_by,
@@ -441,7 +397,7 @@ def _provenance(
                     str(citation.event_id) if citation.event_id is not None else None
                 ),
                 "source_id": citation.source_id,
-                "source_uri": citation.source_uri if include_locations else None,
+                "source_uri": citation.source_uri if show_location else None,
             }
             for citation in memory.snapshot.citations
         ),
@@ -460,9 +416,7 @@ def _provenance(
         "security_label": memory.security_label.value,
         "source_digest": memory.snapshot.content_digest,
         "source_kind": memory.snapshot.source_kind.value,
-        "source_reference": (
-            memory.snapshot.source_reference if include_locations else None
-        ),
+        "source_reference": memory.snapshot.source_reference if show_location else None,
         "source_version": memory.snapshot.source_version,
         "version_key": memory.version_key,
     }

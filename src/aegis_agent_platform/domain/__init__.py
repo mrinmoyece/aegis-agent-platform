@@ -11,7 +11,6 @@ from aegis_agent_platform.domain.events import (
     JsonScalar,
     JsonValue,
     TraceContext,
-    require_aware_datetime,
     thaw_json,
 )
 from aegis_agent_platform.domain.evidence import (
@@ -342,7 +341,6 @@ __all__ = [
     "replay_memory",
     "replay_remediation",
     "replay_sandbox",
-    "require_aware_datetime",
     "sandbox_request_from_payload",
     "sandbox_request_to_payload",
     "sandbox_result_digest",

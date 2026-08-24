@@ -269,7 +269,7 @@ sequenceDiagram
   participant J as JwtVerifier + JWKS provider
   participant D as IdentityDirectory
   participant Z as AuthorizationService
-  participant P as PolicyRepository
+  participant Q as PolicyEvaluator
   participant A as AuditStore
   C->>CP: Bearer JWT
   CP->>J: verify signature, issuer, audience, expiry
@@ -278,8 +278,8 @@ sequenceDiagram
   D-->>CP: Principal (tenant, roles)
   CP->>Z: decide(principal, tenant_id, permission)
   Z-->>CP: AuthorizationDecision
-  CP->>P: get(TenantContext(tenant_id))
-  P-->>CP: TenantPolicy
+  CP->>Q: evaluate(policy, request, usage)
+  Q-->>CP: PolicyDecision (allow/deny/require_approval)
   CP->>A: append(AuthenticationOutcome, AuthorizationDecision)
 ```
 
@@ -374,11 +374,9 @@ behind a small route set: `/healthz` and `/health/live` for liveness,
 in Layer 1), `/v1/me` returning the authenticated principal's tenant and active
 roles, tenant and policy routes, bounded model catalog/usage/provider-health
 views, plus bounded redacted ledger, run-timeline, and run-status projection
-reads. Every `/v1/*` route requires a valid bearer token; `/v1/me` returns
-immediately after authentication, while the tenant-scoped routes also require a
-passing authorization decision. Authentication outcomes, and authorization
-outcomes where authorization runs, are recorded as audit events before a
-response is returned. No other `/v1/*`
+reads. Every `/v1/*` route requires a valid bearer token and a passing
+authorization decision, and both authentication and authorization outcomes are
+recorded as audit events before a response is returned. No other `/v1/*`
 surface should be assumed until it appears in the code and its tests.
 
 ## Canonical incident: checkout failures after deployment
@@ -649,3 +647,24 @@ validation, deterministic sampling, bounded async links, central redaction,
 fixed metric cardinality, non-blocking export, authenticated observability APIs,
 and the read-only replay debugger preserve domain purity and durable execution.
 Configured SLOs and local dashboards are not production attainment evidence.
+
+## Layer 13 operator boundary
+
+Layer 13 adds a presentation and BFF adapter without changing runtime authority.
+The BFF reads bounded views through application-service ports, validates tenant and
+purpose, applies server authorization, and audits privileged reads/mutations. It
+does not expose projections or database adapters. Secure HttpOnly sessions,
+PKCE/state/nonce, CSRF/origin checks, anti-enumeration, idempotency, and optimistic
+concurrency are described in
+[ADR 0021](adr/0021-bff-session-and-derived-operator-views.md).
+
+The React application validates every response against runtime schemas generated
+from the checked-in OpenAPI contract. It labels event facts, derived state, model
+claims, operator decisions, and unknown outcomes. Tenant/purpose-scoped view state
+is disposable and cleared on session switch. Cursor polling cannot bypass normal
+validation or authorization. Browser, UI, telemetry, and cache failure cannot
+change ledger truth or controlled execution.
+
+The current executable experience is a visibly synthetic demo. The live OIDC
+exchange and shared session adapter are intentionally absent and readiness is
+false. See [operator-ui.md](operator-ui.md).

@@ -9,7 +9,7 @@ from types import MappingProxyType
 from typing import Protocol
 from uuid import UUID
 
-from aegis_agent_platform.domain import JsonValue, require_aware_datetime
+from aegis_agent_platform.domain import JsonValue
 from aegis_agent_platform.domain.events import freeze_json_mapping
 from aegis_agent_platform.tenancy import TenantContext
 
@@ -28,41 +28,6 @@ class PermanentQueueError(QueueError):
 
 class PoisonMessageError(PermanentQueueError):
     """Delivery cannot be safely deserialized and must be quarantined."""
-
-
-@dataclass(frozen=True, slots=True)
-class Lease:
-    """Legacy time-bounded, tenant-scoped claim contract."""
-
-    lease_id: UUID
-    tenant_id: str
-    work_id: UUID
-    expires_at: datetime
-    attempt: int
-    fence: int
-
-    def __post_init__(self) -> None:
-        if not self.tenant_id.strip():
-            raise ValueError("tenant_id is required")
-        require_aware_datetime(self.expires_at, field_name="expires_at")
-        if self.attempt < 1 or self.fence < 1:
-            raise ValueError("attempt and fence must be positive")
-
-
-class LeaseQueue(Protocol):
-    """Legacy durable queue port retained for compatibility tests."""
-
-    async def acquire(
-        self,
-        worker_id: str,
-        tenant: TenantContext,
-    ) -> Lease | None: ...
-
-    async def renew(self, lease: Lease, *, extend_until: datetime) -> Lease: ...
-
-    async def acknowledge(self, lease: Lease) -> None: ...
-
-    async def release(self, lease: Lease, *, reason: str) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,7 +161,6 @@ class OutboxRepository(Protocol):
         message_id: UUID,
         *,
         lease_owner: str,
-        lease_expires_at: datetime,
         published_at: datetime,
     ) -> None:
         """Acknowledge publication under the current database lease."""
@@ -208,7 +172,6 @@ class OutboxRepository(Protocol):
         message_id: UUID,
         *,
         lease_owner: str,
-        lease_expires_at: datetime,
         retry_at: datetime,
         error_code: str,
     ) -> None:
@@ -216,9 +179,28 @@ class OutboxRepository(Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
+class Lease:
+    """Time-bounded, tenant-scoped claim contract for at-least-once delivery."""
+
+    lease_id: UUID
+    tenant_id: str
+    work_id: UUID
+    expires_at: datetime
+    attempt: int
+    fence: int
+
+    def __post_init__(self) -> None:
+        if not self.tenant_id.strip():
+            raise ValueError("tenant_id is required")
+        if self.expires_at.tzinfo is None:
+            raise ValueError("expires_at must be timezone-aware")
+        if self.attempt < 1 or self.fence < 1:
+            raise ValueError("attempt and fence must be positive")
+
+
 __all__ = [
     "Lease",
-    "LeaseQueue",
     "MessageEnvelope",
     "OutboxRepository",
     "PendingEntry",

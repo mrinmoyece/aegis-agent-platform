@@ -19,7 +19,6 @@ from aegis_agent_platform.evidence.service import (
     EvidenceRequestResult,
 )
 from aegis_agent_platform.identity import AuthorizationService, Permission, Principal
-from aegis_agent_platform.observability.context import PropagationContext
 from aegis_agent_platform.policy import TenantPolicy
 from aegis_agent_platform.tenancy import TenantContext
 
@@ -81,7 +80,6 @@ class EvidenceOperations:
         policy: TenantPolicy,
         *,
         at: datetime,
-        propagation: PropagationContext | None = None,
     ) -> EvidenceRequestResult:
         self._require(principal, context, Permission.EVIDENCE_QUERY, at)
         return await self._service.request(
@@ -89,7 +87,6 @@ class EvidenceOperations:
             query,
             policy,
             actor_id=principal.actor_id,
-            propagation=propagation,
         )
 
     async def status(

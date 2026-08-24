@@ -125,10 +125,10 @@ class OfficialKubernetesClient:
                 "kubernetes_collection_invalid",
                 retryable=False,
             )
-        if any(not isinstance(item, dict) for item in items):
+        if not all(isinstance(item, dict) for item in items):
             raise ConnectorError(
                 ConnectorErrorClass.MALFORMED_RESPONSE,
-                "kubernetes_collection_invalid",
+                "kubernetes_collection_item_invalid",
                 retryable=False,
             )
         return (
@@ -1256,13 +1256,6 @@ def kubernetes_sandbox_workload(
             "name": "input-snapshot",
         },
     ]
-    mounts.append(
-        {
-            "mountPath": f"/{spec.working_directory}",
-            "name": "input-snapshot",
-            "readOnly": True,
-        }
-    )
     mounts.append(
         {
             "mountPath": "/inputs/snapshot",

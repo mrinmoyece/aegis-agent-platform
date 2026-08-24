@@ -176,8 +176,10 @@ def _load_events(path: Path) -> tuple[EventEnvelope, ...]:
         raise ValueError("event export must be a JSON array or newline-delimited JSON")
     if len(parsed) > 5_000:
         raise ValueError("event export exceeds the replay event bound")
-    if any(not isinstance(item, dict) for item in parsed):
-        raise ValueError("event export entries must all be JSON objects")
+    if not all(isinstance(item, dict) for item in parsed):
+        raise ValueError(
+            "event export contains non-object entries; rejecting tampered export"
+        )
     return tuple(EventEnvelope.from_mapping(item) for item in parsed)
 
 
@@ -219,5 +221,5 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == "__main__":
     raise SystemExit(main())

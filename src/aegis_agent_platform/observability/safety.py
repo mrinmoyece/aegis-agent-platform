@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from hashlib import sha256
 from hmac import new as hmac_new
@@ -166,13 +165,27 @@ def hash_identifier(identifier: str, *, key: bytes, key_version: str) -> str:
 
 
 def bounded_event_size(value: Mapping[str, object]) -> bool:
-    """Reject an event whose canonical JSON encoding exceeds the reviewed bound."""
-    encoded = json.dumps(
-        value,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    return len(encoded) <= MAX_EVENT_BYTES
+    """Conservatively reject an event whose scalar representation is oversized."""
+    size = 2
+    stack: list[object] = [value]
+    seen: set[int] = set()
+    while stack:
+        item = stack.pop()
+        item_id = id(item)
+        if isinstance(item, (Mapping, Sequence)) and not isinstance(item, str | bytes):
+            if item_id in seen:
+                return False  # cyclic reference — reject
+            seen.add(item_id)
+        if isinstance(item, Mapping):
+            size += sum(len(str(key).encode("utf-8")) + 3 for key in item)
+            stack.extend(item.values())
+        elif isinstance(item, Sequence) and not isinstance(item, str | bytes):
+            stack.extend(item)
+        else:
+            size += len(str(item).encode("utf-8")) + 1
+        if size > MAX_EVENT_BYTES:
+            return False
+    return True
 
 
 __all__ = [

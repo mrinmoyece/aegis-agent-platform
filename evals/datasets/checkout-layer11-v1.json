@@ -71,6 +71,12 @@
     "observability.retry-deduplication",
     "observability.safety-alert",
     "observability.secret-redaction",
+    "operator.ambiguous-not-success",
+    "operator.exact-approval-scope",
+    "operator.injected-evidence-data",
+    "operator.server-denial",
+    "operator.tenant-switch-clears",
+    "operator.ui-outage-contained",
     "policy.allowed",
     "policy.approval-required",
     "policy.budget-denial",
@@ -99,8 +105,8 @@
     "work.stale-success"
   ],
   "created_at": "2026-08-13T12:00:00Z",
-  "dataset_id": "aegis-checkout-layer12",
-  "description": "Synthetic checkout incident, adversarial channels, recovery cut points, and observability invariants.",
+  "dataset_id": "aegis-checkout-layer13",
+  "description": "Synthetic checkout incident, adversarial channels, recovery cut points, observability invariants, and operator safety invariants.",
   "fixtures": [
     {
       "classification": "internal",
@@ -147,5 +153,5 @@
   ],
   "migration_from": null,
   "schema_version": 1,
-  "version": "1.1.0"
+  "version": "1.2.0"
 }

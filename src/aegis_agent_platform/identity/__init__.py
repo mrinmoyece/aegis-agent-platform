@@ -3,7 +3,6 @@
 from aegis_agent_platform.identity.authentication import (
     AuthenticationError,
     AuthenticationErrorCode,
-    AuthenticationPort,
     AuthenticationService,
     IdentityDirectory,
     IdentityRecord,
@@ -35,7 +34,6 @@ __all__ = [
     "PLATFORM_TENANT_ID",
     "AuthenticationError",
     "AuthenticationErrorCode",
-    "AuthenticationPort",
     "AuthenticationService",
     "AuthorizationDecision",
     "AuthorizationService",

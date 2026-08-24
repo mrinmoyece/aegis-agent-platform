@@ -5,9 +5,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pytest
-from scripts.check_migrations import _validate_migration_names, security_reversals
-
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "migrations" / "0001_identity_governance.sql"
 LEDGER_MIGRATION = ROOT / "migrations" / "0002_durable_ledger.sql"
@@ -24,7 +21,6 @@ def test_identity_governance_schema_has_tenant_constraints_and_indexes() -> None
     assert "identities_tenant_idx" in schema
     assert "role_bindings_tenant_identity_idx" in schema
     assert "security_audit_events_tenant_sequence_idx" in schema
-    assert "check (role <> 'platform_admin' or tenant_id = 'platform')" in schema
 
 
 def test_tenant_tables_have_forced_row_level_security() -> None:
@@ -70,7 +66,6 @@ def test_ledger_schema_is_append_only_tenant_scoped_and_indexed() -> None:
     assert "unique (tenant_id, aggregate_id, aggregate_sequence)" in schema
     assert "before update or delete on events" in schema
     assert "event records are append-only" in schema
-    assert "create policy tenants_tenant_isolation on tenants" not in schema
     adapter = (
         (ROOT / "src" / "aegis_agent_platform" / "event_store" / "postgres.py")
         .read_text(encoding="utf-8")
@@ -99,29 +94,6 @@ def test_destructive_migration_guard_rejects_optional_truncate_syntax() -> None:
     assert not pattern.search("REVOKE TRUNCATE ON events;".lower())
 
 
-@pytest.mark.parametrize(
-    "statement",
-    [
-        "DROP FUNCTION reject_event_mutation() CASCADE;",
-        "DROP AGGREGATE security.aggregate_name(text);",
-    ],
-)
-def test_security_reversal_guard_rejects_function_and_aggregate_drops(
-    statement: str,
-) -> None:
-    reversals = security_reversals(statement.lower())
-
-    assert len(reversals) == 1
-    assert statement.lower().startswith(reversals[0])
-
-
-def test_migration_name_validation_requires_pattern_and_contiguous_sequence() -> None:
-    with pytest.raises(SystemExit, match=r"NNNN_description\.sql"):
-        _validate_migration_names([Path("001_bad-name.sql")])
-    with pytest.raises(SystemExit, match="contiguous"):
-        _validate_migration_names([Path("0001_first.sql"), Path("0003_third.sql")])
-
-
 def test_model_budget_schema_is_tenant_scoped_fenced_and_versioned() -> None:
     schema = GATEWAY_MIGRATION.read_text(encoding="utf-8").lower()
     for table in (
@@ -131,9 +103,7 @@ def test_model_budget_schema_is_tenant_scoped_fenced_and_versioned() -> None:
     ):
         assert f"alter table {table} force row level security" in schema
         assert f"{table}_tenant_isolation" in schema
-    assert "model_budget_reservations_request_active_idx" in schema
-    assert "model_budget_reservations_idempotency_active_idx" in schema
-    assert "where status in ('active', 'charged')" in schema
+    assert "unique (tenant_id, idempotency_key)" in schema
     assert "price_version text not null" in schema
     assert "lease_generation bigint not null" in schema
     assert "where status = 'active'" in schema

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from threading import Lock
 from time import monotonic
 from typing import Any, ClassVar, Protocol
@@ -51,7 +51,7 @@ WHERE tenant_id = %s AND aggregate_id = %s
 ORDER BY aggregate_sequence
 LIMIT %s
 """
-_CLAIM_OUTBOX_ALL_DESTINATIONS = """
+_CLAIM_OUTBOX = """
 WITH candidates AS (
     SELECT tenant_id, message_id
     FROM outbox_messages
@@ -193,11 +193,6 @@ class NullStorageTelemetry:
         del lag_events
 
 
-def _observe_telemetry(callback: Callable[..., None], *args: object) -> None:
-    with suppress(Exception):
-        callback(*args)
-
-
 class PostgresEventStore:
     """Tenant-isolated append-only ledger using PostgreSQL transactions."""
 
@@ -231,14 +226,12 @@ class PostgresEventStore:
                     expected_version=expected_version,
                     outbox=outbox,
                 )
-            _observe_telemetry(
-                self._telemetry.append_completed,
-                len(events),
-                self._monotonic() - started_at,
+            self._telemetry.append_completed(
+                len(events), self._monotonic() - started_at
             )
             return version
         except ConcurrencyError:
-            _observe_telemetry(self._telemetry.append_conflicted)
+            self._telemetry.append_conflicted()
             raise
         except psycopg.Error as error:
             raise classify_storage_error(error) from error
@@ -333,7 +326,7 @@ class PostgresEventStore:
                     await mutation(self._connection)
                 return AppendResult(aggregate_version=version)
         except ConcurrencyError:
-            _observe_telemetry(self._telemetry.append_conflicted)
+            self._telemetry.append_conflicted()
             raise
         except psycopg.Error as error:
             raise classify_storage_error(error) from error
@@ -623,8 +616,7 @@ class PostgresEventStore:
 
         Pass ``destination`` to restrict claiming to a specific outbox queue
         (e.g. ``"aegis.work"`` for the worker publisher). Omit it to claim
-        from all destinations, which is useful for integration tests and
-        general-purpose outbox consumers.
+        from all destinations.
         """
         lease_duration = lease_expires_at - now
         if (
@@ -638,7 +630,7 @@ class PostgresEventStore:
         try:
             async with _tenant_transaction(self._connection, self._lock, context):
                 if destination is not None:
-                    statement = _CLAIM_OUTBOX_ONE_DESTINATION
+                    stmt = _CLAIM_OUTBOX_ONE_DESTINATION
                     params: tuple[object, ...] = (
                         str(context.tenant_id),
                         destination,
@@ -647,14 +639,14 @@ class PostgresEventStore:
                         lease_duration.total_seconds(),
                     )
                 else:
-                    statement = _CLAIM_OUTBOX_ALL_DESTINATIONS
+                    stmt = _CLAIM_OUTBOX
                     params = (
                         str(context.tenant_id),
                         limit,
                         lease_owner,
                         lease_duration.total_seconds(),
                     )
-                cursor = await self._connection.execute(statement, params)
+                cursor = await self._connection.execute(stmt, params)
                 rows = await cursor.fetchall()
         except psycopg.Error as error:
             raise classify_storage_error(error) from error
@@ -682,16 +674,9 @@ class PostgresEventStore:
         message_id: UUID,
         *,
         lease_owner: str,
-        lease_expires_at: datetime,
         published_at: datetime,
     ) -> None:
-        """Mark only the exact current lease as delivered.
-
-        ``lease_expires_at`` acts as a fencing token: if the lease has expired
-        and been reclaimed by another attempt (even with the same owner name),
-        the expiry timestamp will differ and the stale completion will be a
-        no-op that raises ``ConcurrencyError`` instead of silently succeeding.
-        """
+        """Mark only the current lease as delivered."""
         await self._update_outbox_state(
             context,
             """
@@ -700,15 +685,8 @@ class PostgresEventStore:
                 lease_owner = NULL, lease_expires_at = NULL
             WHERE tenant_id = %s AND message_id = %s
               AND status = 'leased' AND lease_owner = %s
-              AND lease_expires_at = %s
             """,
-            (
-                published_at,
-                str(context.tenant_id),
-                message_id,
-                lease_owner,
-                lease_expires_at,
-            ),
+            (published_at, str(context.tenant_id), message_id, lease_owner),
         )
 
     async def mark_outbox_failed(
@@ -717,14 +695,10 @@ class PostgresEventStore:
         message_id: UUID,
         *,
         lease_owner: str,
-        lease_expires_at: datetime,
         retry_at: datetime,
         error_code: str,
     ) -> None:
-        """Release the exact current lease or dead-letter exhausted work.
-
-        ``lease_expires_at`` acts as a fencing token — see ``mark_outbox_published``.
-        """
+        """Release a failed lease or place exhausted work in the DLQ projection."""
         if not error_code or len(error_code) > 128:
             raise ValueError("bounded error_code is required")
         await self._update_outbox_state(
@@ -738,7 +712,6 @@ class PostgresEventStore:
                 lease_owner = NULL, lease_expires_at = NULL
             WHERE tenant_id = %s AND message_id = %s
               AND status = 'leased' AND lease_owner = %s
-              AND lease_expires_at = %s
             """,
             (
                 retry_at,
@@ -746,7 +719,6 @@ class PostgresEventStore:
                 str(context.tenant_id),
                 message_id,
                 lease_owner,
-                lease_expires_at,
             ),
         )
 
@@ -773,7 +745,6 @@ class PostgresProjectionRepository:
     _TABLES: ClassVar[Mapping[str, str]] = {
         "run-status": "run_status_projection",
         "artifact-index": "artifact_index_projection",
-        "model-usage": "model_usage_projection",
         "pending-approvals": "pending_approvals_projection",
         "tenant-listing": "tenant_listing_projection",
         "usage-quota": "usage_quota_projection",
@@ -859,14 +830,6 @@ class PostgresProjectionRepository:
                     (final_position, str(context.tenant_id), projection_name),
                 )
                 return final_position
-        except InvalidOperation as error:
-            raise PermanentStorageError(
-                "projection event payload is invalid"
-            ) from error
-        except ValueError as error:
-            raise PermanentStorageError(
-                "projection event payload is invalid"
-            ) from error
         except ConcurrencyError:
             raise
         except psycopg.Error as error:
@@ -899,8 +862,6 @@ class PostgresProjectionRepository:
             await self._apply_artifact(event)
         elif projection_name == "pending-approvals":
             await self._apply_approval(event)
-        elif projection_name == "model-usage":
-            await self._apply_model_usage(event)
         elif projection_name == "usage-quota":
             await self._apply_usage(event)
         elif projection_name == "tenant-listing":
@@ -960,7 +921,7 @@ class PostgresProjectionRepository:
             """,
             (
                 event.tenant_id,
-                _required_uuid(event.payload, "artifact_id"),
+                UUID(_required_string(event.payload, "artifact_id")),
                 event.aggregate_id,
                 _required_string(event.payload, "artifact_kind"),
                 _required_string(event.payload, "source_reference"),
@@ -983,7 +944,7 @@ class PostgresProjectionRepository:
                 """,
                 (
                     event.tenant_id,
-                    _required_uuid(event.payload, "approval_id"),
+                    UUID(_required_string(event.payload, "approval_id")),
                     event.aggregate_id,
                     _required_string(event.payload, "proposal_reference"),
                     event.occurred_at,
@@ -991,7 +952,6 @@ class PostgresProjectionRepository:
                     event.global_position,
                 ),
             )
-
         elif event_type is DomainEventType.APPROVAL_DECIDED:
             await self._connection.execute(
                 """
@@ -1000,76 +960,16 @@ class PostgresProjectionRepository:
                 """,
                 (
                     event.tenant_id,
-                    _required_uuid(event.payload, "approval_id"),
+                    UUID(_required_string(event.payload, "approval_id")),
                 ),
             )
-
-    async def _apply_model_usage(self, event: EventEnvelope) -> None:
-        if (
-            _domain_event_type(event.event_type)
-            is not DomainEventType.MODEL_USAGE_RECORDED
-        ):
-            return
-        recorded_at = event.recorded_at or event.occurred_at
-        input_tokens = _required_int(event.payload, "input_tokens")
-        output_tokens = _required_int(event.payload, "output_tokens")
-        cache_read_tokens = _required_int(event.payload, "cache_read_tokens")
-        cache_write_tokens = _required_int(event.payload, "cache_write_tokens")
-        reasoning_tokens = _required_int(event.payload, "reasoning_tokens")
-        await self._connection.execute(
-            """
-            INSERT INTO model_usage_projection (
-                tenant_id, request_id, run_id, provider, model, price_version,
-                input_tokens, output_tokens, cache_read_tokens,
-                cache_write_tokens, reasoning_tokens, total_tokens, cost_usd,
-                recorded_at
-            ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-            )
-            ON CONFLICT (tenant_id, request_id) DO UPDATE
-            SET run_id = EXCLUDED.run_id,
-                provider = EXCLUDED.provider,
-                model = EXCLUDED.model,
-                price_version = EXCLUDED.price_version,
-                input_tokens = EXCLUDED.input_tokens,
-                output_tokens = EXCLUDED.output_tokens,
-                cache_read_tokens = EXCLUDED.cache_read_tokens,
-                cache_write_tokens = EXCLUDED.cache_write_tokens,
-                reasoning_tokens = EXCLUDED.reasoning_tokens,
-                total_tokens = EXCLUDED.total_tokens,
-                cost_usd = EXCLUDED.cost_usd,
-                recorded_at = EXCLUDED.recorded_at
-            """,
-            (
-                event.tenant_id,
-                UUID(_required_string(event.payload, "request_id")),
-                UUID(event.aggregate_id),
-                _required_string(event.payload, "provider"),
-                _required_string(event.payload, "model"),
-                _required_string(event.payload, "price_version"),
-                input_tokens,
-                output_tokens,
-                cache_read_tokens,
-                cache_write_tokens,
-                reasoning_tokens,
-                (
-                    input_tokens
-                    + output_tokens
-                    + cache_read_tokens
-                    + cache_write_tokens
-                    + reasoning_tokens
-                ),
-                Decimal(_required_string(event.payload, "cost_usd")),
-                recorded_at,
-            ),
-        )
 
     async def _apply_usage(self, event: EventEnvelope) -> None:
         if _domain_event_type(event.event_type) is not DomainEventType.USAGE_RECORDED:
             return
         period = _required_string(event.payload, "period")
         tokens = _required_int(event.payload, "tokens")
-        cost = _required_decimal(event.payload, "cost_usd")
+        cost = Decimal(_required_string(event.payload, "cost_usd"))
         await self._connection.execute(
             """
             INSERT INTO usage_quota_projection (
@@ -1200,7 +1100,7 @@ def _event_insert_values(
         event.correlation_id,
         event.causation_id,
         event.actor.actor_id if event.actor else None,
-        str(event.actor.kind) if event.actor else None,
+        event.actor.kind.value if event.actor else None,
         event.identity_reference,
         event.policy_reference,
         event.audit_reference,
@@ -1241,9 +1141,6 @@ def _event_from_row(row: Sequence[Any]) -> EventEnvelope:
         audit_reference=row[17],
         idempotency_key=row[18],
         trace_context=trace_context,
-        previous_aggregate_sequence=(
-            int(row[21]) if len(row) > 21 and row[21] is not None else None
-        ),
     )
 
 
@@ -1316,31 +1213,6 @@ def _required_int(payload: Mapping[str, JsonValue], field: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise PermanentStorageError(f"projection event requires non-negative {field}")
     return value
-
-
-def _required_uuid(payload: Mapping[str, JsonValue], field: str) -> UUID:
-    value = _required_string(payload, field)
-    try:
-        return UUID(value)
-    except ValueError as error:
-        raise PermanentStorageError(
-            f"projection event requires uuid {field}"
-        ) from error
-
-
-def _required_decimal(payload: Mapping[str, JsonValue], field: str) -> Decimal:
-    value = _required_string(payload, field)
-    try:
-        decimal_value = Decimal(value)
-    except InvalidOperation as error:
-        raise PermanentStorageError(
-            f"projection event requires finite non-negative {field}"
-        ) from error
-    if not decimal_value.is_finite() or decimal_value < 0:
-        raise PermanentStorageError(
-            f"projection event requires finite non-negative {field}"
-        )
-    return decimal_value
 
 
 __all__ = [

@@ -170,19 +170,32 @@ After startup:
 The imported Keycloak realm has no users and self-registration disabled, so it
 demonstrates the expected configuration shape (issuer, JWKS URL, audience) for
 `RemoteJwksProvider` rather than a ready-to-use login flow. Calling `/v1/me`
-on the module-level demo application returns `503 authentication_not_configured`;
-obtaining a real token and wiring an authentication service through
-`RemoteJwksProvider` is a deployment exercise, not something the fast local
-checks assume works. PostgreSQL initializes all forward migrations. Production
-composition must explicitly inject the PostgreSQL repositories and event store;
-the module-level demo application remains fail-closed and does not invent
-development identities.
+without a bearer token returns `401 missing_token`; obtaining a real token
+against this realm and wiring it through `RemoteJwksProvider` is a deployment
+exercise, not something the fast local checks assume works. PostgreSQL initializes all forward migrations. Production composition must
+explicitly inject the PostgreSQL repositories and event store; the module-level
+demo application remains fail-closed and does not invent development identities.
 
 Stop and remove containers with `docker compose down`. Add `--volumes` only when
 you intentionally want to delete local data.
 
+## Run the Layer 13 synthetic operator UI
+
+```bash
+pnpm --dir frontend install --frozen-lockfile
+pnpm --dir frontend check
+pnpm --dir frontend dev
+```
+
+Open <http://127.0.0.1:5173>. The session and incident are visibly synthetic and use
+no production network, identity, credential, model, connector, or action. To test
+the non-root static image, run
+`docker compose --profile operator-demo up --build operator-ui` and open
+<http://127.0.0.1:4173>. This does not wire live Keycloak login; see
+[operator-ui.md](operator-ui.md).
+
 ## Read next
 
 Read `durable-execution.md`, `worker-runtime.md`, ADR 0010/0011,
-ADR 0014, `failure-modes.md`, and `runbook.md`, then
+ADR 0014, ADR 0021, `operator-ui.md`, `failure-modes.md`, and `runbook.md`, then
 compare roadmap gates with `enterprise-checklist.md`.

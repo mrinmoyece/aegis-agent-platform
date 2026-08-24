@@ -261,13 +261,7 @@ def _normalize(
             "kubernetes_identity_missing",
             retryable=False,
         )
-    observed = _time(
-        _first_timestamp(
-            item.get("lastTimestamp"),
-            item.get("eventTime"),
-            timestamp,
-        )
-    )
+    observed = _time(item.get("lastTimestamp") or item.get("eventTime") or timestamp)
     status = item.get("status")
     status_mapping = status if isinstance(status, Mapping) else {}
     spec = item.get("spec")
@@ -333,13 +327,6 @@ def _time(value: object) -> datetime:
         "kubernetes_timestamp_invalid",
         retryable=False,
     )
-
-
-def _first_timestamp(*values: object) -> object:
-    for value in values:
-        if isinstance(value, str) and value:
-            return value
-    return None
 
 
 def _selector(value: str) -> bool:

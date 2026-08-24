@@ -146,8 +146,8 @@ GRANT SELECT, INSERT ON reasoning_artifact_projection TO aegis_app;
 REVOKE DELETE, TRUNCATE ON agent_run_projection, agent_task_projection,
     reasoning_artifact_projection FROM PUBLIC, aegis_app;
 REVOKE UPDATE ON reasoning_artifact_projection FROM PUBLIC, aegis_app;
-GRANT USAGE ON SCHEMA public TO aegis_maintenance;
 GRANT SELECT, INSERT, UPDATE, DELETE ON agent_run_projection,
     agent_task_projection, reasoning_artifact_projection TO aegis_maintenance;
+GRANT USAGE ON SCHEMA public TO aegis_maintenance;
 
 COMMIT;

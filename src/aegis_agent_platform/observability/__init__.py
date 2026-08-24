@@ -43,7 +43,6 @@ from aegis_agent_platform.observability.replay import (
     ReplayState,
     ReplayValidation,
     SupportReport,
-    SupportReportRangeError,
     SupportReportTooLargeError,
 )
 from aegis_agent_platform.observability.safety import (
@@ -107,7 +106,6 @@ __all__ = [
     "SanitizationStats",
     "SloSummary",
     "SupportReport",
-    "SupportReportRangeError",
     "SupportReportTooLargeError",
     "TelemetryStatus",
     "TraceContextError",

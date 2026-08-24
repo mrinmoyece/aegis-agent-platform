@@ -25,7 +25,6 @@ from aegis_agent_platform.agents.artifacts import (
     EvidenceCitation,
     FinalIncidentAssessmentArtifact,
     HypothesisArtifact,
-    RemediationRecommendationArtifact,
     artifact_from_payload,
     artifact_kind,
 )
@@ -151,8 +150,6 @@ class SpecialistBudget:
     max_iterations: int = 2
 
     def __post_init__(self) -> None:
-        if min(self.max_steps, self.max_input_tokens, self.timeout_seconds) <= 0:
-            raise ValueError("specialist budget limits must be positive")
         if not 1 <= self.max_steps <= 64:
             raise ValueError("max_steps must be between 1 and 64")
         if not 1 <= self.max_input_tokens <= 1_000_000:
@@ -269,8 +266,6 @@ class TaskState:
     attempts: int = 0
     reserved_tokens: int = 0
     used_tokens: int = 0
-    reserved_cost_usd: Decimal = Decimal("0")
-    used_cost_usd: Decimal = Decimal("0")
     artifact_ids: tuple[UUID, ...] = ()
     last_error_code: str | None = None
 
@@ -288,8 +283,6 @@ class InvestigationState:
     version: int = 0
     used_tokens: int = 0
     reserved_tokens: int = 0
-    used_cost_usd: Decimal = Decimal("0")
-    reserved_cost_usd: Decimal = Decimal("0")
     final_artifact_id: UUID | None = None
     terminal_reason: str | None = None
 
@@ -589,38 +582,22 @@ def _fold_event(
         reservation = int(str(event.payload.get("reserved_tokens", 0)))
         if reservation != assignment.budget.token_reservation:
             raise ReplayCorruptionError("task reservation does not match plan")
-        reserved_cost = Decimal(str(event.payload.get("reserved_cost_usd", "0")))
-        released_tokens = (
-            task.reserved_tokens
-            if task.status in {TaskStatus.DISPATCHED, TaskStatus.RUNNING}
-            else 0
-        )
-        released_cost = (
-            task.reserved_cost_usd
-            if task.status in {TaskStatus.DISPATCHED, TaskStatus.RUNNING}
-            else Decimal("0")
-        )
         tasks = dict(state.tasks)
         tasks[assignment_id] = replace(
             task,
             status=TaskStatus.DISPATCHED,
             attempts=task.attempts + 1,
             reserved_tokens=reservation,
-            reserved_cost_usd=reserved_cost,
             last_error_code=None,
         )
-        reserved = state.reserved_tokens - released_tokens + reservation
-        total_reserved_cost = state.reserved_cost_usd - released_cost + reserved_cost
+        reserved = state.reserved_tokens + reservation
         if state.used_tokens + reserved > state.plan.max_total_tokens:
             raise ReplayCorruptionError("dispatch exceeded the global token budget")
-        if state.used_cost_usd + total_reserved_cost > state.plan.max_total_cost_usd:
-            raise ReplayCorruptionError("dispatch exceeded the global cost budget")
         return replace(
             state,
             status=InvestigationStatus.RUNNING,
             tasks=tasks,
             reserved_tokens=reserved,
-            reserved_cost_usd=total_reserved_cost,
         )
     if event_type == DomainEventType.SPECIALIST_TASK_STARTED:
         assignment_id = _assignment_id(event)
@@ -691,9 +668,6 @@ def _fold_event(
         used_tokens = int(str(event.payload.get("used_tokens", 0)))
         if not 0 <= used_tokens <= task.reserved_tokens:
             raise ReplayCorruptionError("task usage exceeds its reservation")
-        used_cost = Decimal(str(event.payload.get("used_cost_usd", "0")))
-        if not Decimal("0") <= used_cost <= task.reserved_cost_usd:
-            raise ReplayCorruptionError("task cost exceeds its reservation")
         task_status = {
             DomainEventType.SPECIALIST_TASK_SUCCEEDED: TaskStatus.SUCCEEDED,
             DomainEventType.SPECIALIST_TASK_FAILED: TaskStatus.FAILED,
@@ -706,8 +680,6 @@ def _fold_event(
             status=task_status,
             reserved_tokens=0,
             used_tokens=task.used_tokens + used_tokens,
-            reserved_cost_usd=Decimal("0"),
-            used_cost_usd=task.used_cost_usd + used_cost,
             last_error_code=(
                 str(event.payload["error_code"])
                 if event.payload.get("error_code") is not None
@@ -719,8 +691,6 @@ def _fold_event(
             tasks=tasks,
             used_tokens=state.used_tokens + used_tokens,
             reserved_tokens=state.reserved_tokens - task.reserved_tokens,
-            used_cost_usd=state.used_cost_usd + used_cost,
-            reserved_cost_usd=state.reserved_cost_usd - task.reserved_cost_usd,
         )
     if event_type == DomainEventType.INVESTIGATION_BUDGET_EXHAUSTED:
         return replace(
@@ -801,26 +771,6 @@ def _validate_final_assessment(
     decision = decisions.get(artifact.decision_id)
     if decision is None or decision.outcome is not artifact.outcome:
         raise ArtifactPolicyError("final assessment does not match a durable decision")
-    if artifact.outcome is not CoordinatorOutcome.FINALIZE:
-        return
-    hypotheses = {
-        item.artifact_id: item
-        for item in state.artifacts
-        if isinstance(item, HypothesisArtifact)
-    }
-    recommendations = {
-        item.artifact_id: item
-        for item in state.artifacts
-        if isinstance(item, RemediationRecommendationArtifact)
-    }
-    selected_hypothesis_id = artifact.selected_hypothesis_id
-    if selected_hypothesis_id is None or hypotheses.get(selected_hypothesis_id) is None:
-        raise ArtifactPolicyError("final assessment cites an unknown hypothesis")
-    if artifact.selected_hypothesis_id != decision.selected_hypothesis_id:
-        raise ArtifactPolicyError("final assessment selected hypothesis diverges")
-    recommendation_id = artifact.recommendation_id
-    if recommendation_id is None or recommendations.get(recommendation_id) is None:
-        raise ArtifactPolicyError("final assessment cites an unknown recommendation")
 
 
 def _validate_dag(

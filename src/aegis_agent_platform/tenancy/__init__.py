@@ -44,11 +44,15 @@ class InMemoryTenantRepository:
     """Deterministic tenant-scoped store; never accepts a payload tenant."""
 
     def __init__(self, tenants: tuple[Tenant, ...]) -> None:
-        self._tenants: dict[TenantId, Tenant] = {}
-        for tenant in tenants:
-            if tenant.tenant_id in self._tenants:
-                raise ValueError("duplicate tenant records are not allowed")
-            self._tenants[tenant.tenant_id] = tenant
+        seen: dict[TenantId, int] = {}
+        for i, tenant in enumerate(tenants):
+            if tenant.tenant_id in seen:
+                raise ValueError(
+                    f"duplicate tenant {tenant.tenant_id!r} at positions "
+                    f"{seen[tenant.tenant_id]} and {i}"
+                )
+            seen[tenant.tenant_id] = i
+        self._tenants = {tenant.tenant_id: tenant for tenant in tenants}
 
     def get(self, context: TenantContext) -> Tenant | None:
         return self._tenants.get(context.tenant_id)

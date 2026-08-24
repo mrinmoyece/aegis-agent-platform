@@ -23,18 +23,12 @@ CREATE TABLE model_budget_reservations (
     created_at timestamptz NOT NULL,
     reconciled_at timestamptz,
     PRIMARY KEY (tenant_id, reservation_id),
+    UNIQUE (tenant_id, request_id),
+    UNIQUE (tenant_id, idempotency_key),
     FOREIGN KEY (tenant_id, work_id)
         REFERENCES work_items (tenant_id, work_id),
     CHECK ((status = 'active') = (reconciled_at IS NULL))
 );
-
-CREATE UNIQUE INDEX model_budget_reservations_request_active_idx
-    ON model_budget_reservations (tenant_id, request_id)
-    WHERE status IN ('active', 'charged');
-
-CREATE UNIQUE INDEX model_budget_reservations_idempotency_active_idx
-    ON model_budget_reservations (tenant_id, idempotency_key)
-    WHERE status IN ('active', 'charged');
 
 CREATE INDEX model_budget_reservations_active_idx
     ON model_budget_reservations (tenant_id, run_id, created_at)

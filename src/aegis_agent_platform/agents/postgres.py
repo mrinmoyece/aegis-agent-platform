@@ -144,16 +144,8 @@ class PostgresAgentRepository(AgentRepository):
         context: TenantContext,
         run_id: UUID,
     ) -> tuple[EventEnvelope, ...]:
-        limit = await self._events.current_version(context, str(run_id))
-        if limit == 0:
-            return ()
         events = [
-            event
-            async for event in self._events.read_stream(
-                context,
-                str(run_id),
-                limit=limit,
-            )
+            event async for event in self._events.read_stream(context, str(run_id))
         ]
         return tuple(events)
 
@@ -460,8 +452,6 @@ async def _apply_projection_events(
     if row is None:
         raise ValueError("agent run projection is missing")
     projection_version = int(row[0])
-    if projection_version != ledger_version:
-        raise ValueError("agent projection ledger version mismatch")
     version = ledger_version
     run_status: InvestigationStatus | None = None
     terminal_reason: str | None = None
@@ -478,22 +468,6 @@ async def _apply_projection_events(
         )
         if event_type is DomainEventType.SPECIALIST_TASK_DISPATCH_REQUESTED:
             assert assignment_id is not None
-            task_cursor = await connection.execute(
-                """
-                SELECT status, reserved_tokens
-                FROM agent_task_projection
-                WHERE tenant_id = %s AND run_id = %s AND assignment_id = %s
-                FOR UPDATE
-                """,
-                (tenant_id, run_id, assignment_id),
-            )
-            task_row = await task_cursor.fetchone()
-            if task_row is None:
-                raise ValueError("agent task projection is missing")
-            previous_status = TaskStatus(str(task_row[0]))
-            previous_reserved_tokens = int(task_row[1])
-            if previous_status in {TaskStatus.DISPATCHED, TaskStatus.RUNNING}:
-                reserved_delta -= previous_reserved_tokens
             reserved_delta += int(str(event.payload["reserved_tokens"]))
             await connection.execute(
                 """
