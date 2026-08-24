@@ -125,12 +125,14 @@ class OfficialKubernetesClient:
                 "kubernetes_collection_invalid",
                 retryable=False,
             )
+        if not all(isinstance(item, dict) for item in items):
+            raise ConnectorError(
+                ConnectorErrorClass.MALFORMED_RESPONSE,
+                "kubernetes_collection_item_invalid",
+                retryable=False,
+            )
         return (
-            tuple(
-                cast(Mapping[str, object], item)
-                for item in items
-                if isinstance(item, dict)
-            ),
+            tuple(cast(Mapping[str, object], item) for item in items),
             cast(str | None, metadata.get("_continue") or metadata.get("continue")),
         )
 

@@ -48,6 +48,11 @@ class QuotaLimits:
             raise ValueError("quota integer limits cannot be negative")
         if self.max_run_cost_usd < 0 or self.max_tenant_cost_usd_per_period < 0:
             raise ValueError("quota cost limits cannot be negative")
+        if (
+            not self.max_run_cost_usd.is_finite()
+            or not self.max_tenant_cost_usd_per_period.is_finite()
+        ):
+            raise ValueError("quota cost limits must be finite")
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,6 +214,14 @@ class InMemoryPolicyRepository:
     """Deterministic policy store for tests and the local API slice."""
 
     def __init__(self, policies: tuple[TenantPolicy, ...]) -> None:
+        seen: dict[TenantId, int] = {}
+        for i, policy in enumerate(policies):
+            if policy.tenant_id in seen:
+                raise ValueError(
+                    f"duplicate policy for tenant {policy.tenant_id!r} at positions "
+                    f"{seen[policy.tenant_id]} and {i}"
+                )
+            seen[policy.tenant_id] = i
         self._policies = {policy.tenant_id: policy for policy in policies}
 
     def get(self, context: TenantContext) -> TenantPolicy | None:

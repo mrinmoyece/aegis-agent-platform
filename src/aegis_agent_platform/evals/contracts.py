@@ -397,10 +397,12 @@ class EvaluationSuite:
         }
         if referenced_fixture_ids != fixture_ids:
             raise ValueError("every governed fixture must be referenced by a case")
-        scenario_case_ids = {
+        scenario_case_ids = [
             case_id for scenario in self.scenarios for case_id in scenario.case_ids
-        }
-        if scenario_case_ids != set(case_ids):
+        ]
+        if set(scenario_case_ids) != set(case_ids) or len(scenario_case_ids) != len(
+            case_ids
+        ):
             raise ValueError("scenarios must cover every case exactly by identifier")
 
     @property

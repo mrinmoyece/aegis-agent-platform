@@ -1,4 +1,4 @@
-const FORMULA_PREFIX = /^[\t\r]*[=+\-@]/;
+const FORMULA_PREFIX = /^[\s]*[=+\-@]/;
 const SENSITIVE_KEY =
   /(authorization|credential|password|private.?key|prompt|secret|token)/i;
 const BEARER_VALUE = /\bBearer\s+\S+/gi;

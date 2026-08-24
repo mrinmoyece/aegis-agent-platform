@@ -137,6 +137,10 @@ class RoleBinding:
                 raise ValueError("expires_at must follow assigned_at")
         if self.revoked_at is not None and self.revoked_at.tzinfo is None:
             raise ValueError("revoked_at must be timezone-aware")
+        if self.role is Role.PLATFORM_ADMIN and self.tenant_id != PLATFORM_TENANT_ID:
+            raise ValueError(
+                "platform_admin role may only be bound to the platform tenant"
+            )
 
     def is_active(self, at: datetime) -> bool:
         """Return whether the binding is active at a caller-supplied time."""

@@ -14,8 +14,19 @@ def main() -> None:
     if not migrations:
         raise SystemExit("at least one SQL migration is required")
     names = [path.name for path in migrations]
-    if names != sorted(names) or len(names) != len(set(names)):
-        raise SystemExit("migration names must be unique and lexically ordered")
+    _migration_pattern = re.compile(r"^(\d{4})_[a-z0-9_]+\.sql$")
+    for name in names:
+        if not _migration_pattern.match(name):
+            raise SystemExit(f"migration name does not match expected pattern: {name}")
+    numbers = [int(_migration_pattern.match(name).group(1)) for name in names]  # type: ignore[union-attr]
+    if len(numbers) != len(set(numbers)):
+        raise SystemExit("migration sequence numbers must be unique")
+    for i, num in enumerate(numbers):
+        if num != i + 1:
+            raise SystemExit(
+                f"migration sequence must be contiguous starting at 0001; "
+                f"got {names[i]!r} at position {i}"
+            )
     schema = "\n".join(path.read_text(encoding="utf-8") for path in migrations).lower()
     required = (
         "create table tenants",
@@ -67,6 +78,19 @@ def main() -> None:
         raise SystemExit("migration controls missing: " + ", ".join(missing))
     if re.search(r"^\s*(?:drop\s+table|truncate)\b", schema, re.MULTILINE):
         raise SystemExit("destructive migration statements are prohibited")
+    _security_reversals = re.compile(
+        r"^\s*(?:"
+        r"drop\s+policy"
+        r"|alter\s+table\s+\S+\s+disable\s+row\s+level\s+security"
+        r"|drop\s+(?:trigger|function)\s+\S+"
+        r")\b",
+        re.MULTILINE,
+    )
+    if _security_reversals.search(schema):
+        raise SystemExit(
+            "security-reversing migration statements are prohibited "
+            "(drop policy, disable rls, drop trigger/function)"
+        )
 
 
 if __name__ == "__main__":

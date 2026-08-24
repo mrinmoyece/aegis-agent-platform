@@ -80,7 +80,13 @@ export class TenantEventPoller {
         return true;
       });
       this.trimSeen();
-      this.cursor = page.next_cursor ?? this.cursor;
+      if (page.next_cursor !== null) {
+        this.cursor = page.next_cursor;
+      } else if (ordered.length > 0) {
+        // End of stream — advance cursor to the last event's source_cursor so
+        // subsequent polls only fetch events added after this point.
+        this.cursor = ordered[ordered.length - 1].source_cursor;
+      }
       this.failures = 0;
       this.onState(page.stale ? 'degraded' : 'connected');
       if (fresh.length > 0) {

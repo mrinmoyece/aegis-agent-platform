@@ -1442,7 +1442,11 @@ class ControlledActionExecutor:
             prepared,
             expected_version=state.version,
         )
-        self._metrics.add("actions_dispatched", action_kind=action.kind)
+        if any(
+            event_type is DomainEventType.ACTION_DISPATCH_CLAIMED
+            for event_type, _, _ in events
+        ):
+            self._metrics.add("actions_dispatched", action_kind=action.kind)
         return await self._state(context, state.plan.plan_id)
 
     async def _state(

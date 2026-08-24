@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -289,13 +290,14 @@ class RemediationApprovalService:
             if approval.status is not ApprovalStatus.PENDING:
                 raise ApprovalDeniedError("approval_is_not_pending")
             if at >= approval.scope.expires_at:
-                await self._append_expired(
-                    principal,
-                    context,
-                    state,
-                    approval,
-                    at=at,
-                )
+                with contextlib.suppress(ConcurrencyError):
+                    await self._append_expired(
+                        principal,
+                        context,
+                        state,
+                        approval,
+                        at=at,
+                    )
                 raise ApprovalDeniedError("approval_expired")
             if (
                 current_policy.tenant_id != state.plan.tenant_id
@@ -622,7 +624,12 @@ class RemediationApprovalService:
             occurred_at=at,
             payload=payload,
             correlation_id=plan.investigation_run_id,
-            actor=ActorReference(principal.actor_id, ActorKind.USER),
+            actor=ActorReference(
+                principal.actor_id,
+                ActorKind.USER
+                if principal.kind is PrincipalKind.USER
+                else ActorKind.SERVICE,
+            ),
             identity_reference=principal.subject,
             policy_reference=plan.approval_policy.digest,
             idempotency_key=idempotency_key,

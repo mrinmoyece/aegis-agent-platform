@@ -75,6 +75,15 @@ class OperatorItem:
         for meta_key, meta_val in self.metadata.items():
             if not isinstance(meta_key, str) or not meta_key or len(meta_key) > 128:
                 raise ValueError("operator item metadata key exceeds length bound")
+            # Only scalar JSON values (string, int/float, bool, None) are permitted.
+            # Nested objects/arrays would be rejected by the OpenAPI JsonValue schema.
+            if meta_val is not None and not isinstance(
+                meta_val, (bool, int, float, str)
+            ):
+                raise ValueError(
+                    "operator item metadata value must be a scalar"
+                    " (string, number, bool, null)"
+                )
             if isinstance(meta_val, str) and len(meta_val) > MAX_OPERATOR_STRING:
                 raise ValueError("operator item metadata string value exceeds bound")
             if isinstance(meta_val, float) and not math.isfinite(meta_val):

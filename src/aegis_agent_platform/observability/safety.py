@@ -168,8 +168,14 @@ def bounded_event_size(value: Mapping[str, object]) -> bool:
     """Conservatively reject an event whose scalar representation is oversized."""
     size = 2
     stack: list[object] = [value]
+    seen: set[int] = set()
     while stack:
         item = stack.pop()
+        item_id = id(item)
+        if isinstance(item, (Mapping, Sequence)) and not isinstance(item, str | bytes):
+            if item_id in seen:
+                return False  # cyclic reference — reject
+            seen.add(item_id)
         if isinstance(item, Mapping):
             size += sum(len(str(key).encode("utf-8")) + 3 for key in item)
             stack.extend(item.values())

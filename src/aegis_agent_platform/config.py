@@ -33,7 +33,7 @@ class Settings:
     redis_url: str = ""
     oidc_issuer: str = ""
     oidc_jwks_url: str = ""
-    oidc_audience: str = "aegis-control-plane"
+    oidc_audience: str = ""
     oidc_clock_skew_seconds: int = 30
     redis_max_connections: int = 32
     redis_connect_timeout_seconds: float = 2.0

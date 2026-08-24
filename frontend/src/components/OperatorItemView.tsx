@@ -41,7 +41,7 @@ export function OperatorItemView({ item, supportMode }: OperatorItemViewProps) {
       <header className="item-card__header">
         <div>
           <p className="eyebrow">{item.kind.replaceAll('-', ' ')}</p>
-          <h3>{item.title}</h3>
+          <h3>{supportMode ? '[REDACTED]' : item.title}</h3>
         </div>
         <StatusBadge status={item.status} severity={item.severity} />
       </header>
@@ -66,11 +66,11 @@ export function OperatorItemView({ item, supportMode }: OperatorItemViewProps) {
           </dd>
         </div>
       </dl>
-      {citation === null ? null : (
+      {!supportMode && citation !== null ? (
         <p className="citation">
           <span aria-hidden="true">↳</span> Source: <code>{citation}</code>
         </p>
-      )}
+      ) : null}
       {Object.keys(item.metadata).length === 0 ? null : (
         <details>
           <summary>Bounded metadata</summary>

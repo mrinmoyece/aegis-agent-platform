@@ -134,4 +134,12 @@ def _link_context(link: TraceLink) -> SpanContext:
     )
 
 
-__all__ = ["RuntimeMetrics", "RuntimeTracer"]
+_SHARED_RUNTIME_METRICS = RuntimeMetrics()
+
+
+def shared_runtime_metrics() -> RuntimeMetrics:
+    """Return the process-global bounded runtime metrics registry."""
+    return _SHARED_RUNTIME_METRICS
+
+
+__all__ = ["RuntimeMetrics", "RuntimeTracer", "shared_runtime_metrics"]

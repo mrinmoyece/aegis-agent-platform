@@ -56,10 +56,7 @@ class GatewayOperations:
                 and identity.model not in policy.allowed_models
             ):
                 continue
-            if (
-                policy.allowed_providers
-                and identity.provider not in policy.allowed_providers
-            ):
+            if identity.provider not in policy.allowed_providers:
                 continue
             result.append(
                 {

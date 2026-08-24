@@ -20,7 +20,7 @@ interface ApprovalDialogProps {
 
 export function ApprovalDialog({
   approval,
-  serverTime: _serverTime, // eslint-disable-line @typescript-eslint/no-unused-vars
+  serverTime,
   onClose,
   onSubmit,
 }: ApprovalDialogProps) {
@@ -28,6 +28,7 @@ export function ApprovalDialog({
   const descriptionId = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const mountClientTimeRef = useRef<number>(Date.now());
   const [decision, setDecision] = useState<'grant' | 'deny'>('grant');
   const [confirmation, setConfirmation] = useState('');
   const [comment, setComment] = useState('');
@@ -41,17 +42,21 @@ export function ApprovalDialog({
   const expectedPhrase = decision === 'grant' ? 'APPROVE' : 'DENY';
   const expiresAt = String(metadata.expires_at ?? '');
   const expiresAtMs = Date.parse(expiresAt);
-  const [remaining, setRemaining] = useState(() =>
-    Number.isFinite(expiresAtMs) ? Math.max(0, expiresAtMs - Date.now()) : 0,
-  );
+  const serverTimeMs = Date.parse(serverTime);
+  const computeRemaining = () => {
+    if (!Number.isFinite(expiresAtMs) || !Number.isFinite(serverTimeMs)) return 0;
+    const elapsed = Date.now() - mountClientTimeRef.current;
+    return Math.max(0, expiresAtMs - (serverTimeMs + elapsed));
+  };
+  const [remaining, setRemaining] = useState(computeRemaining);
 
   useEffect(() => {
-    if (!Number.isFinite(expiresAtMs) || remaining <= 0) return;
+    if (!Number.isFinite(expiresAtMs) || !Number.isFinite(serverTimeMs) || remaining <= 0) return;
     const id = window.setInterval(() => {
-      setRemaining(Math.max(0, expiresAtMs - Date.now()));
+      setRemaining(computeRemaining());
     }, 1_000);
     return () => window.clearInterval(id);
-  }, [expiresAtMs, remaining]);
+  }, [expiresAtMs, serverTimeMs, remaining]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const dialog = dialogRef.current;

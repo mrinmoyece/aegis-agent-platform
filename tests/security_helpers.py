@@ -165,6 +165,8 @@ def tenant_policy() -> TenantPolicy:
         approval_from_risk=RiskLevel.HIGH,
         tools_requiring_approval=frozenset({"remediate"}),
         approver_roles=frozenset({Role.APPROVER}),
+        allowed_providers=frozenset({"mock", "model-safe"}),
+        allowed_data_residencies=frozenset({"eu"}),
         quotas=QuotaLimits(
             max_run_tokens=1_000,
             max_run_cost_usd=Decimal("2.00"),
