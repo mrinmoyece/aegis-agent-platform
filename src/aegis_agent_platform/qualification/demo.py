@@ -299,8 +299,15 @@ async def run_qualification_demo(output_directory: Path) -> Mapping[str, JsonVal
         "support_bundle": {
             "content_digest": support.content_digest,
             "signature_algorithm": support.signature_algorithm,
+            "signature": support.signature,
+            "signer": support.signer,
             "signed": support.signature is not None,
             "redacted_tenant_reference": support.tenant_reference,
+            "aggregate_reference": support.aggregate_reference,
+            "validation_valid": support.validation.valid,
+            "validation_event_count": support.validation.event_count,
+            "state_key_count": len(support.state.event_counts),
+            "causal_chain_length": len(support.causal_chain),
         },
         "assertions": {
             **ordering,

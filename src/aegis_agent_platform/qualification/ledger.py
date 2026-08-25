@@ -240,8 +240,9 @@ class ReadOnlyArchiveEventStore:
             event
             for event in self._events
             if event.tenant_id == str(context.tenant_id)
-            and event.global_position is not None
-            and event.global_position > after_position
+            and (
+                event.global_position is None or event.global_position > after_position
+            )
         )
         page = selected[:limit]
         next_cursor = page[-1].global_position if len(page) == limit else None

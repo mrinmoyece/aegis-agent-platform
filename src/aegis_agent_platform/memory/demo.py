@@ -200,7 +200,7 @@ async def run_demo(
             ),
             "immutable_ledger_retained": len(
                 await ledger.load(
-                    TenantContext(TenantId("tenant-a")),
+                    TenantContext(TenantId(tenant_id)),
                     prior.memory_id,
                 )
             )

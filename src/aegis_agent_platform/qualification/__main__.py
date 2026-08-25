@@ -50,6 +50,13 @@ async def _run(args: argparse.Namespace) -> Mapping[str, JsonValue]:
             p95_budget_ms=args.p95_budget_ms,
         )
         _write(args.output, result)
+        raw_blocking = result.get("blocking_profiles", ())
+        blocking_profiles = raw_blocking if isinstance(raw_blocking, Sequence) else ()
+        if blocking_profiles:
+            raise RuntimeError(
+                "qualification load budget failed for: "
+                + ", ".join(str(p) for p in blocking_profiles)
+            )
     else:
         raise ValueError("unknown qualification command")
     return result

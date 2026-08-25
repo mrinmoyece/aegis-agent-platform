@@ -190,20 +190,17 @@ async def run_load_smoke(
                 "passed": passed,
             }
         )
-    if blocking:
-        raise RuntimeError(
-            "qualification load budget failed for: " + ", ".join(blocking)
-        )
-    return {
+    result: Mapping[str, JsonValue] = {
         "schema_version": 1,
         "profile": "bounded-local-deterministic",
         "environment": "developer-or-ci-host; not normalized production hardware",
         "samples_per_profile": samples,
         "profiles": tuple(results),
         "profile_count": len(results),
-        "blocking_profiles": (),
+        "blocking_profiles": tuple(blocking),
         "production_capacity_claimed": False,
     }
+    return result
 
 
 async def _gateway_profile(index: int) -> object:
