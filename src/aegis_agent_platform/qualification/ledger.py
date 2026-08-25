@@ -240,6 +240,7 @@ class ReadOnlyArchiveEventStore:
             event
             for event in self._events
             if event.tenant_id == str(context.tenant_id)
+            and event.global_position is not None
             and event.global_position > after_position
         )
         page = selected[:limit]
