@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "certification_claimed": false,
+  "scope_statement": "Engineering control mapping only. Organizational, legal, process, live-operation, and independent-audit evidence is outside this repository.",
+  "controls": [
+    {
+      "id": "SOC2-SECURITY-ACCESS",
+      "concept": "Logical access and tenant isolation",
+      "code": ["src/aegis_agent_platform/identity", "migrations/0001_identity_governance.sql"],
+      "tests": ["tests/test_identity_security.py", "tests/integration/test_postgres_storage.py"],
+      "evidence": ["qualification/release-readiness.json"],
+      "missing_live_or_process_evidence": ["IdP lifecycle", "periodic access review", "joiner-mover-leaver records"]
+    },
+    {
+      "id": "SOC2-SECURITY-CHANGE",
+      "concept": "Reviewed change and immutable promotion",
+      "code": [".github/workflows/ci.yml", ".github/workflows/promotion.yml"],
+      "tests": ["scripts/check_manifests.py", "scripts/check_production.py"],
+      "evidence": ["CHANGELOG.md", "docs/repository-governance.md"],
+      "missing_live_or_process_evidence": ["Branch protection", "environment approvals", "signed protected-branch run"]
+    },
+    {
+      "id": "SOC2-AVAILABILITY",
+      "concept": "Durability, recovery, capacity, and incident response",
+      "code": ["src/aegis_agent_platform/event_store", "src/aegis_agent_platform/runtime"],
+      "tests": ["make eval-recovery", "make restore-drill", "make qualification-load"],
+      "evidence": ["qualification/chaos-matrix.json", "qualification/performance-budgets.json"],
+      "missing_live_or_process_evidence": ["Measured SLO/RPO/RTO", "managed failover", "24/7 on-call records"]
+    },
+    {
+      "id": "SOC2-CONFIDENTIALITY",
+      "concept": "Classification, redaction, secret references, and bounded support evidence",
+      "code": ["src/aegis_agent_platform/audit.py", "src/aegis_agent_platform/observability/safety.py"],
+      "tests": ["tests/test_audit_secrets.py", "tests/test_observability.py"],
+      "evidence": ["docs/privacy-and-compliance.md"],
+      "missing_live_or_process_evidence": ["Data inventory", "DLP operations", "key custody", "vendor agreements"]
+    },
+    {
+      "id": "SOC2-AUDIT",
+      "concept": "Append-only audit and replay evidence",
+      "code": ["src/aegis_agent_platform/observability/replay.py", "migrations/0002_durable_ledger.sql"],
+      "tests": ["tests/test_replay_debugger.py", "tests/test_migrations.py"],
+      "evidence": ["make qualification-demo"],
+      "missing_live_or_process_evidence": ["Retention approval", "periodic audit review", "external evidence custody"]
+    },
+    {
+      "id": "SOC2-BACKUP",
+      "concept": "Backup, restore, rebuild, and redrive",
+      "code": ["scripts/restore_drill.sh", "infra/terraform/aws/modules/reference/storage-backup.tf"],
+      "tests": ["make restore-drill", "tests/test_production_foundations.py"],
+      "evidence": ["docs/backup-restore-dr.md"],
+      "missing_live_or_process_evidence": ["Managed PITR", "cross-account/key recovery", "production-volume timing"]
+    },
+    {
+      "id": "ISO27001-ORGANIZATIONAL",
+      "concept": "Policies, ownership, risk, supplier and incident governance",
+      "code": ["AGENTS.md", "CODEOWNERS", "SECURITY.md"],
+      "tests": ["make qualification-check"],
+      "evidence": ["qualification/residual-risks.json", "docs/repository-governance.md"],
+      "missing_live_or_process_evidence": ["Approved ISMS scope", "risk acceptance", "supplier reviews", "training", "management review"]
+    },
+    {
+      "id": "ISO27001-PEOPLE",
+      "concept": "Role separation and privileged operations",
+      "code": ["src/aegis_agent_platform/remediation/approvals.py", "src/aegis_agent_platform/operator/session.py"],
+      "tests": ["tests/test_remediation_approvals.py", "tests/test_operator_api.py"],
+      "evidence": ["docs/operational-acceptance.md"],
+      "missing_live_or_process_evidence": ["Screening", "training", "on-call assignment", "access recertification"]
+    },
+    {
+      "id": "ISO27001-PHYSICAL",
+      "concept": "Hosting and physical controls",
+      "code": ["infra/terraform/aws"],
+      "tests": ["make terraform-check"],
+      "evidence": ["docs/terraform-aws-reference.md"],
+      "missing_live_or_process_evidence": ["Cloud account evidence", "facility and device controls", "provider assurance reports"]
+    },
+    {
+      "id": "ISO27001-TECHNOLOGICAL",
+      "concept": "Secure architecture, cryptography, logging, network, SDLC, and vulnerability controls",
+      "code": ["deploy/kubernetes", ".github/workflows/supply-chain.yml", "security/vulnerability-waivers.yaml"],
+      "tests": ["make production-check", "make dependency-audit", "make kubernetes-check"],
+      "evidence": ["docs/security-assessment.md"],
+      "missing_live_or_process_evidence": ["Live admission/network enforcement", "key rotation", "penetration test", "remediation SLAs"]
+    },
+    {
+      "id": "PRIVACY-LIFECYCLE",
+      "concept": "Purpose, minimization, retention, legal hold, deletion, and export",
+      "code": ["src/aegis_agent_platform/memory/lifecycle.py", "migrations/0009_event_grounded_memory_pgvector.sql"],
+      "tests": ["tests/test_memory_recovery_edges.py", "tests/integration/test_memory_postgres.py"],
+      "evidence": ["docs/privacy-and-compliance.md"],
+      "missing_live_or_process_evidence": ["Legal basis", "data-subject workflow", "backup expiry", "processor inventory", "cross-border assessment"]
+    },
+    {
+      "id": "AI-GOVERNANCE",
+      "concept": "Model risk, provenance, evaluation, human oversight, monitoring, and change control",
+      "code": ["src/aegis_agent_platform/gateway", "src/aegis_agent_platform/evals", "src/aegis_agent_platform/agents"],
+      "tests": ["make evals", "make eval-adversarial", "tests/test_specialist_orchestration.py"],
+      "evidence": ["qualification/framework-parity.json", "docs/security-assessment.md"],
+      "missing_live_or_process_evidence": ["Model inventory approval", "human-label calibration", "live drift", "impact assessment", "independent model-risk review"]
+    }
+  ]
+}

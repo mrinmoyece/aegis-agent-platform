@@ -18,6 +18,10 @@ Layer 10 adds event-grounded memory and derived retrieval. Layer 11 currently
 implements hermetic release gates, governed synthetic datasets, deterministic
 fault injection, baseline/waiver controls, bounded reports, and fail-closed
 optional-live/model-judge configuration.
+Layers 12-15 add safe observability/replay, a derived operator boundary,
+governed MCP/A2A adapters, and production deployment foundations. Layer 16 adds
+integrated local qualification, executable risk/readiness/chaos/load evidence,
+and final claim-boundary checks.
 The system assumes model output, tool output, retrieved
 content, and tenant input can be hostile. Cloud, identity provider, model
 provider, and operator accounts can be compromised. Prompt instructions are
@@ -70,7 +74,7 @@ never trusted as controls.
 | Secret exfiltration | Credentials in prompts or telemetry | Brokered secrets, redaction, content policy | Secret-reference abstraction, redacted `SecretValue`, and audit-detail redaction implemented; only a local environment-variable provider exists, no vault-backed broker |
 | Provider data leakage | Sensitive content retained externally | Provider policy, classification, regional routing | Retention/residency policy and routing implemented; provider account verification and encrypted content artifacts remain planned |
 | Resource exhaustion | Runaway work or noisy tenant | Deadlines, queue backpressure, global and tenant quotas | Worker and provider concurrency, timeouts, request/token limits, circuits, and fenced model budgets implemented |
-| Supply-chain compromise | Malicious build dependency/action | Pinned actions, review, scanning, attestations | Partial |
+| Supply-chain compromise | Malicious build dependency/action | Pinned actions/images, hashed locks, review, scanning, SBOM, attestations, signing/admission policy | Implemented local/CI configuration; protected-branch signing, registry, and live admission remain unproven |
 | Telemetry leakage | Tenant data in labels or traces | Redaction and bounded-cardinality conventions | Runtime/model instruments use fixed names and catalog-bounded provider/model labels without tenant/run/request IDs; backend review remains planned |
 | Evaluation poisoning | Unsafe release passes gates | Synthetic governed datasets, provenance/digests, quarantine, immutable results | Implemented fixture manifest, digest/shape/sensitive-content checks, and quarantine disposition |
 | Baseline or waiver abuse | Regression is normalized or exception silently broadened | Reviewed immutable baseline changes; hard safety non-waivable; exact non-safety case/metric, owner, reason, and expiry | Implemented with complete-passing-run baseline updates and fail-closed expiry |
@@ -376,3 +380,17 @@ quarantine or deny before authority is used.
 Placeholder digests, unqualified process-role bootstrap, scaled-to-zero BFF/
 protocol surfaces, and disabled sandbox execution are deliberate fail-closed
 states. Operators must not remove them merely to obtain a green rollout.
+
+## Layer 16 qualification residual risk
+
+The integrated runner proves local composition, intent ordering, cited evidence,
+tenant-bound policy, approval ambiguity/reconciliation, quarantine, replay, and
+projection convergence using deterministic fakes. It also validates the final
+risk/readiness/control manifests and removes the avoidable base-image waiver.
+
+It does not add runtime authority or reduce any Layer 15 residual risk. The
+canonical residual-risk register is
+`qualification/residual-risks.json`; open live gates include branch protection,
+identity, sandbox/egress, providers/connectors, PKI/federation, cloud apply,
+managed recovery, production capacity/SLO/on-call evidence, independent
+assessment, privacy process, and certification.

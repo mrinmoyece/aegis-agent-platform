@@ -2,8 +2,9 @@
 
 ## Supported versions
 
-Aegis is pre-release learning software and is not supported for production
-deployment. Security fixes are applied to the default branch only.
+Aegis is pre-release learning/reference software and is not certified or
+supported for production deployment. Security fixes are applied to the default
+branch only.
 
 ## Reporting a vulnerability
 
@@ -21,7 +22,15 @@ and disclosure depend on severity and project maturity.
 
 ## Scope warning
 
-Layer 1 provides architecture and local-development scaffolding. It does not
-implement authorization, tenant isolation, sandboxing, audit retention, or
-durable execution. The local credentials in `.env.example` are intentionally
-unsafe outside an isolated workstation.
+Layer 16 locally qualifies implemented authorization, tenant isolation, durable
+execution, provider/evidence/agent/remediation/sandbox/memory/protocol
+boundaries, replay, and deployment configuration. It does not prove live
+identity, cloud/cluster/sandbox/egress enforcement, provider/partner behavior,
+managed recovery, production SLOs/capacity, 24/7 operations, independent
+penetration testing, or compliance. The local credentials in `.env.example` and
+all deterministic fakes are intentionally unsafe outside an isolated
+workstation.
+
+See `docs/security-assessment.md` and
+`qualification/residual-risks.json` for the current executable assessment and
+open gates.

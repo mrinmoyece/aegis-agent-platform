@@ -1,0 +1,251 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-08-14",
+  "production_ready": false,
+  "certification_claimed": false,
+  "status_definitions": {
+    "Implemented": "Code or configuration exists but this manifest does not assert an execution result.",
+    "Locally Verified": "Deterministic local or CI evidence passed on bounded fixtures.",
+    "Environment-Gated": "Code fails closed until deployment-specific controls are supplied and verified.",
+    "Live Evidence Required": "A production-like or live control must be exercised before go-live.",
+    "Deferred/Not Claimed": "The capability is intentionally absent or outside the current qualification claim."
+  },
+  "categories": [
+    {
+      "id": "architecture",
+      "owner": "platform-architecture",
+      "status": "Locally Verified",
+      "evidence_commands": ["make qualification-check", "make check"],
+      "blockers": [],
+      "rollback_criteria": "Any invariant, replay, or package-boundary failure blocks release."
+    },
+    {
+      "id": "security",
+      "owner": "platform-security",
+      "status": "Locally Verified",
+      "evidence_commands": ["make eval-adversarial", "make qualification-check", "make dependency-audit"],
+      "blockers": ["Independent penetration test and live identity/egress qualification are absent."],
+      "rollback_criteria": "Any hard-safety, secret, cross-tenant, or unwaived HIGH/CRITICAL finding blocks release."
+    },
+    {
+      "id": "identity",
+      "owner": "identity-platform",
+      "status": "Environment-Gated",
+      "evidence_commands": ["python -m pytest tests/test_identity_security.py tests/test_api.py"],
+      "blockers": ["Live OIDC exchange, JWKS rotation, logout, and emergency revocation are unproven."],
+      "rollback_criteria": "Issuer, audience, key rotation, session revocation, or tenant binding failure."
+    },
+    {
+      "id": "tenancy",
+      "owner": "data-platform",
+      "status": "Locally Verified",
+      "evidence_commands": ["make integration-test", "make migration-check"],
+      "blockers": ["Production role and RLS configuration require environment evidence."],
+      "rollback_criteria": "Any cross-tenant row, cache, protocol, UI, audit, or telemetry disclosure."
+    },
+    {
+      "id": "reliability",
+      "owner": "runtime",
+      "status": "Locally Verified",
+      "evidence_commands": ["make eval-recovery", "make qualification-chaos"],
+      "blockers": ["Live dependency failover and sustained soak evidence are absent."],
+      "rollback_criteria": "Ledger divergence, unauthorized stale effect, unbounded duplicate, or lost audit."
+    },
+    {
+      "id": "data",
+      "owner": "data-platform",
+      "status": "Locally Verified",
+      "evidence_commands": ["make migration-check", "make restore-drill"],
+      "blockers": ["Managed PITR, key recovery, archive expiry, and production-volume restore are unmeasured."],
+      "rollback_criteria": "Sequence/hash mismatch, failed RLS, failed migration window, or unrebuildable projection."
+    },
+    {
+      "id": "model-safety",
+      "owner": "ai-platform",
+      "status": "Locally Verified",
+      "evidence_commands": ["make eval-adversarial", "python -m pytest tests/test_model_gateway.py"],
+      "blockers": ["Live provider retention, residency, billing reconciliation, quality, and latency are unproven."],
+      "rollback_criteria": "Budget bypass, schema coercion, unsafe tool call, raw-content persistence, or unbounded retry."
+    },
+    {
+      "id": "connectors",
+      "owner": "integrations",
+      "status": "Locally Verified",
+      "evidence_commands": ["python -m pytest tests/test_evidence.py tests/test_evidence_adapters.py"],
+      "blockers": ["External account scopes, egress, TLS, pagination scale, rotation, and source SLAs are unqualified."],
+      "rollback_criteria": "Read without intent, cursor regression, provenance loss, or partial result labeled success."
+    },
+    {
+      "id": "agents",
+      "owner": "incident-automation",
+      "status": "Locally Verified",
+      "evidence_commands": ["make qualification-demo", "python -m pytest tests/test_specialist_orchestration.py"],
+      "blockers": ["Live semantic quality and human-label calibration remain required."],
+      "rollback_criteria": "Coordinator ownership loss, role escalation, uncited claim, critic bypass, or nondeterministic fold."
+    },
+    {
+      "id": "approvals-actions",
+      "owner": "change-management",
+      "status": "Locally Verified",
+      "evidence_commands": ["python -m pytest tests/test_remediation_approvals.py tests/test_remediation_execution.py", "make qualification-demo"],
+      "blockers": ["Live credential brokerage, target semantics, and operator process evidence are absent."],
+      "rollback_criteria": "Stale/forged approval, SoD failure, missing intent, blind retry, or false verification."
+    },
+    {
+      "id": "sandbox",
+      "owner": "sandbox-platform",
+      "status": "Environment-Gated",
+      "evidence_commands": ["python -m pytest tests/test_sandbox_execution.py tests/test_sandbox_workspace.py", "make qualification-chaos"],
+      "blockers": ["RuntimeClass, CNI/egress, admission, PID, artifact driver, scanner, and quarantine operations are unverified live."],
+      "rollback_criteria": "Any isolation prerequisite missing, policy drift, orphan without reconciliation, or unsafe artifact release."
+    },
+    {
+      "id": "memory",
+      "owner": "ai-platform",
+      "status": "Locally Verified",
+      "evidence_commands": ["python -m pytest tests/test_memory.py tests/test_memory_recovery_edges.py", "make eval-integration"],
+      "blockers": ["Production embeddings, erasable encrypted blobs, external scanning, cache fleet, and backup deletion are unqualified."],
+      "rollback_criteria": "Cross-tenant retrieval, uncited compaction, poisoned promotion, legal-hold violation, or failed purge."
+    },
+    {
+      "id": "evals",
+      "owner": "quality-engineering",
+      "status": "Locally Verified",
+      "evidence_commands": ["make evals", "make eval-adversarial eval-recovery eval-meta"],
+      "blockers": ["Live/statistical provider qualification and independent human labeling are absent."],
+      "rollback_criteria": "Hard-safety regression, fixture drift, nondeterministic replay, invalid baseline, or waiver abuse."
+    },
+    {
+      "id": "observability-slo",
+      "owner": "sre",
+      "status": "Environment-Gated",
+      "evidence_commands": ["make observability-check", "python -m pytest tests/test_observability.py"],
+      "blockers": ["Managed backends, long-window SLI history, paging, and attained SLOs are unproven."],
+      "rollback_criteria": "Correctness depends on telemetry, secrets leak, cardinality is unbounded, or safety alert is absent."
+    },
+    {
+      "id": "operator-ui",
+      "owner": "operator-experience",
+      "status": "Locally Verified",
+      "evidence_commands": ["make frontend-check", "make frontend-e2e", "make frontend-audit"],
+      "blockers": ["Live OIDC/session deployment and supported browser/assistive-technology qualification are absent."],
+      "rollback_criteria": "Server authorization bypass, XSS/CSRF, tenant cache bleed, stale approval, or ambiguity rendered success."
+    },
+    {
+      "id": "mcp-a2a",
+      "owner": "protocols",
+      "status": "Locally Verified",
+      "evidence_commands": ["make protocol-check", "make qualification-demo"],
+      "blockers": ["Production PKI, token brokerage, partner identity, federation, and conformance evidence are absent."],
+      "rollback_criteria": "Capability escalation, card drift acceptance, replay, SSRF, tenant mismatch, or remediation bypass."
+    },
+    {
+      "id": "supply-chain",
+      "owner": "platform-security",
+      "status": "Environment-Gated",
+      "evidence_commands": ["make production-check", "make dependency-audit", "make license-check"],
+      "blockers": ["Protected-branch publish, keyless signing, registry admission, and immutable promotion are unproven on this PR."],
+      "rollback_criteria": "Mutable dependency, unpinned action/image, secret finding, invalid SBOM/provenance, or unwaived fixable HIGH/CRITICAL."
+    },
+    {
+      "id": "deployment",
+      "owner": "platform-engineering",
+      "status": "Environment-Gated",
+      "evidence_commands": ["make kubernetes-check", "make terraform-check", "make compose-config"],
+      "blockers": ["Real image digests, cloud apply, cluster prerequisites, egress, identities, controllers, and GitOps rollout are absent."],
+      "rollback_criteria": "Readiness prerequisite fails, schema window breaks, unsigned image is admitted, or rollback cannot preserve ledger truth."
+    },
+    {
+      "id": "ha-dr",
+      "owner": "sre",
+      "status": "Live Evidence Required",
+      "evidence_commands": ["make restore-drill"],
+      "blockers": ["Managed PITR, cross-account/key restore, failover, and measured RPO/RTO are absent."],
+      "rollback_criteria": "Restore integrity, fencing, projection rebuild, redrive, rotation, or smoke approval fails."
+    },
+    {
+      "id": "multi-region",
+      "owner": "sre",
+      "status": "Deferred/Not Claimed",
+      "evidence_commands": ["python -m pytest tests/test_production_foundations.py -k writer"],
+      "blockers": ["No live regional deployment or traffic/database fencing drill exists; active-active writes are out of scope."],
+      "rollback_criteria": "Old-region fence cannot be proven before traffic shift."
+    },
+    {
+      "id": "performance",
+      "owner": "performance-engineering",
+      "status": "Locally Verified",
+      "evidence_commands": ["make qualification-load"],
+      "blockers": ["Results are bounded local smoke only; production topology, volume, skew, soak, and cost are unmeasured."],
+      "rollback_criteria": "CI p95 budget, error-rate threshold, correctness assertion, or resource bound fails."
+    },
+    {
+      "id": "compliance",
+      "owner": "governance-risk-compliance",
+      "status": "Live Evidence Required",
+      "evidence_commands": ["make qualification-check"],
+      "blockers": ["Organizational scope, policies, training, access reviews, evidence retention, legal review, and independent audit are absent."],
+      "rollback_criteria": "Certification language appears without an authorized independent assessment."
+    },
+    {
+      "id": "operations",
+      "owner": "sre",
+      "status": "Environment-Gated",
+      "evidence_commands": ["make qualification-check", "make restore-drill"],
+      "blockers": ["Named responders, paging, 24/7 coverage, live drills, tenant lifecycle, and partner operations are unproven."],
+      "rollback_criteria": "No safe command, signal, owner, escalation, or rollback exists for a go-live gate."
+    },
+    {
+      "id": "governance",
+      "owner": "maintainers",
+      "status": "Live Evidence Required",
+      "evidence_commands": ["make qualification-check"],
+      "blockers": ["The default branch currently has no GitHub branch protection or repository ruleset."],
+      "rollback_criteria": "Required review/check/signing policy is absent or bypassed."
+    }
+  ],
+  "hard_go_live_gates": [
+    {
+      "id": "branch-protection",
+      "owner": "maintainers",
+      "evidence_command": "gh api repos/mrinmoyece/aegis-agent-platform/branches/master/protection",
+      "required_status": "Live Evidence Required",
+      "rollback_criteria": "Do not promote if required reviews and checks are not enforced."
+    },
+    {
+      "id": "live-identity",
+      "owner": "identity-platform",
+      "evidence_command": "runbook://operational-acceptance#identity-and-key-rotation",
+      "required_status": "Live Evidence Required",
+      "rollback_criteria": "Disable login and revoke sessions if issuer, key rotation, or tenant binding fails."
+    },
+    {
+      "id": "managed-restore",
+      "owner": "sre",
+      "evidence_command": "runbook://operational-acceptance#backup-restore-and-disaster",
+      "required_status": "Live Evidence Required",
+      "rollback_criteria": "Remain unavailable on any count, hash, sequence, key, fence, or rebuild mismatch."
+    },
+    {
+      "id": "sandbox-enforcement",
+      "owner": "sandbox-platform",
+      "evidence_command": "python scripts/verify_cluster_prerequisites.py --help",
+      "required_status": "Live Evidence Required",
+      "rollback_criteria": "Scale sandbox execution to zero when any admission/runtime/network prerequisite is unverified."
+    },
+    {
+      "id": "live-slo-capacity",
+      "owner": "sre",
+      "evidence_command": "runbook://operational-acceptance#capacity-and-slo-acceptance",
+      "required_status": "Live Evidence Required",
+      "rollback_criteria": "Halt rollout on burn, queue, database, provider, or resource saturation."
+    },
+    {
+      "id": "signed-promotion",
+      "owner": "platform-security",
+      "evidence_command": "workflow://supply-chain/publish",
+      "required_status": "Live Evidence Required",
+      "rollback_criteria": "No unsigned, unattested, unscanned, mutable, or unmirrored digest may deploy."
+    }
+  ]
+}

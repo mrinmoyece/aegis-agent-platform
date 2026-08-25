@@ -152,12 +152,13 @@ def canonical_protocol_peer(
     *,
     capabilities: tuple[ProtocolCapability, ...] | None = None,
     status: ProtocolPeerStatus = ProtocolPeerStatus.ACTIVE,
+    tenant_id: str = "tenant-alpha",
 ) -> ProtocolPeer:
     selected = capabilities or canonical_protocol_capabilities()
     marker = f"aegis-{family.value}-deterministic-v1"
     return ProtocolPeer(
         f"peer-{family.value}-deterministic",
-        "tenant-alpha",
+        tenant_id,
         family,
         "Aegis deterministic fixtures",
         "local-test",

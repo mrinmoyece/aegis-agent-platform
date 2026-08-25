@@ -14,7 +14,7 @@ deployments, Kubernetes/runtime changes, and runbooks. This narrow story makes
 durability, evidence provenance, authorization, and safe effects testable end
 to end.
 
-> **Current status: Layer 15 - Production deployment foundations.** Layers 1-4 add
+> **Current status: Layer 16 - Final local enterprise qualification.** Layers 1-4 add
 > tenant-bound work events, a crash-reconcilable PostgreSQL outbox publisher,
 > Redis Streams consumer groups, inbox deduplication, PostgreSQL renewable
 > leases and fencing, fair bounded supervision, quota enforcement, cancellation,
@@ -63,7 +63,12 @@ to end.
 > policy, immutable digest promotion, SPDX/provenance/keyless signing workflows,
 > additive migration/retention/writer-fence contracts, HA/capacity and single-writer
 > regional design, deterministic deployment evals, and an isolated restore/rebuild/
-> Redis-loss drill. The catalog now contains 119 cases. These are
+> Redis-loss drill. Layer 16 composes the implemented boundaries into one
+> authenticated, shared-tenant, no-network checkout journey; exports and verifies
+> the complete redacted event streams; proves deterministic projection rebuild;
+> runs bounded chaos/load smoke; and validates readiness, residual-risk,
+> compliance, operational, learning, governance, and future-framework parity
+> manifests. These are
 > configured and locally validated controls, not evidence of production SLO
 > attainment. Managed bootstrap is implemented for API, publisher, and reconciler;
 > workers/BFF/protocol execution remains fail-closed at zero. Live model/connector and
@@ -72,7 +77,7 @@ to end.
 > production identity/browser qualification, public protocol federation and PKI/
 > token-broker qualification, external managed backends,
 > 24/7 on-call evidence, live cloud/cluster apply, measured HA/DR/RPO/RTO,
-> multi-region operation, compliance certification, and final
+> multi-region operation, compliance certification, and full-scale/live
 > load/chaos certification remain deferred. See
 > [Limitations and production gaps](docs/limitations.md) for the complete,
 > honest gap list.
@@ -109,7 +114,7 @@ to end.
    isolation, exact approval, artifacts, and cleanup.
 10. **Memory and retrieval:** event-grounded three-tier memory,
     provenance-preserving pgvector RAG, cited compaction, and privacy lifecycle.
-11. **Evaluation (current):** deterministic release gates, governed synthetic
+11. **Evaluation:** deterministic release gates, governed synthetic
     datasets, fault injection, baselines, waivers, and bounded reports.
 12. **Observability and enterprise operations:** production signals, resilience,
     governance, and deployment evidence.
@@ -117,6 +122,11 @@ to end.
     mutation review, accessibility, and browser security.
 14. **MCP and A2A boundaries:** governed tool/context and external-agent
     interoperability without replacing ledger-mediated orchestration.
+15. **Production foundations:** Kustomize, Terraform, supply chain, migration,
+    restore, capacity, and single-writer regional controls.
+16. **Final qualification:** one replayable checkout journey, cross-layer
+    invariants, adversarial/recovery/load gates, readiness evidence, operational
+    acceptance, and explicit live blockers.
 
 Across these layers the checkout-failure demo grows from fixture-backed evidence
 to durable investigation, approval-gated rollback, recovery verification, and
@@ -172,6 +182,7 @@ python -m aegis_agent_platform.protocols artifact-exchange
 make eval-adversarial
 make eval-recovery
 make eval-baseline
+make qualification
 ```
 
 These commands perform no live network call. The remediation demo executes only
@@ -206,6 +217,8 @@ timeline correlation, webhook security requirements, and connector extension.
 suite, fault cuts, governance, gates, reports, CLI, and explicit live gaps.
 [MCP and A2A interoperability](docs/protocols.md) covers protocol compatibility,
 trust, lifecycle, security, operations, and production-readiness gaps.
+[Layer 16 final qualification](docs/final-qualification.md) is the canonical
+end-to-end demonstration and evidence index.
 
 ## Repository map
 
@@ -220,6 +233,7 @@ src/aegis_agent_platform/  Importable platform boundaries
   gateway/                 Catalog, routing, budgets, resilience, and metering
   providers/               Neutral protocol plus OpenAI/Anthropic/mock adapters
   evals/                   Layer 11/12 contracts, catalog, gates, and reporting
+  qualification/           Layer 16 replay, chaos, load, and readiness evidence
   protocols/               Governed protocol registry, security, ledger, and demos
   persistence/             PostgreSQL identity/governance repositories
 evals/                     Governed fixtures, dataset, baseline, and waivers

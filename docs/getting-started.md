@@ -199,6 +199,18 @@ the non-root static image, run
 <http://127.0.0.1:4173>. This does not wire live Keycloak login; see
 [operator-ui.md](operator-ui.md).
 
+## Run the Layer 16 integrated qualification
+
+```bash
+make qualification
+```
+
+Start with `.aegis-qualification/demo/checkout-qualification-result.json`.
+Confirm every assertion is true, the archive chain is valid, and the projection
+digests match. Then inspect the chaos and load JSON. These results qualify
+bounded local fixtures only; use
+[the final qualification guide](final-qualification.md) for the live gates.
+
 ## Read next
 
 Read `durable-execution.md`, `worker-runtime.md`, ADR 0010/0011,

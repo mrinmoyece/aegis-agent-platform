@@ -33,8 +33,11 @@ coordination, safe effects, evaluation, and operations.
 > UX, accessibility/security/supply-chain gates, and six operator invariants.
 > Layer 14 implements governed MCP tool/context and A2A external-agent
 > boundaries, digest-pinned trust, durable reconciliation, deterministic demos,
-> and eight protocol invariants. Production federation and PKI remain unverified.
-> Live identity/browser environments and production operations remain unverified.
+> and eight protocol invariants. Layer 15 adds production deployment foundations.
+> Layer 16 adds the canonical integrated checkout qualification, replayable event
+> export, deterministic chaos/load smoke, final risk/readiness/operations
+> evidence, and a consolidated learning path. Production federation, PKI,
+> identity/browser environments, and operations remain unverified.
 
 The curriculum is backed by the concrete delivery slices and acceptance
 evidence in `enterprise-implementation-plan.md`; the roadmap is not merely a
@@ -49,7 +52,7 @@ Implemented only when its document links executable code and tests.
 | Module and planned document | Staff-level learning outcomes | Layer | Status/evidence |
 | --- | --- | --- | --- |
 | System overview and elevator pitch (`README.md`, this document) | Frame the product, users, trust boundaries, and non-goals in two minutes | 1 | Documented |
-| Canonical incident and demo scripts (`demo-script.md`) | Narrate evidence-to-verification without overstating automation | 1–8 | Foundation script documented |
+| Canonical incident and demo scripts (`demo-script.md`, `final-qualification.md`) | Execute and narrate evidence-to-verification without overstating automation | 1–16 | Integrated local qualification implemented |
 | Architecture walkthrough (`architecture.md`) | Explain control/data planes, boundaries, authoritative state, and trust crossings | 1 | Documented; architecture tests |
 | Multi-agent workflow and artifacts (`architecture.md`, ADR 0008/0014) | Defend fixed roles, DAG scheduling, ledger communication, critique, and bounded authority | 7 | Implemented; unit/live-Postgres tests and fake evals |
 | Durable execution and event sourcing (`durable-execution.md`) | Design replay, additive schemas, projections, crash recovery, and intent-before-effect | 3 | Implemented persistence mechanics; ADR 0002/0010 and live PostgreSQL tests |
@@ -62,15 +65,16 @@ Implemented only when its document links executable code and tests.
 | Evidence connectors and correlation (`evidence-connectors.md`) | Translate Dynatrace, GitHub, Kubernetes, and runbooks into stable evidence; preserve provenance, partial results, ambiguity, and conflict | 6 | Implemented with mocked transports; live environments unverified |
 | Agent and tool protocols (`protocols.md`, ADR 0022) | Distinguish internal correctness ports, MCP adapters, and external A2A interoperability | 14 | Implemented deterministic/local; production federation deferred |
 | Evaluation strategy (`evaluation.md`, ADR 0018) | Separate hermetic CI, integration, live/statistical qualification, and production evidence; govern datasets, gates, waivers, judges, reports, and lifecycle | 11 | Implemented deterministic suite/CLI; optional-live boundary limited and no production qualification |
-| Observability and SLOs (`observability-and-slos.md`) | Correlate events/traces safely, select SLIs, control cardinality, and operate alerting | 12 | Local topology scaffolded; production layer planned |
-| Threat model (`threat-model.md`) | Analyze tenant, evidence, model, swarm, tool, memory, sandbox, provider, evaluation, and supply-chain threats | 1–11 | Layer 11 evaluation controls and environment gaps documented |
-| Failure modes and runbooks (`failure-modes.md`, `runbook.md`) | Diagnose crashes, stale leases, partial effects, provider faults, poisoned memory/evidence/evaluation data, and regional failure | 3–12 | Runtime and Layer 11 evaluation responses documented; regional sections planned |
+| Observability and SLOs (`observability-and-slos.md`) | Correlate events/traces safely, select SLIs, control cardinality, and operate alerting | 12–16 | Local/config evidence; production attainment unproven |
+| Threat model (`threat-model.md`, `security-assessment.md`) | Analyze tenant, evidence, model, swarm, tool, memory, sandbox, provider, evaluation, protocol, deployment, and supply-chain threats | 1–16 | Executable local assessment; independent/live review gaps explicit |
+| Failure modes and runbooks (`failure-modes.md`, `runbook.md`, `operational-acceptance.md`) | Diagnose crashes, stale leases, partial effects, provider faults, poisoned memory/evidence/evaluation data, regional failure, and launch operations | 3–16 | Deterministic matrix and local drills implemented; live operations gated |
 | Scaling and multi-region (`scaling-and-multi-region.md`) | Estimate capacity, partition tenants, preserve ordering, and choose recovery objectives | 15 | Design and deterministic fencing evidence; live load/failover deferred |
 | Privacy, retention, and compliance (`privacy-and-compliance.md`) | Classify data, minimize collection, enforce deletion/legal hold, and produce evidence | 15 | Control mapping scaffolded; no certification |
 | Deployment and supply chain (`deployment-and-supply-chain.md`) | Build least-privilege releases with SBOM, provenance, signing, promotion, and rollback | 15 | CI/config implemented; live admission/GitOps deferred |
-| Alternatives and ADR index (`adr/README.md`) | Compare orchestration, queues, identity, sandbox, provider, evaluation, and deployment choices | 1–15 | Documented through ADR 0026 |
-| Interview question bank (`interview-question-bank.md`) | Communicate tradeoffs and defend design under follow-up pressure | 1–11 | Layer 11 release-evidence boundary questions documented |
-| Hands-on labs (`labs.md`) | Turn each invariant into executable evidence and inject realistic failures | 1–12 | Layers 1–11 deterministic labs runnable |
+| Alternatives and ADR index (`adr/README.md`) | Compare orchestration, queues, identity, sandbox, provider, evaluation, deployment, qualification, and framework choices | 1–16 | Documented through ADR 0027 |
+| Interview question bank (`interview-question-bank.md`) | Communicate tradeoffs and defend design under follow-up pressure | 1–16 | Staff/Principal answers through final qualification |
+| Hands-on labs (`labs.md`) | Turn each invariant into executable evidence and inject realistic failures | 1–16 | Final qualification, chaos, replay, and risk labs runnable |
+| Start-to-expert path (`learning-path.md`) | Traverse every layer through invariants, source, tests, failures, and tradeoffs | 16 | Consolidated |
 | Terminology (`glossary.md`) | Use durability, evidence, tenancy, evaluation, and operations terms precisely | 1 | Documented |
 | Limitations and production gaps (`limitations.md`) | State what is absent, unsafe, local-only, or not yet proven | Every layer | Documented and maintained |
 
@@ -131,3 +135,14 @@ Use [Kubernetes deployment](kubernetes-deployment.md),
 [Terraform AWS reference](terraform-aws-reference.md),
 [database lifecycle](database-lifecycle.md), and
 [backup/restore/DR](backup-restore-dr.md).
+
+## Layer 16 learning outcomes
+
+Learners can execute the full local checkout journey, distinguish subsystem
+event truth from the derived qualification archive, prove replay/projection
+convergence, read p50/p95/p99 without extrapolating local results, map chaos cuts
+to alerts/runbooks, defend residual risks and hard go-live gates, separate
+engineering control mappings from certification, and compare a future framework
+implementation against measurable parity. Use
+[the start-to-expert path](learning-path.md) and
+[final qualification](final-qualification.md).

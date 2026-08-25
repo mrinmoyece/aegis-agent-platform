@@ -40,6 +40,7 @@ data/
 logs/
 .aegis-evals/
 .aegis-evidence/
+.aegis-qualification/
 .terraform/
 *.tfstate
 *.tfstate.*

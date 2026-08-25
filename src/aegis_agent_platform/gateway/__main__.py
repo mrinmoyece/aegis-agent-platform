@@ -5,12 +5,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from aegis_agent_platform.config import Environment
 from aegis_agent_platform.domain import (
+    EventEnvelope,
     FinishReason,
     MessageRole,
     ModelCapabilities,
@@ -38,20 +40,24 @@ from aegis_agent_platform.tenancy import TenantContext
 
 _TENANT = TenantId("diagnostic-local")
 _RUN_ID = UUID("00000000-0000-4000-8000-000000000001")
-_REQUEST_ID = UUID("00000000-0000-4000-8000-000000000002")
-_LEASE_TOKEN = UUID("00000000-0000-4000-8000-000000000003")
-_RESERVATION_EVENT = UUID("00000000-0000-4000-8000-000000000004")
 _NOW = datetime(2026, 1, 1, tzinfo=UTC)
 _MODEL = ModelIdentity("mock", "aegis-diagnostic-v1")
 
 
-async def run_mock_diagnostic(prompt: str) -> dict[str, object]:
+async def run_mock_diagnostic(
+    prompt: str,
+    *,
+    tenant_id: str = _TENANT.value,
+    run_id: UUID = _RUN_ID,
+    event_sink: Callable[[tuple[EventEnvelope, ...]], None] | None = None,
+) -> dict[str, object]:
     if not prompt or len(prompt) > 1_000:
         raise ValueError("diagnostic prompt must contain 1 to 1000 characters")
+    tenant = TenantId(tenant_id)
     request = ModelRequest(
-        request_id=_REQUEST_ID,
-        tenant_id=str(_TENANT),
-        run_id=_RUN_ID,
+        request_id=_id(run_id, "request"),
+        tenant_id=str(tenant),
+        run_id=run_id,
         messages=(ModelMessage(MessageRole.USER, (TextPart(prompt),)),),
         max_output_tokens=64,
         prompt_token_estimate=max(1, len(prompt) // 4),
@@ -92,9 +98,9 @@ async def run_mock_diagnostic(prompt: str) -> dict[str, object]:
         latency_rank=0,
     )
     lease = WorkLease(
-        work_id=_RUN_ID,
-        tenant_id=str(_TENANT),
-        token=_LEASE_TOKEN,
+        work_id=run_id,
+        tenant_id=str(tenant),
+        token=_id(run_id, "lease"),
         generation=1,
         owner="diagnostic",
         attempt=1,
@@ -104,7 +110,7 @@ async def run_mock_diagnostic(prompt: str) -> dict[str, object]:
     )
     repository = InMemoryGatewayRepository(
         (lease,),
-        uuid_factory=lambda: _RESERVATION_EVENT,
+        uuid_factory=lambda: _id(run_id, "reservation"),
     )
     catalog = ModelCatalog((entry,))
     controls = ProviderControls(
@@ -125,7 +131,7 @@ async def run_mock_diagnostic(prompt: str) -> dict[str, object]:
         clock=lambda: _NOW,
     )
     policy = TenantPolicy(
-        tenant_id=_TENANT,
+        tenant_id=tenant,
         version="diagnostic-policy-v1",
         allowed_models=frozenset({_MODEL.catalog_key}),
         allowed_tools=frozenset(),
@@ -146,12 +152,15 @@ async def run_mock_diagnostic(prompt: str) -> dict[str, object]:
         allowed_data_residencies=frozenset({"local"}),
     )
     result = await gateway.complete(
-        TenantContext(_TENANT),
+        TenantContext(tenant),
         request,
         lease,
         policy,
         environment=Environment.DEVELOPMENT,
     )
+    if event_sink is not None:
+        event_sink(repository.events)
+    usage = repository.usage_summary(str(tenant))
     return {
         "provider": result.model.provider,
         "model": result.model.model,
@@ -161,8 +170,14 @@ async def run_mock_diagnostic(prompt: str) -> dict[str, object]:
         ),
         "input_tokens": result.usage.input_tokens,
         "output_tokens": result.usage.output_tokens,
+        "charged_tokens": usage["tokens"],
+        "charged_cost_usd": usage["cost_usd"],
         "durable_event_types": [event.event_type for event in repository.events],
     }
+
+
+def _id(run_id: UUID, label: str) -> UUID:
+    return uuid5(NAMESPACE_URL, f"aegis-gateway-diagnostic:{run_id}:{label}")
 
 
 def main() -> None:

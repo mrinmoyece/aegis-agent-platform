@@ -1,7 +1,7 @@
 # Implementation status
 
-The repository currently implements **Layer 15: production deployment
-foundations** on top of the Layer 14 protocol boundary.
+The repository currently implements **Layer 16: final local enterprise
+qualification** on top of the Layer 15 production foundations.
 
 Layer 10 adds immutable working/episodic/semantic contracts, additive lifecycle
 events and pure replay, authorized digest-bound ingestion, scanning/quarantine,
@@ -90,8 +90,8 @@ SBOM/provenance/keyless signing
 workflows, migration checksums/advisory locking/schema windows, tenant-scoped writer
 fences, retention/archive manifests, HA/capacity/single-writer regional design,
 backup/restore/DR runbooks, eight deterministic deployment invariants, and a
-containerized ledger restore/projection rebuild/Redis-loss/outbox-redrive drill. The evaluation
-catalog contains 119 cases.
+containerized ledger restore/projection rebuild/Redis-loss/outbox-redrive drill.
+At that layer, the evaluation catalog contained 119 cases.
 
 This does not establish production readiness. Application image digests in the
 Kustomize overlays are placeholders. API, publisher, and reconciler have explicit
@@ -101,3 +101,27 @@ CNI/admission/runtime-class enforcement, production egress, PKI/token brokerage,
 24/7 operations, measured SLO/RPO/RTO/load/chaos, independent penetration/
 accessibility/compliance review, or active-active writes are claimed. See
 [production-readiness evidence](production-readiness-evidence.md).
+
+Layer 16 adds one authenticated, shared-tenant, deterministic checkout journey
+that drives four durable evidence queries and cited correlation, the budgeted
+model gateway, ten-node specialist DAG and critic, memory retrieval/compaction,
+exact two-person approval, ambiguous controlled-action reconciliation,
+verification, sandbox quarantine, MCP/A2A adapters, the operator view, audit,
+replay, and a signed support bundle. It exports all captured redacted envelopes
+to an atomic hash-chained archive and proves the derived projection rebuilds to
+the same digest.
+
+Required qualification also validates 17 deterministic chaos branches, 12
+bounded local performance profiles, the final cross-layer contract tests, and
+machine-readable readiness, risk, failure, compliance, governance, operations,
+and framework-parity manifests. Eight Layer 16 qualification cases bring the
+deterministic catalog to 127 cases. The Python 3.14.7 base is fixed upstream;
+the temporary risk waiver is narrowed to an exact, expiring Grype false-positive
+disposition for both published architectures.
+
+This is locally verified release evidence, not production certification.
+Protected-branch signing, branch protection, live identity, provider/connector
+accounts, sandbox/egress enforcement, cloud apply, managed restore/failover,
+production SLO/capacity/on-call history, public protocol federation,
+independent security/accessibility/compliance review, and active-active writes
+remain unproven or not claimed.

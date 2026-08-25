@@ -97,6 +97,14 @@
     "protocol.outage-contained",
     "protocol.revocation",
     "protocol.tenant-isolation",
+    "qualification.action-ambiguity",
+    "qualification.canonical-replay",
+    "qualification.chaos-matrix",
+    "qualification.performance-budgets",
+    "qualification.protocol-drift",
+    "qualification.protocol-revocation",
+    "qualification.release-readiness",
+    "qualification.risk-register",
     "remediation.ambiguous-reconciled",
     "remediation.approved-success",
     "remediation.crash-recovery",
@@ -121,8 +129,8 @@
     "work.stale-success"
   ],
   "created_at": "2026-08-13T12:00:00Z",
-  "dataset_id": "aegis-checkout-layer15",
-  "description": "Synthetic checkout incident, adversarial channels, recovery cut points, observability, operator safety, protocol, and deployment invariants.",
+  "dataset_id": "aegis-checkout-layer16",
+  "description": "Synthetic checkout incident, adversarial channels, recovery cut points, observability, operator safety, protocol, deployment, and final qualification invariants.",
   "fixtures": [
     {
       "classification": "internal",
@@ -169,5 +177,5 @@
   ],
   "migration_from": null,
   "schema_version": 1,
-  "version": "1.4.0"
+  "version": "1.5.0"
 }

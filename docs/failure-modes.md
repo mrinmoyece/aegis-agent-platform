@@ -198,3 +198,21 @@ See [operator-ui.md](operator-ui.md) for triage and
 
 Automatic rollback never executes destructive schema reversal or assumes an
 external effect failed. Ambiguous outcomes remain visible until reconciliation.
+
+## Layer 16 qualification failures
+
+| Failure | Detection | Safe response |
+| --- | --- | --- |
+| Archive write interruption | atomic temporary file never replaces prior evidence | rerun; do not accept a partial file |
+| Archive line reordered/tampered | contiguous position or hash-chain failure | quarantine evidence and investigate revision/host |
+| Legacy/current envelope decode fails | additive compatibility test or archive loader | block release; add compatible decoder, never rewrite history |
+| Projection differs after reload | before/after digest mismatch | block release and inspect nondeterminism/missing event |
+| Intent ordering assertion fails | qualification demo assertion | block release as an integrity defect |
+| Chaos scenario fails | nonzero `qualification-chaos` result | preserve output, fix invariant, rerun deterministic and integration gates |
+| Local p95/error budget fails | `qualification-load` blocking profile | inspect regression/resource exhaustion; never raise threshold without reviewed evidence |
+| Risk/readiness schema drifts | `qualification-check` | correct owner/evidence/trigger/date; no success-shaped default |
+| Residual-risk target expires | manifest check | owner must close, re-plan, or explicitly review a new target |
+| Live gate has no evidence | readiness remains false | no-go; do not translate local checks into live proof |
+| Support report exceeds bounds or leaks | replay/report validation | stop export, quarantine/delete derived copy, rotate exposed material |
+
+See `qualification/chaos-matrix.json` for the failure-to-test/runbook/alert map.

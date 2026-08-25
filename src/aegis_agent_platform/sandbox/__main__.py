@@ -8,6 +8,7 @@ import io
 import json
 import tempfile
 import zipfile
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -19,6 +20,7 @@ from aegis_agent_platform.domain import (
     CapturedArtifact,
     CleanupPolicy,
     ContentReference,
+    EventEnvelope,
     ExpectedOutput,
     IsolationConstraints,
     NetworkMode,
@@ -116,18 +118,28 @@ class _Cancellation:
 
 async def run_sandbox_demo(
     scenario: SandboxScenario = SandboxScenario.APPROVED_ANALYSIS,
+    *,
+    tenant_id: str = "tenant-demo",
+    run_id: UUID | None = None,
+    event_sink: Callable[[tuple[EventEnvelope, ...]], None] | None = None,
 ) -> SandboxDemoResult:
     """Run a fake sandbox lifecycle without processes, credentials, or networks."""
     if scenario is SandboxScenario.PROMPT_INJECTION:
-        return _rejected_input_demo(scenario)
+        return _rejected_input_demo(scenario, event_sink=event_sink)
     if scenario is SandboxScenario.MALICIOUS_ARCHIVE:
-        return _malicious_archive_demo(scenario)
+        return _malicious_archive_demo(scenario, event_sink=event_sink)
     clock = _Clock(datetime(2026, 8, 13, 16, 0, tzinfo=UTC))
     uuids = _UUIDs()
-    tenant_id = TenantId("tenant-demo")
-    context = TenantContext(tenant_id)
-    operator = _principal("operator-demo", tenant_id, clock())
-    request = _request(uuids, tenant_id, operator.actor_id, clock())
+    tenant = TenantId(tenant_id)
+    context = TenantContext(tenant)
+    operator = _principal("operator-demo", tenant, clock())
+    request = _request(
+        uuids,
+        tenant,
+        operator.actor_id,
+        clock(),
+        run_id=run_id,
+    )
     policy = _policy(request, runtime_verified=True)
     if scenario is SandboxScenario.POLICY_DENIED:
         policy = replace(policy, allowed_command_families=frozenset({"ruff"}))
@@ -155,6 +167,7 @@ async def run_sandbox_demo(
             (),
             request.spec.digest,
             policy.digest,
+            event_sink=event_sink,
         )
     artifact = CapturedArtifact(
         artifact_id=uuids(),
@@ -221,6 +234,7 @@ async def run_sandbox_demo(
         tuple(backend.calls),
         request.spec.digest,
         policy.digest,
+        event_sink=event_sink,
     )
 
 
@@ -229,12 +243,14 @@ def _request(
     tenant_id: TenantId,
     requested_by: str,
     at: datetime,
+    *,
+    run_id: UUID | None = None,
 ) -> SandboxRequest:
     return SandboxRequest(
         sandbox_id=uuids(),
         linkage=SandboxLinkage(
             tenant_id=str(tenant_id),
-            run_id=uuids(),
+            run_id=run_id or uuids(),
             task_id=uuids(),
             remediation_plan_id=uuids(),
             remediation_action_id=uuids(),
@@ -358,7 +374,11 @@ def _principal(actor_id: str, tenant_id: TenantId, at: datetime) -> Principal:
     )
 
 
-def _rejected_input_demo(scenario: SandboxScenario) -> SandboxDemoResult:
+def _rejected_input_demo(
+    scenario: SandboxScenario,
+    *,
+    event_sink: Callable[[tuple[EventEnvelope, ...]], None] | None = None,
+) -> SandboxDemoResult:
     try:
         SandboxSpec(
             image="registry.example.invalid/aegis/analyzer@sha256:" + "a" * 64,
@@ -393,11 +413,23 @@ def _rejected_input_demo(scenario: SandboxScenario) -> SandboxDemoResult:
             cleanup_policy=CleanupPolicy(),
         )
     except ValueError:
-        return _result(scenario, "rejected", None, (), None, None)
+        return _result(
+            scenario,
+            "rejected",
+            None,
+            (),
+            None,
+            None,
+            event_sink=event_sink,
+        )
     raise RuntimeError("prompt-injected sandbox input was unexpectedly accepted")
 
 
-def _malicious_archive_demo(scenario: SandboxScenario) -> SandboxDemoResult:
+def _malicious_archive_demo(
+    scenario: SandboxScenario,
+    *,
+    event_sink: Callable[[tuple[EventEnvelope, ...]], None] | None = None,
+) -> SandboxDemoResult:
     archive = io.BytesIO()
     with zipfile.ZipFile(archive, "w") as container:
         container.writestr("../escape", b"denied")
@@ -410,7 +442,15 @@ def _malicious_archive_demo(scenario: SandboxScenario) -> SandboxDemoResult:
                 archive_format="zip",
             )
         except ValueError:
-            return _result(scenario, "rejected", None, (), None, None)
+            return _result(
+                scenario,
+                "rejected",
+                None,
+                (),
+                None,
+                None,
+                event_sink=event_sink,
+            )
     raise RuntimeError("malicious archive was unexpectedly accepted")
 
 
@@ -421,7 +461,11 @@ def _result(
     calls: tuple[str, ...],
     spec_digest: str | None,
     policy_digest: str | None,
+    *,
+    event_sink: Callable[[tuple[EventEnvelope, ...]], None] | None = None,
 ) -> SandboxDemoResult:
+    if event_sink is not None:
+        event_sink(repository.events if repository is not None else ())
     return {
         "demo_only": True,
         "uses_live_network": False,

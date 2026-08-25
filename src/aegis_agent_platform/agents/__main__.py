@@ -5,11 +5,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import cast
 from uuid import UUID
 
+from aegis_agent_platform.agents.artifacts import EvidenceCitation
 from aegis_agent_platform.agents.engines import (
     CanonicalCheckoutEngine,
     CanonicalScenario,
@@ -18,7 +19,7 @@ from aegis_agent_platform.agents.engines import (
 )
 from aegis_agent_platform.agents.repository import InMemoryAgentRepository
 from aegis_agent_platform.agents.service import DurableCoordinator
-from aegis_agent_platform.domain import JsonValue, WorkLease
+from aegis_agent_platform.domain import EventEnvelope, JsonValue, WorkLease
 from aegis_agent_platform.identity import TenantId
 from aegis_agent_platform.tenancy import TenantContext
 
@@ -29,8 +30,14 @@ DEMO_LEASE_TOKEN = UUID("70000000-0000-4000-8000-000000000008")
 
 async def run_canonical_demo(
     scenario: CanonicalScenario = CanonicalScenario.SUCCESS,
+    *,
+    tenant_id: str = "tenant-demo",
+    incident_id: str = "checkout-failure-demo",
+    run_id: UUID = DEMO_RUN_ID,
+    evidence: Mapping[str, EvidenceCitation] | None = None,
+    event_sink: Callable[[tuple[EventEnvelope, ...]], None] | None = None,
 ) -> Mapping[str, JsonValue]:
-    context = TenantContext(TenantId("tenant-demo"))
+    context = TenantContext(TenantId(tenant_id))
     repository = InMemoryAgentRepository()
     coordinator = DurableCoordinator(
         repository,
@@ -38,9 +45,9 @@ async def run_canonical_demo(
         clock=lambda: DEMO_NOW,
     )
     plan = canonical_checkout_plan(
-        tenant_id="tenant-demo",
-        incident_id="checkout-failure-demo",
-        run_id=DEMO_RUN_ID,
+        tenant_id=tenant_id,
+        incident_id=incident_id,
+        run_id=run_id,
         created_at=DEMO_NOW,
     )
     request = await coordinator.request(
@@ -50,8 +57,8 @@ async def run_canonical_demo(
         idempotency_key=f"checkout-demo:{scenario.value}",
     )
     lease = WorkLease(
-        work_id=DEMO_RUN_ID,
-        tenant_id="tenant-demo",
+        work_id=run_id,
+        tenant_id=tenant_id,
         token=DEMO_LEASE_TOKEN,
         generation=1,
         owner="local-fake-worker",
@@ -63,16 +70,25 @@ async def run_canonical_demo(
     repository.register_lease(lease)
     state = await coordinator.execute(
         context,
-        DEMO_RUN_ID,
+        run_id,
         lease,
-        canonical_checkout_citations(),
+        evidence or canonical_checkout_citations(),
     )
-    status = await repository.status(context, DEMO_RUN_ID)
+    status = await repository.status(context, run_id)
     artifacts, _cursor = await repository.artifact_page(
         context,
-        DEMO_RUN_ID,
+        run_id,
         limit=100,
     )
+    events = await repository.load(context, run_id)
+    before_rebuild = cast(Mapping[str, JsonValue], status or {})
+    repository.clear_projections()
+    await repository.rebuild_projection(context, run_id)
+    after_rebuild = cast(
+        Mapping[str, JsonValue], await repository.status(context, run_id) or {}
+    )
+    if event_sink is not None:
+        event_sink(events)
     return {
         "demo_only": True,
         "uses_live_network": False,
@@ -80,8 +96,10 @@ async def run_canonical_demo(
         "scenario": scenario.value,
         "request_created": request.created,
         "status": state.status.value,
-        "run": cast(Mapping[str, JsonValue], status or {}),
+        "run": before_rebuild,
         "artifacts": artifacts,
+        "event_count": len(events),
+        "projection_rebuild_identical": before_rebuild == after_rebuild,
     }
 
 

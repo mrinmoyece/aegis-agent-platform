@@ -432,3 +432,39 @@ def test_vulnerability_policy_reports_unfixed_and_scopes_waivers(
     )
 
     assert (reported, unfixed, blocking) == (2, 1, ())
+
+
+def test_false_positive_disposition_requires_scanner_and_advisory(
+    tmp_path: Path,
+) -> None:
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(
+        """
+        {
+          "schema_version": 1,
+          "policy": {
+            "fail_severities": ["HIGH", "CRITICAL"],
+            "unfixed_findings": "report",
+            "require_fixed_version_when_available": true,
+            "maximum_waiver_days": 30
+          },
+          "waivers": [{
+            "vulnerability_id": "CVE-FALSE-POSITIVE",
+            "report": "application/linux-amd64",
+            "package": "runtime",
+            "package_version": "1.2.3",
+            "issued_on": "2026-08-14",
+            "expires_on": "2026-08-28",
+            "approved_change_reference": "change-ref://false-positive",
+            "owner": "security",
+            "reason": "scanner branch range is stale",
+            "compensating_control": "independent advisory verification",
+            "disposition": "false_positive"
+          }]
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="false-positive"):
+        load_policy(policy_path, today=date(2026, 8, 14))

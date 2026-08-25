@@ -101,7 +101,7 @@ Status meanings:
 | Memory quotas and fenced lifecycle recovery | Implemented | atomic tenant-period reservations, durable intent/results, reconciliation and rebuild tests |
 | Deterministic specialist behavioral evaluations | Implemented | success, ambiguity, contradiction, budget, recovery; `make evals` |
 | Deterministic remediation behavioral evaluations | Implemented | approval success/denial/stale, ambiguity, verification/rollback, policy attack, crash recovery |
-| Layered provider-neutral evaluation contracts and harness | Implemented | `aegis_agent_platform.evals`; ADR 0018; 119-case catalog |
+| Layered provider-neutral evaluation contracts and harness | Implemented | `aegis_agent_platform.evals`; ADR 0018; 127-case Layer 16 catalog |
 | Governed synthetic scenario/adversarial/recovery corpus | Implemented | versioned manifest/fixtures; 12 adversarial cases and 22 fault cuts |
 | Hermetic deterministic release gates and hard safety baselines | Implemented | no live network, secrets, judge, or production effects |
 | Scoped expiring evaluation waivers and reviewed baseline changes | Implemented | non-safety waivers only; explicit reviewed update |
@@ -126,6 +126,12 @@ Status meanings:
 | Durable MCP/A2A lifecycle mapping and replay protection | Implemented | intent/result/ambiguity/reconciliation events, idempotency, replay cache |
 | Protocol tenant, drift, and malicious-peer tests | Implemented | deterministic adversarial suite plus environment-gated PostgreSQL RLS |
 | Production PKI/token brokerage and public federation | Planned | readiness fails closed; partner/conformance qualification deferred |
+| Integrated authenticated checkout qualification | Implemented local | shared tenant/run, evidence, gateway, DAG, memory, approval/action, sandbox, protocols, operator, audit/replay |
+| Complete hash-chained event export and projection convergence | Implemented local | `aegis_agent_platform.qualification`, `make qualification-demo` |
+| Deterministic cross-layer chaos and bounded load gates | Implemented local | 17 chaos branches, 12 local performance profiles; no production capacity claim |
+| Machine-readable readiness and residual-risk gates | Implemented | `qualification/release-readiness.json`, `qualification/residual-risks.json` |
+| Operational acceptance and compliance control map | Implemented documentation/schema | no live operations or certification claim |
+| Protected branch/ruleset enforcement | Live evidence required | GitHub reported no protection/ruleset on `master` during Layer 16 audit |
 
 Changing a row to Implemented requires tests or operational evidence in the
 same pull request. Planned capabilities map to concrete EP-01 through EP-16
@@ -184,3 +190,15 @@ delivery slices and exit gates in the enterprise implementation blueprint.
 | HA, scaling, and regional fencing | Mixed implementation/design | multi-replica API/publisher/reconciler, gated workers, leases/fences, quotas/capacity profiles, stale-region eval; no live failover/load |
 | Backup/restore/DR | Implemented local drill/design | encrypted/locked reference, isolated dump/restore/hash/rebuild/Redis-loss report; managed RPO/RTO unmeasured |
 | Compliance-ready evidence | Scaffolded | asset/data-flow/control mapping and evidence bundle; no certification |
+
+## Layer 16 final qualification evidence
+
+| Control | Status | Evidence |
+| --- | --- | --- |
+| Canonical checkout journey | Locally verified | `make qualification-demo`; authenticated intake through verification, quarantine, protocols, UI, audit and support |
+| Full captured event export | Locally verified | atomic hash-chained JSONL, legacy-compatible decode, read-only replay |
+| Projection rebuild | Locally verified | before/after projection digests must match |
+| Cross-layer failure qualification | Locally verified | `make qualification-chaos`, `make eval-recovery`, chaos matrix |
+| Bounded performance regression | Locally verified | 12 p50/p95/p99/throughput/error profiles; production extrapolation prohibited |
+| Security/supply-chain final audit | Locally verified source/config | no remaining high-confidence in-repo exploit; fixed Python base, no CVE waiver |
+| Production readiness | False | live identity, sandbox, promotion, cloud, restore, SLO/capacity/on-call, partner and independent evidence remain |

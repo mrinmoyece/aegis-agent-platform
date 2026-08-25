@@ -272,3 +272,17 @@ runbooks remain required. See [operator-ui.md](operator-ui.md).
 These procedures are executable locally where stated, but production owners,
 contacts, paging paths, account/cluster identifiers, managed recovery commands,
 and measured objectives remain deployment-specific.
+
+## Layer 16 qualification and launch operations
+
+Run `make qualification` before packaging release evidence. Preserve the
+result/ledger/chaos/load JSON with revision and environment metadata. A missing
+assertion, archive/hash/replay/projection mismatch, chaos failure, p95/error
+budget breach, invalid risk/readiness manifest, or expired risk target blocks.
+
+Use [operational acceptance](operational-acceptance.md) for launch, day-0/day-1/
+day-2, incident/on-call handoff, restore/failover, key/token rotation, CVE
+response, capacity, tenant lifecycle, protocol partner, sandbox quarantine,
+provider outage, support evidence, and disaster declaration. Live gates in
+`qualification/release-readiness.json` remain no-go until their owners attach
+reviewed evidence and rollback criteria.

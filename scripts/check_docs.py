@@ -47,6 +47,15 @@ REQUIRED_DOCUMENTS = {
     ROOT / "docs" / "deployment-and-supply-chain.md",
     ROOT / "docs" / "privacy-and-compliance.md",
     ROOT / "docs" / "production-readiness-evidence.md",
+    ROOT / "docs" / "final-qualification.md",
+    ROOT / "docs" / "security-assessment.md",
+    ROOT / "docs" / "performance-chaos-qualification.md",
+    ROOT / "docs" / "production-readiness-scorecard.md",
+    ROOT / "docs" / "operational-acceptance.md",
+    ROOT / "docs" / "compliance-control-map.md",
+    ROOT / "docs" / "learning-path.md",
+    ROOT / "docs" / "framework-comparison-handoff.md",
+    ROOT / "docs" / "repository-governance.md",
     ROOT / "docs" / "runbooks" / "deployment.md",
     ROOT / "docs" / "runbooks" / "migration.md",
     ROOT / "docs" / "runbooks" / "backup-restore.md",
@@ -68,6 +77,8 @@ REQUIRED_DOCUMENTS = {
     ROOT / "docs" / "adr" / "0012-fenced-model-budgeting.md",
     ROOT / "docs" / "adr" / "0011-shared-redis-stream.md",
     ROOT / "docs" / "adr" / "0009-tenant-governance-audit-and-secrets.md",
+    ROOT / "docs" / "adr" / "0027-final-enterprise-qualification.md",
+    ROOT / "CHANGELOG.md",
 }
 LINK_PATTERN = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
 
@@ -115,7 +126,7 @@ def main() -> None:
         raise SystemExit("broken documentation links:\n" + "\n".join(failures))
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    if "Current status: Layer 15" not in readme:
+    if "Current status: Layer 16" not in readme:
         raise SystemExit("README must state the current implementation layer")
 
 

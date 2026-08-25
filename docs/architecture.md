@@ -712,3 +712,42 @@ DNS cannot grant write authority. See
 [ADR 0024](adr/0024-single-writer-multi-region.md). Kustomize/AWS artifacts,
 mock plans, scans, evals, and the local restore drill do not prove a live cloud,
 cluster, backup/failover, or production SLO.
+
+## Layer 16 qualification boundary
+
+Layer 16 composes existing application services; it does not add an
+orchestration authority. Each subsystem keeps its authoritative tenant event
+stream. The qualification runner captures those complete redacted envelopes
+through diagnostic sinks and writes an atomic hash-chained release export.
+
+```mermaid
+flowchart LR
+  I[Authenticated local intake] --> E[Evidence and cited correlation]
+  E --> G[Budgeted model gateway]
+  G --> A[Fixed specialist DAG and critic]
+  A --> M[Memory retrieval and compaction]
+  A --> R[Two-person approval and controlled action]
+  R --> S[Sandbox quarantine]
+  A --> P[MCP and A2A adapters]
+  I --> L[(Subsystem event streams)]
+  E --> L
+  G --> L
+  A --> L
+  M --> L
+  R --> L
+  S --> L
+  P --> L
+  L --> X[Hash-chained qualification export]
+  X --> Q[Read-only replay and projection rebuild]
+```
+
+`QualificationArchive` is derived release evidence. It cannot authorize,
+schedule, approve, execute, or reconstruct runtime truth when the source event
+streams exist. A projection digest is compared before export and after verified
+reload. The replay debugger reads only the specialist stream and emits a
+bounded, redacted support report.
+
+The runner uses deterministic fakes and an ephemeral signed local identity.
+Bounded chaos/load and manifest checks are release gates, not production
+capacity, SLO, recovery, security, or compliance evidence. See
+[Layer 16 final qualification](final-qualification.md) and ADR 0027.

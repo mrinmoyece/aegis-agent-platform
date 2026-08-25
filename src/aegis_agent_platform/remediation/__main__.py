@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -20,6 +21,7 @@ from aegis_agent_platform.domain import (
     Condition,
     ConditionOperator,
     EffectOutcome,
+    EventEnvelope,
     MaintenanceWindow,
     ReconciliationPolicy,
     RemediationEvidenceCitation,
@@ -104,15 +106,20 @@ class _UUIDs:
 
 async def run_remediation_demo(
     scenario: RemediationScenario = RemediationScenario.APPROVED_SUCCESS,
+    *,
+    tenant_id: str = "tenant-demo",
+    incident_id: str = "checkout-latency-42",
+    investigation_run_id: UUID | None = None,
+    event_sink: Callable[[tuple[EventEnvelope, ...]], None] | None = None,
 ) -> RemediationDemoResult:
     """Run proposal through verification without networks or real credentials."""
     clock = _Clock(datetime(2026, 8, 13, 14, 0, tzinfo=UTC))
     uuids = _UUIDs()
-    tenant_id = TenantId("tenant-demo")
-    context = TenantContext(tenant_id)
-    operator = _principal("operator-demo", Role.OPERATOR, tenant_id, clock())
-    approver_one = _principal("approver-one", Role.APPROVER, tenant_id, clock())
-    approver_two = _principal("approver-two", Role.APPROVER, tenant_id, clock())
+    tenant = TenantId(tenant_id)
+    context = TenantContext(tenant)
+    operator = _principal("operator-demo", Role.OPERATOR, tenant, clock())
+    approver_one = _principal("approver-one", Role.APPROVER, tenant, clock())
+    approver_two = _principal("approver-two", Role.APPROVER, tenant, clock())
     target = ActionTarget(
         provider="kubernetes",
         environment="staging",
@@ -120,7 +127,7 @@ async def run_remediation_demo(
         resource_id="checkout-api",
         scope="checkout",
     )
-    policy = _policy(tenant_id, target, clock())
+    policy = _policy(tenant, target, clock())
     if scenario in {RemediationScenario.DENIED, RemediationScenario.POLICY_ATTACK}:
         policy = replace(policy, allowed_target_fingerprints=frozenset())
     action = ActionSpecification(
@@ -155,9 +162,9 @@ async def run_remediation_demo(
     )
     plan = RemediationPlan(
         plan_id=uuids(),
-        tenant_id=str(tenant_id),
-        incident_id="checkout-latency-42",
-        investigation_run_id=uuids(),
+        tenant_id=str(tenant),
+        incident_id=incident_id,
+        investigation_run_id=investigation_run_id or uuids(),
         revision=1,
         requested_by=operator.actor_id,
         created_at=clock(),
@@ -194,7 +201,13 @@ async def run_remediation_demo(
     )
     approval = proposed.state.approval_for(action.action_id)
     if approval is None:
-        return _result(repository, proposed.state, scenario, "policy_denied")
+        return _result(
+            repository,
+            proposed.state,
+            scenario,
+            "policy_denied",
+            event_sink=event_sink,
+        )
     if scenario is RemediationScenario.EXPIRED:
         clock.advance(policy.approval_ttl_seconds + 1)
         try:
@@ -211,7 +224,13 @@ async def run_remediation_demo(
             )
         except ApprovalDeniedError:
             state = replay_remediation(await repository.load(context, plan.plan_id))
-            return _result(repository, state, scenario, "expired")
+            return _result(
+                repository,
+                state,
+                scenario,
+                "expired",
+                event_sink=event_sink,
+            )
         raise RuntimeError("expired approval was unexpectedly accepted")
     for approver in (approver_one, approver_two):
         await approvals.decide(
@@ -227,7 +246,7 @@ async def run_remediation_demo(
         )
     lease = WorkLease(
         work_id=plan.plan_id,
-        tenant_id=str(tenant_id),
+        tenant_id=str(tenant),
         token=uuids(),
         generation=1,
         owner="demo-worker",
@@ -282,6 +301,7 @@ async def run_remediation_demo(
         scenario,
         state.action_statuses[action.action_id].value,
         adapter_calls=tuple(adapter.calls),
+        event_sink=event_sink,
     )
 
 
@@ -352,7 +372,10 @@ def _result(
     status: str,
     *,
     adapter_calls: tuple[str, ...] = (),
+    event_sink: Callable[[tuple[EventEnvelope, ...]], None] | None = None,
 ) -> RemediationDemoResult:
+    if event_sink is not None:
+        event_sink(repository.events)
     return {
         "demo_only": True,
         "uses_live_network": False,

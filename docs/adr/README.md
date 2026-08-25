@@ -12,6 +12,7 @@ rewriting history.
 | 0024 | single-writer multi-region boundary |
 | 0025 | governed ledger retention and partitioning |
 | 0026 | keyless supply-chain verification |
+| 0027 | final local enterprise qualification boundary |
 
 See each numbered file for context, decision, consequences, and rejected
 alternatives.

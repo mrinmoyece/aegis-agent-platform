@@ -2,7 +2,7 @@
 
 ## No certification claim
 
-Layer 15 maps controls and produces local/CI evidence. It does not certify SOC 2, ISO
+Layer 16 maps controls and produces local/CI evidence. It does not certify SOC 2, ISO
 27001, GDPR, HIPAA, PCI DSS, or any other framework. Scope, legal basis, contracts,
 organizational controls, production operation, independent audit, and jurisdictional
 review remain required.
@@ -42,3 +42,8 @@ quarterly retention/residency review; service owners run restore drills at least
 quarterly and regional exercises at least annually after live deployment. Evidence
 bundles record owner, reviewer, period, immutable source, result, exceptions, expiry,
 and follow-up. Cadence statements are objectives until production records exist.
+
+The complete machine-readable mapping is
+[`qualification/compliance-map.json`](../qualification/compliance-map.json);
+[the compliance guide](compliance-control-map.md) distinguishes repository
+evidence from missing organizational, legal, live, and independent evidence.

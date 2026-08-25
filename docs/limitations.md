@@ -14,7 +14,7 @@
   or create dynamic peers.
 - Exact-scope human approval, fenced controlled effects, reconciliation,
   post-action verification, bounded Layer 9 analysis sandbox execution, and
-  Layer 10 event-grounded memory/RAG are implemented. Arbitrary tools and
+  Layer 10 event-grounded memory/RAG are implemented. Bounded controlled tools and
   Layer 11 deterministic evaluation contracts/harness are implemented. This is
   a hermetic release-evidence system, not live production qualification.
 - Runtime spans, bounded metric instruments, local dashboards, and alert rules
@@ -26,8 +26,9 @@
 - MCP and A2A endpoints are deterministic/local interoperability boundaries,
   not production federation. They provide curated tool/context and external
   task/artifact/status/cancellation flows, but no live partners or credentials.
-- CI emits a frontend CycloneDX SBOM and builds images, but does not emit signed
-  provenance, a promoted release artifact, or deployment evidence.
+- CI emits frontend/application SBOM evidence and defines protected-branch
+  provenance/signing/promotion, but PR execution does not prove signed published
+  artifacts, a promoted release, live admission, or deployment evidence.
 
 ## Current Layer 11 implementation (evaluation and release evidence)
 
@@ -422,3 +423,25 @@ qualification, load/chaos, HA/DR, and multi-region evidence.
 - Live OIDC/BFF sessions, production PKI/token brokerage/partner federation,
   independent penetration/accessibility/compliance certification, 24/7 operations,
   measured SLOs, and active-active writes remain explicitly deferred.
+
+## Layer 16 limitations
+
+- The integrated checkout runner executes real application service paths with
+  deterministic fakes and local ephemeral identity. It makes no external network
+  call, production mutation, or live incident update.
+- The hash-chained archive is release evidence, not a second authoritative
+  runtime event store. Its identical projection digest proves only the captured
+  fixture and current projection.
+- The 17 chaos scenarios and 12 performance profiles are bounded CI smoke. They
+  do not prove production scale, skew, soak, topology, SLO, capacity, recovery,
+  or partner/provider behavior.
+- The security assessment is source/configuration review, not independent
+  penetration testing. Compliance mappings are engineering cross-references,
+  not certification.
+- GitHub reported no branch protection or ruleset on `master` during the final
+  audit. Protected-branch signing/promotion is therefore unproven and a hard
+  go-live blocker.
+- Live identity/session/key rotation, cloud/cluster/egress/sandbox controls,
+  managed backup/failover, providers/connectors, public protocol federation,
+  production SLO/on-call history, privacy/organizational controls, and active-
+  active writes remain environment-gated, live-required, or not claimed.
