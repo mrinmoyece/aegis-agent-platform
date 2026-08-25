@@ -27,6 +27,7 @@ from aegis_agent_platform.queueing.redis_streams import RedisStreamQueue
 from aegis_agent_platform.runtime.operations import RequeueApproval
 from aegis_agent_platform.runtime.postgres import PostgresWorkRepository
 from aegis_agent_platform.tenancy import TenantContext
+from integration_helpers import integration_writer_fences
 
 DATABASE_URL = os.environ.get("AEGIS_TEST_DATABASE_URL")
 REDIS_URL = os.environ.get("AEGIS_TEST_REDIS_URL")
@@ -65,8 +66,14 @@ def test_live_publish_claim_fence_duplicate_ack_and_poison() -> None:
         queue = RedisStreamQueue(client, stream=stream, group=group)
         first_connection = await app_connection()
         second_connection = await app_connection()
-        first_events = PostgresEventStore(first_connection)
-        second_events = PostgresEventStore(second_connection)
+        first_events = PostgresEventStore(
+            first_connection,
+            writer_fence_resolver=integration_writer_fences("local-test", 1),
+        )
+        second_events = PostgresEventStore(
+            second_connection,
+            writer_fence_resolver=integration_writer_fences("local-test", 1),
+        )
         first = PostgresWorkRepository(first_connection, first_events)
         second = PostgresWorkRepository(second_connection, second_events)
         work_id = uuid4()

@@ -39,6 +39,7 @@ from aegis_agent_platform.protocols import (
     peer_digest,
 )
 from aegis_agent_platform.tenancy import TenantContext
+from integration_helpers import integration_writer_fences
 
 DATABASE_URL = os.environ.get("AEGIS_TEST_DATABASE_URL")
 pytestmark = [
@@ -88,7 +89,10 @@ def test_protocol_operation_truth_rls_idempotency_and_rebuild() -> None:
             deadline=now + timedelta(seconds=30),
         )
         principal = _principal(now)
-        events = PostgresEventStore(connection)
+        events = PostgresEventStore(
+            connection,
+            writer_fence_resolver=integration_writer_fences("local-test", 1),
+        )
         ledger = PostgresProtocolLedger(connection, events)
         adapter = FakeExternalProtocolAdapter(
             ProtocolFamily.A2A,

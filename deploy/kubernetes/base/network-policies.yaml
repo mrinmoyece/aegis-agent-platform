@@ -1,0 +1,381 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: aegis-system
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: aegis-data
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: aegis-sandbox
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: aegis-egress
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: aegis-system
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-data-services
+  namespace: aegis-system
+  annotations:
+    aegis.dev/managed-data-boundary: network-policy-data-cidr-plus-aws-security-group
+spec:
+  podSelector:
+    matchExpressions:
+      - key: aegis.dev/process-class
+        operator: In
+        values: [api, bff, worker, publisher, reconciler, protocol-gateway]
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.42.128.0/17
+        - namespaceSelector:
+            matchLabels:
+              aegis.dev/network-zone: data
+          podSelector:
+            matchLabels:
+              aegis.dev/data-service: postgresql
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - ipBlock:
+            cidr: 10.42.128.0/17
+        - namespaceSelector:
+            matchLabels:
+              aegis.dev/network-zone: data
+          podSelector:
+            matchLabels:
+              aegis.dev/data-service: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-migration-postgresql
+  namespace: aegis-system
+  annotations:
+    aegis.dev/managed-data-boundary: network-policy-data-cidr-plus-aws-security-group
+spec:
+  podSelector:
+    matchLabels:
+      aegis.dev/process-class: migration
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.42.128.0/17
+        - namespaceSelector:
+            matchLabels:
+              aegis.dev/network-zone: data
+          podSelector:
+            matchLabels:
+              aegis.dev/data-service: postgresql
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgresql-from-system
+  namespace: aegis-data
+spec:
+  podSelector:
+    matchLabels:
+      aegis.dev/data-service: postgresql
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              aegis.dev/network-zone: application
+          podSelector:
+            matchExpressions:
+              - key: aegis.dev/process-class
+                operator: In
+                values:
+                  [api, bff, worker, publisher, reconciler, protocol-gateway, migration]
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-redis-from-system
+  namespace: aegis-data
+spec:
+  podSelector:
+    matchLabels:
+      aegis.dev/data-service: redis
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              aegis.dev/network-zone: application
+          podSelector:
+            matchExpressions:
+              - key: aegis.dev/process-class
+                operator: In
+                values: [api, bff, worker, publisher, reconciler, protocol-gateway]
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-otel
+  namespace: aegis-system
+spec:
+  podSelector:
+    matchExpressions:
+      - key: aegis.dev/process-class
+        operator: Exists
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: aegis-otel-collector
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-otel-ingress
+  namespace: aegis-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-otel-collector
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: aegis.dev/process-class
+                operator: Exists
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-approved-external-egress
+  namespace: aegis-system
+  annotations:
+    aegis.dev/intent: oidc-provider-connectors-and-protocol-peers-via-egress-gateway
+spec:
+  podSelector:
+    matchExpressions:
+      - key: aegis.dev/process-class
+        operator: In
+        values: [api, bff, worker, publisher, reconciler, protocol-gateway]
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              aegis.dev/network-zone: egress
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: aegis-egress-gateway
+      ports:
+        - protocol: TCP
+          port: 8443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-telemetry-via-egress-gateway
+  namespace: aegis-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-otel-collector
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              aegis.dev/network-zone: egress
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: aegis-egress-gateway
+      ports:
+        - protocol: TCP
+          port: 8443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-system-to-egress-gateway
+  namespace: aegis-egress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-egress-gateway
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              aegis.dev/network-zone: application
+      ports:
+        - protocol: TCP
+          port: 8443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-gateway-dns
+  namespace: aegis-egress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-egress-gateway
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-gateway-public-tls
+  namespace: aegis-egress
+  annotations:
+    aegis.dev/intent: deny-metadata-link-local-private-and-special-use-addresses
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-egress-gateway
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.0.0.0/24
+              - 192.168.0.0/16
+              - 224.0.0.0/4
+              - 240.0.0.0/4
+      ports:
+        - protocol: TCP
+          port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-envoy-gateway
+  namespace: aegis-system
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [aegis-api, aegis-operator-bff, aegis-operator-ui]
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              gateway.envoyproxy.io/owning-gateway-name: aegis
+              gateway.envoyproxy.io/owning-gateway-namespace: aegis-system
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-metrics-scrape
+  namespace: aegis-system
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              monitoring: enabled
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8888

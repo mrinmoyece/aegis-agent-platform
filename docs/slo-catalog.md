@@ -26,3 +26,20 @@ effects, cleanup failures, and cross-tenant access are invariants or direct
 alerts. They do not consume an availability error budget. During budget
 exhaustion, freeze risky releases, prioritize reliability, and require explicit
 leadership acceptance for unrelated changes.
+
+## Layer 15 recovery and deployment objectives
+
+These are future production objectives, not attained SLOs:
+
+| Objective/SLI | Initial objective | Evidence gate |
+| --- | --- | --- |
+| Ledger recovery point | <= 5 minutes | managed PITR and restore point |
+| Artifact/config recovery point | <= 24 hours | encrypted versioned object/config |
+| Isolated tenant restore time | <= 4 hours | integrity, rebuild, redrive, rotation |
+| Regional writer failover time | <= 2 hours | old-writer fence, generation, traffic/reconcile |
+| Normal API rollout | zero unavailable replicas | PDB/rolling/readiness plus live observation |
+| Migration safety | zero incompatible-ready pods/destructive statements | schema window, lock/checksum, canary |
+| Supply-chain trust | 100% admitted Aegis images signed/attested | live admission audit |
+
+Backup success alone does not satisfy recovery. Availability is never traded for
+split-brain risk or tenant isolation.

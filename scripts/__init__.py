@@ -1,1 +1,1 @@
-"""Repository validation scripts."""
+"""Repository validation and operational scripts."""

@@ -1,7 +1,7 @@
 # Implementation status
 
-The repository currently implements **Layer 14: secure MCP and A2A
-interoperability** on top of the Layer 13 operator surface and durable runtime.
+The repository currently implements **Layer 15: production deployment
+foundations** on top of the Layer 14 protocol boundary.
 
 Layer 10 adds immutable working/episodic/semantic contracts, additive lifecycle
 events and pure replay, authorized digest-bound ingestion, scanning/quarantine,
@@ -78,3 +78,26 @@ Distributed production token brokerage, PKI/mTLS deployment, public federation,
 partner qualification, independent conformance certification, and production
 load/HA/DR evidence are not implemented. Protocol readiness therefore fails
 closed outside the deterministic/local boundary.
+
+Layer 15 implements code/config and local evidence for Kustomize packaging,
+Gateway API/Envoy Gateway `v1.8.3`, restricted workload/admission/network intent,
+separate API/UI/BFF/worker/
+publisher/reconciler/migration/protocol/observability/sandbox shapes, immutable
+digest promotion with private-ECR mirroring and checksummed GitOps bundles, External
+Secrets and workload identity references, an AWS
+Terraform `1.11.4` / provider `5.100.0` reference, platform/index SPDX
+SBOM/provenance/keyless signing
+workflows, migration checksums/advisory locking/schema windows, tenant-scoped writer
+fences, retention/archive manifests, HA/capacity/single-writer regional design,
+backup/restore/DR runbooks, eight deterministic deployment invariants, and a
+containerized ledger restore/projection rebuild/Redis-loss/outbox-redrive drill. The evaluation
+catalog contains 119 cases.
+
+This does not establish production readiness. Application image digests in the
+Kustomize overlays are placeholders. API, publisher, and reconciler have explicit
+managed bootstrap; workers, BFF, and protocol gateway are scaled to zero and fail closed
+pending their adapters and prerequisites. No cloud apply, managed PITR/failover, cluster
+CNI/admission/runtime-class enforcement, production egress, PKI/token brokerage,
+24/7 operations, measured SLO/RPO/RTO/load/chaos, independent penetration/
+accessibility/compliance review, or active-active writes are claimed. See
+[production-readiness evidence](production-readiness-evidence.md).

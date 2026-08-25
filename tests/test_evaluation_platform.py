@@ -93,7 +93,7 @@ def full_report() -> EvaluationReport:
 def test_catalog_covers_every_layer_outcome_and_gate_pack() -> None:
     suite = build_suite()
 
-    assert len(suite.cases) == 111
+    assert len(suite.cases) == 119
     assert {case.layer for case in suite.cases} == {
         "layer-2",
         "layer-3",
@@ -107,6 +107,7 @@ def test_catalog_covers_every_layer_outcome_and_gate_pack() -> None:
         "layer-12",
         "layer-13",
         "layer-14",
+        "layer-15",
         "cross-layer",
     }
     assert set(ExpectedOutcome).issubset(
@@ -123,6 +124,7 @@ def test_catalog_covers_every_layer_outcome_and_gate_pack() -> None:
         "gateway.budget-denial",
         "gateway.stale-worker",
     }.issubset({case.case_id for case in suite.cases})
+    assert sum("deployment" in case.tags for case in suite.cases) == 8
     schema_case = next(
         case for case in suite.cases if case.case_id == "adversarial.schema-smuggling"
     )

@@ -22,7 +22,7 @@ from aegis_agent_platform.agents import (
 )
 from aegis_agent_platform.agents.operations import AgentOperations
 from aegis_agent_platform.audit import REDACTED, AuditEventType, InMemoryAuditStore
-from aegis_agent_platform.config import Environment
+from aegis_agent_platform.config import RDS_GLOBAL_BUNDLE_PATH, Environment
 from aegis_agent_platform.control_plane.api import ControlPlaneApp, application
 from aegis_agent_platform.domain import (
     DomainEventType,
@@ -154,6 +154,9 @@ class PatchedEnvironment:
             "AEGIS_OIDC_ISSUER",
             "AEGIS_OIDC_JWKS_URL",
             "AEGIS_OIDC_AUDIENCE",
+            "AEGIS_CREDENTIAL_PROVIDER",
+            "AEGIS_SIGNING_KEY_REFERENCE",
+            "AEGIS_WRITER_FENCES_FILE",
         }
         self.original = {key: os.environ.get(key) for key in keys}
         for key in keys:
@@ -324,6 +327,32 @@ def test_invalid_configuration_is_not_ready() -> None:
 
     assert status == 503
     assert body["status"] == "not-ready"
+
+
+@pytest.mark.parametrize("environment_name", ["staging", "production"])
+def test_managed_environments_require_runtime_dependencies(
+    environment_name: str,
+) -> None:
+    status, body, _ = request(
+        "/readyz",
+        environment={
+            "AEGIS_ENVIRONMENT": environment_name,
+            "AEGIS_DATABASE_URL": (
+                "postgresql://database/aegis?sslmode=verify-full"
+                f"&sslrootcert={RDS_GLOBAL_BUNDLE_PATH}"
+            ),
+            "AEGIS_REDIS_URL": "rediss://cache/0",
+            "AEGIS_OIDC_ISSUER": "https://identity.example",
+            "AEGIS_OIDC_JWKS_URL": "https://identity.example/certs",
+            "AEGIS_OIDC_AUDIENCE": "aegis",
+            "AEGIS_CREDENTIAL_PROVIDER": "external-secrets",
+            "AEGIS_SIGNING_KEY_REFERENCE": "secret-ref://aegis/signing",
+            "AEGIS_WRITER_FENCES_FILE": ("/var/run/secrets/aegis/writer-fences.json"),
+        },
+    )
+
+    assert status == 503
+    assert body["reason"] == "managed_environment_dependencies_unconfigured"
 
 
 def test_current_principal_comes_only_from_verified_identity() -> None:
@@ -567,6 +596,28 @@ def test_readiness_includes_configured_storage_dependency() -> None:
     assert ready["checks"] == ["configuration", "storage"]
     assert failed_status == 503
     assert failed["reason"] == "storage_unavailable"
+
+
+def test_readiness_fails_closed_on_schema_mismatch() -> None:
+    async def compatible() -> int:
+        return 11
+
+    async def incompatible() -> int:
+        return 12
+
+    ready_status, ready, _ = request(
+        "/health/ready",
+        app=ControlPlaneApp(schema_version=compatible),
+    )
+    failed_status, failed, _ = request(
+        "/health/ready",
+        app=ControlPlaneApp(schema_version=incompatible),
+    )
+
+    assert ready_status == 200
+    assert ready["checks"] == ["configuration", "schema"]
+    assert failed_status == 503
+    assert failed["reason"] == "schema_incompatible"
 
 
 def test_api_rejects_hostile_trace_context_before_authentication() -> None:

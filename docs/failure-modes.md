@@ -174,3 +174,27 @@ See [operator-ui.md](operator-ui.md) for triage and
   visible for reconciliation and operator escalation.
 - Production readiness fails closed without deployed PKI/mTLS/token brokerage,
   egress controls, partner identity, rotation/revocation, and capacity evidence.
+
+## Layer 15 deployment and disaster-recovery failures
+
+| Failure | Detection | Safe response |
+| --- | --- | --- |
+| Unsigned/untrusted digest | promotion/admission verification | block; no mutable-tag fallback |
+| Secret/key/OIDC unavailable | production readiness `503` | keep unready; no plaintext fallback |
+| Schema outside app window | readiness/migration preflight | halt; compatible digest or roll forward |
+| Concurrent migration | advisory lock denied | terminate duplicate; never bypass |
+| Additive migration commits, app fails | canary/readiness/SLO | roll back compatible app; keep schema |
+| Pod/zone restart | health/PDB plus replay | drain/reacquire; reject stale fence |
+| Redis loss | lag/connection alert, DB outbox intact | recreate, republish/redrive/reconcile |
+| PostgreSQL failover ambiguity | fence/sequence/integrity alert | stop writers, prove rows/generation |
+| Restore mismatch | count/hash/sequence gate | quarantine restore; investigate/select another point |
+| Projection/index loss | checkpoint/replay compare | rebuild only from ledger |
+| Backup/object/key unavailable | restore preflight | remain unavailable |
+| Retry storm | retry/queue/provider/pool saturation | shed before acceptance, cap/open circuits |
+| Egress/CNI failure | readiness/network synthetic | deny external calls; retain intent |
+| OTel loss | exporter health | degrade telemetry only |
+| Region isolated or returns stale | writer generation | fence before shift; deny stale appends |
+| GitOps/cluster drift | rendered/live diff | halt and reconcile reviewed revision |
+
+Automatic rollback never executes destructive schema reversal or assumes an
+external effect failed. Ambiguous outcomes remain visible until reconciliation.

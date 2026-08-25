@@ -82,6 +82,13 @@ def main() -> None:
         "create table protocol_quota_projection",
         "create table protocol_audit_projection",
         "protocol_trust_decision_history_tenant_isolation",
+        "aegis_schema_migrations",
+        "create table tenant_writer_fences",
+        "create table tenant_retention_policies",
+        "create table ledger_archive_manifests",
+        "aegis_assert_writer_fence",
+        "events_require_writer_fence",
+        "ledger_archive_manifests_tenant_isolation",
     )
     missing = [control for control in required if control not in schema]
     if missing:

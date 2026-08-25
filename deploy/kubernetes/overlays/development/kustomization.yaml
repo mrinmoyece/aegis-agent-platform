@@ -1,0 +1,76 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+patches:
+  - path: replicas.yaml
+  - target:
+      kind: Namespace
+      labelSelector: aegis.dev/environment=production
+    patch: |-
+      - op: replace
+        path: /metadata/labels/aegis.dev~1environment
+        value: development
+  - target:
+      kind: ConfigMap
+      name: aegis-runtime
+    patch: |-
+      - op: replace
+        path: /data/AEGIS_ENVIRONMENT
+        value: development
+      - op: replace
+        path: /data/AEGIS_OIDC_ISSUER
+        value: https://identity.development.example.invalid/realms/aegis
+      - op: replace
+        path: /data/AEGIS_OIDC_JWKS_URL
+        value: https://identity.development.example.invalid/realms/aegis/certs
+      - op: replace
+        path: /data/OTEL_RESOURCE_ATTRIBUTES
+        value: deployment.environment=development,service.namespace=aegis,cloud.region=eu-west-1
+  - target:
+      kind: ExternalSecret
+      name: aegis-runtime
+    patch: |-
+      - op: replace
+        path: /spec/data/0/remoteRef/key
+        value: /aegis/development/database
+      - op: replace
+        path: /spec/data/1/remoteRef/key
+        value: /aegis/development/redis
+      - op: replace
+        path: /spec/data/2/remoteRef/key
+        value: /aegis/development/keys
+  - target:
+      kind: ExternalSecret
+      name: aegis-migration
+    patch: |-
+      - op: replace
+        path: /spec/data/0/remoteRef/key
+        value: /aegis/development/database
+  - target:
+      kind: ExternalSecret
+      name: aegis-ingress-tls
+    patch: |-
+      - op: replace
+        path: /spec/data/0/remoteRef/key
+        value: /aegis/development/ingress-tls
+      - op: replace
+        path: /spec/data/1/remoteRef/key
+        value: /aegis/development/ingress-tls
+  - target:
+      kind: ExternalSecret
+      name: aegis-writer-fences
+    patch: |-
+      - op: replace
+        path: /spec/data/0/remoteRef/key
+        value: /aegis/development/writer-fences
+images:
+  - name: aegis-control-plane
+    newName: ghcr.io/mrinmoyece/aegis-agent-platform
+    digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  - name: aegis-operator-ui
+    newName: ghcr.io/mrinmoyece/aegis-operator-ui
+    digest: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  - name: otel/opentelemetry-collector-contrib
+    newName: otel/opentelemetry-collector-contrib
+    digest: sha256:9c247564e65ca19f97d891cca19a1a8d291ce631b890885b44e3503c5fdb3895

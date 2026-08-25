@@ -1,0 +1,513 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegis-worker-general
+  namespace: aegis-system
+  labels:
+    app.kubernetes.io/name: aegis-worker-general
+    aegis.dev/process-class: worker
+spec:
+  replicas: 0
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-worker-general
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aegis-worker-general
+        aegis.dev/process-class: worker
+      annotations:
+        aegis.dev/readiness-gate: provider-adapter-and-handler-registry
+    spec:
+      serviceAccountName: aegis-worker
+      automountServiceAccountToken: false
+      priorityClassName: aegis-workers
+      terminationGracePeriodSeconds: 90
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: aegis-worker-general
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: aegis-worker-general
+      containers:
+        - name: worker
+          image: aegis-control-plane
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: aegis-runtime
+            - secretRef:
+                name: aegis-runtime
+          env:
+            - name: AEGIS_SERVICE_NAME
+              value: aegis-worker-general
+            - name: AEGIS_PROCESS_ROLE
+              value: worker-general
+            - name: AEGIS_WORKER_DRAIN_SECONDS
+              value: "75"
+          ports:
+            - name: health
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+              ephemeral-storage: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: health
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: health
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: health
+            periodSeconds: 10
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 75"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegis-worker-evidence
+  namespace: aegis-system
+  labels:
+    app.kubernetes.io/name: aegis-worker-evidence
+    aegis.dev/process-class: worker
+spec:
+  replicas: 0
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-worker-evidence
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aegis-worker-evidence
+        aegis.dev/process-class: worker
+      annotations:
+        aegis.dev/readiness-gate: evidence-handler-and-object-store-adapter
+    spec:
+      serviceAccountName: aegis-worker
+      automountServiceAccountToken: false
+      priorityClassName: aegis-workers
+      terminationGracePeriodSeconds: 90
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: aegis-worker-evidence
+      containers:
+        - name: worker
+          image: aegis-control-plane
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: aegis-runtime
+            - secretRef:
+                name: aegis-runtime
+          env:
+            - name: AEGIS_SERVICE_NAME
+              value: aegis-worker-evidence
+            - name: AEGIS_PROCESS_ROLE
+              value: worker-evidence
+            - name: AEGIS_PROVIDER_MAX_CONCURRENCY
+              value: "8"
+          ports:
+            - name: health
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+              ephemeral-storage: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: health
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: health
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: health
+            periodSeconds: 10
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 75"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegis-outbox-publisher
+  namespace: aegis-system
+  labels:
+    app.kubernetes.io/name: aegis-outbox-publisher
+    aegis.dev/process-class: publisher
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-outbox-publisher
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aegis-outbox-publisher
+        aegis.dev/process-class: publisher
+      annotations:
+        aegis.dev/coordination: postgres-skip-locked-claims
+    spec:
+      serviceAccountName: aegis-worker
+      automountServiceAccountToken: false
+      priorityClassName: aegis-control-plane
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: aegis-outbox-publisher
+      containers:
+        - name: publisher
+          image: aegis-control-plane
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: aegis-runtime
+            - secretRef:
+                name: aegis-runtime
+          env:
+            - name: AEGIS_SERVICE_NAME
+              value: aegis-outbox-publisher
+            - name: AEGIS_PROCESS_ROLE
+              value: outbox-publisher
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+              ephemeral-storage: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          startupProbe:
+            exec:
+              command: ["/bin/sh", "-c", "test -f /tmp/aegis-ready"]
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "test -f /tmp/aegis-ready"]
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "kill -0 1"]
+            periodSeconds: 10
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  ["/bin/sh", "-c", "rm -f /tmp/aegis-ready; sleep 45"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegis-reconciler
+  namespace: aegis-system
+  labels:
+    app.kubernetes.io/name: aegis-reconciler
+    aegis.dev/process-class: reconciler
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-reconciler
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aegis-reconciler
+        aegis.dev/process-class: reconciler
+      annotations:
+        aegis.dev/coordination: durable-leases-and-generation-fences
+    spec:
+      serviceAccountName: aegis-worker
+      automountServiceAccountToken: false
+      priorityClassName: aegis-control-plane
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: aegis-reconciler
+      containers:
+        - name: reconciler
+          image: aegis-control-plane
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: aegis-runtime
+            - secretRef:
+                name: aegis-runtime
+          env:
+            - name: AEGIS_SERVICE_NAME
+              value: aegis-reconciler
+            - name: AEGIS_PROCESS_ROLE
+              value: reconciler
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+              ephemeral-storage: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          startupProbe:
+            exec:
+              command: ["/bin/sh", "-c", "test -f /tmp/aegis-ready"]
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "test -f /tmp/aegis-ready"]
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "kill -0 1"]
+            periodSeconds: 10
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  ["/bin/sh", "-c", "rm -f /tmp/aegis-ready; sleep 45"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aegis-protocol-gateway
+  namespace: aegis-system
+  labels:
+    app.kubernetes.io/name: aegis-protocol-gateway
+    aegis.dev/process-class: protocol-gateway
+spec:
+  replicas: 0
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aegis-protocol-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aegis-protocol-gateway
+        aegis.dev/process-class: protocol-gateway
+      annotations:
+        aegis.dev/readiness-gate: pki-token-brokerage-and-peer-trust
+    spec:
+      serviceAccountName: aegis-worker
+      automountServiceAccountToken: false
+      priorityClassName: aegis-workers
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: aegis-protocol-gateway
+      containers:
+        - name: gateway
+          image: aegis-control-plane
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: aegis-runtime
+            - secretRef:
+                name: aegis-runtime
+          env:
+            - name: AEGIS_SERVICE_NAME
+              value: aegis-protocol-gateway
+            - name: AEGIS_PROCESS_ROLE
+              value: protocol-gateway
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+              ephemeral-storage: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 45"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aegis-protocol-gateway
+  namespace: aegis-system
+spec:
+  selector:
+    app.kubernetes.io/name: aegis-protocol-gateway
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

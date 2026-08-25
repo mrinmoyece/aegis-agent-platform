@@ -1,0 +1,61 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: aegis-schema-migration
+  namespace: aegis-system
+  labels:
+    app.kubernetes.io/name: aegis-schema-migration
+    aegis.dev/process-class: migration
+    aegis.dev/template-only: "true"
+spec:
+  suspend: true
+  backoffLimit: 1
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aegis-schema-migration
+        aegis.dev/process-class: migration
+    spec:
+      restartPolicy: Never
+      serviceAccountName: aegis-migrator
+      automountServiceAccountToken: false
+      priorityClassName: aegis-control-plane
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrator
+          image: aegis-control-plane
+          imagePullPolicy: IfNotPresent
+          command: [python, /opt/aegis/scripts/migrate.py]
+          args: [--applied-by, kubernetes-migration-job]
+          envFrom:
+            - configMapRef:
+                name: aegis-runtime
+            - secretRef:
+                name: aegis-migration
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+              ephemeral-storage: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi

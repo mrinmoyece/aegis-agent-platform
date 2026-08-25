@@ -1,0 +1,445 @@
+name: Immutable environment promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      control_plane_digest:
+        description: Signed control-plane multi-platform sha256 digest
+        required: true
+        type: string
+      operator_ui_digest:
+        description: Signed operator-UI multi-platform sha256 digest
+        required: true
+        type: string
+      change_reference:
+        description: Approved change record reference
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promotion-${{ inputs.control_plane_digest }}-${{ inputs.operator_ui_digest }}
+  cancel-in-progress: false
+
+env:
+  CONTROL_PLANE_SOURCE: ghcr.io/mrinmoyece/aegis-agent-platform
+  OPERATOR_UI_SOURCE: ghcr.io/mrinmoyece/aegis-operator-ui
+  OTEL_AMD64_DIGEST: sha256:c1dcd624f4cb005351f9edd322d2d8193de00b18cf23004efb99c4b07c4f97f4
+  OTEL_ARM64_DIGEST: sha256:d18c0d52285547d8926e3cadaf0e861da447d9f89353c236e5c0149f261618ee
+  OTEL_DIGEST: sha256:9c247564e65ca19f97d891cca19a1a8d291ce631b890885b44e3503c5fdb3895
+  OTEL_SOURCE: docker.io/otel/opentelemetry-collector-contrib
+
+jobs:
+  verify:
+    name: Verify promoted artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      attestations: read
+      contents: read
+      packages: read
+    outputs:
+      control_plane_amd64: ${{ steps.platforms.outputs.control_plane_amd64 }}
+      control_plane_arm64: ${{ steps.platforms.outputs.control_plane_arm64 }}
+      operator_ui_amd64: ${{ steps.platforms.outputs.operator_ui_amd64 }}
+      operator_ui_arm64: ${{ steps.platforms.outputs.operator_ui_arm64 }}
+    steps:
+      - name: Require trusted default branch
+        run: test "${GITHUB_REF}" = "refs/heads/master"
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install cosign
+        uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Authenticate to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Resolve exact platform digests
+        id: platforms
+        env:
+          CONTROL_PLANE_DIGEST: ${{ inputs.control_plane_digest }}
+          OPERATOR_UI_DIGEST: ${{ inputs.operator_ui_digest }}
+        run: |
+          mkdir -p .aegis-evidence
+          resolve_platforms() {
+            local name="$1"
+            local image="$2"
+            local digest="$3"
+            local manifest
+            local amd64
+            local arm64
+            manifest="$(docker buildx imagetools inspect --raw "${image}@${digest}")"
+            amd64="$(jq --raw-output '.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64") | .digest' <<<"${manifest}")"
+            arm64="$(jq --raw-output '.manifests[] | select(.platform.os == "linux" and .platform.architecture == "arm64") | .digest' <<<"${manifest}")"
+            for platform_digest in "${amd64}" "${arm64}"; do
+              printf '%s\n' "${platform_digest}" | grep --extended-regexp --quiet '^sha256:[0-9a-f]{64}$'
+            done
+            {
+              echo "${name}_amd64=${amd64}"
+              echo "${name}_arm64=${arm64}"
+            } >> "${GITHUB_OUTPUT}"
+          }
+          resolve_platforms control_plane "${CONTROL_PLANE_SOURCE}" "${CONTROL_PLANE_DIGEST}"
+          resolve_platforms operator_ui "${OPERATOR_UI_SOURCE}" "${OPERATOR_UI_DIGEST}"
+      - name: Verify digests, identities, provenance, and SPDX
+        env:
+          CHANGE_REFERENCE: ${{ inputs.change_reference }}
+          CONTROL_PLANE_AMD64: ${{ steps.platforms.outputs.control_plane_amd64 }}
+          CONTROL_PLANE_ARM64: ${{ steps.platforms.outputs.control_plane_arm64 }}
+          CONTROL_PLANE_DIGEST: ${{ inputs.control_plane_digest }}
+          GH_TOKEN: ${{ github.token }}
+          OPERATOR_UI_AMD64: ${{ steps.platforms.outputs.operator_ui_amd64 }}
+          OPERATOR_UI_ARM64: ${{ steps.platforms.outputs.operator_ui_arm64 }}
+          OPERATOR_UI_DIGEST: ${{ inputs.operator_ui_digest }}
+        run: |
+          printf '%s\n' "${CHANGE_REFERENCE}" | grep --extended-regexp --quiet '^change-ref://'
+          verify_artifact() {
+            local image="$1"
+            local digest="$2"
+            local amd64="$3"
+            local arm64="$4"
+            printf '%s\n' "${digest}" | grep --extended-regexp --quiet '^sha256:[0-9a-f]{64}$'
+            cosign verify \
+              --registry-referrers-mode oci-1-1 \
+              --certificate-identity-regexp '^https://github.com/mrinmoyece/aegis-agent-platform/.github/workflows/supply-chain.yml@refs/heads/master$' \
+              --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+              "${image}@${digest}" >/dev/null
+            gh attestation verify "oci://${image}@${digest}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --signer-workflow github.com/mrinmoyece/aegis-agent-platform/.github/workflows/supply-chain.yml \
+              --source-ref refs/heads/master \
+              --predicate-type 'https://slsa.dev/provenance/v1' >/dev/null
+            gh attestation verify "oci://${image}@${digest}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --signer-workflow github.com/mrinmoyece/aegis-agent-platform/.github/workflows/supply-chain.yml \
+              --source-ref refs/heads/master \
+              --predicate-type 'https://spdx.dev/Document/v2.3' >/dev/null
+            for platform_digest in "${amd64}" "${arm64}"; do
+              gh attestation verify "oci://${image}@${platform_digest}" \
+                --repo "${GITHUB_REPOSITORY}" \
+                --signer-workflow github.com/mrinmoyece/aegis-agent-platform/.github/workflows/supply-chain.yml \
+                --source-ref refs/heads/master \
+                --predicate-type 'https://spdx.dev/Document/v2.3' >/dev/null
+            done
+          }
+          verify_artifact "${CONTROL_PLANE_SOURCE}" "${CONTROL_PLANE_DIGEST}" "${CONTROL_PLANE_AMD64}" "${CONTROL_PLANE_ARM64}"
+          verify_artifact "${OPERATOR_UI_SOURCE}" "${OPERATOR_UI_DIGEST}" "${OPERATOR_UI_AMD64}" "${OPERATOR_UI_ARM64}"
+      - name: Re-scan control-plane amd64 manifest
+        uses: anchore/scan-action@df395807f4554463d4455b8047cf58e37b6acaae # v6.5.0
+        with:
+          image: ${{ env.CONTROL_PLANE_SOURCE }}@${{ steps.platforms.outputs.control_plane_amd64 }}
+          severity-cutoff: high
+          fail-build: false
+          only-fixed: false
+          output-format: json
+          output-file: .aegis-evidence/control-plane-linux-amd64.grype.json
+      - name: Re-scan control-plane arm64 manifest
+        uses: anchore/scan-action@df395807f4554463d4455b8047cf58e37b6acaae # v6.5.0
+        with:
+          image: ${{ env.CONTROL_PLANE_SOURCE }}@${{ steps.platforms.outputs.control_plane_arm64 }}
+          severity-cutoff: high
+          fail-build: false
+          only-fixed: false
+          output-format: json
+          output-file: .aegis-evidence/control-plane-linux-arm64.grype.json
+      - name: Re-scan operator-UI amd64 manifest
+        uses: anchore/scan-action@df395807f4554463d4455b8047cf58e37b6acaae # v6.5.0
+        with:
+          image: ${{ env.OPERATOR_UI_SOURCE }}@${{ steps.platforms.outputs.operator_ui_amd64 }}
+          severity-cutoff: high
+          fail-build: false
+          only-fixed: false
+          output-format: json
+          output-file: .aegis-evidence/operator-ui-linux-amd64.grype.json
+      - name: Re-scan operator-UI arm64 manifest
+        uses: anchore/scan-action@df395807f4554463d4455b8047cf58e37b6acaae # v6.5.0
+        with:
+          image: ${{ env.OPERATOR_UI_SOURCE }}@${{ steps.platforms.outputs.operator_ui_arm64 }}
+          severity-cutoff: high
+          fail-build: false
+          only-fixed: false
+          output-format: json
+          output-file: .aegis-evidence/operator-ui-linux-arm64.grype.json
+      - name: Scan OTel Collector amd64 manifest
+        uses: anchore/scan-action@df395807f4554463d4455b8047cf58e37b6acaae # v6.5.0
+        with:
+          image: ${{ env.OTEL_SOURCE }}@${{ env.OTEL_AMD64_DIGEST }}
+          severity-cutoff: high
+          fail-build: false
+          only-fixed: false
+          output-format: json
+          output-file: .aegis-evidence/otel-linux-amd64.grype.json
+      - name: Scan OTel Collector arm64 manifest
+        uses: anchore/scan-action@df395807f4554463d4455b8047cf58e37b6acaae # v6.5.0
+        with:
+          image: ${{ env.OTEL_SOURCE }}@${{ env.OTEL_ARM64_DIGEST }}
+          severity-cutoff: high
+          fail-build: false
+          only-fixed: false
+          output-format: json
+          output-file: .aegis-evidence/otel-linux-arm64.grype.json
+      - name: Enforce promotion vulnerability policy
+        run: |
+          python scripts/check_vulnerability_policy.py \
+            --report aegis-agent-platform/linux-amd64=.aegis-evidence/control-plane-linux-amd64.grype.json \
+            --report aegis-agent-platform/linux-arm64=.aegis-evidence/control-plane-linux-arm64.grype.json \
+            --report aegis-operator-ui/linux-amd64=.aegis-evidence/operator-ui-linux-amd64.grype.json \
+            --report aegis-operator-ui/linux-arm64=.aegis-evidence/operator-ui-linux-arm64.grype.json \
+            --report aegis-otel-collector/linux-amd64=.aegis-evidence/otel-linux-amd64.grype.json \
+            --report aegis-otel-collector/linux-arm64=.aegis-evidence/otel-linux-arm64.grype.json \
+            --output .aegis-evidence/promotion-vulnerability-policy.json
+
+  development:
+    name: Mirror and materialize development
+    needs: verify
+    environment: development
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      attestations: read
+      contents: read
+      id-token: write
+      packages: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install cosign
+        uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+      - name: Install ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+        with:
+          version: 1.2.2
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Authenticate to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Assume private-registry promotion role
+        uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c # v4
+        with:
+          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_PROMOTION_ROLE_ARN }}
+      - name: Authenticate to private ECR
+        uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64 # v2
+      - name: Mirror signed OCI graphs without changing digests
+        env:
+          AEGIS_ECR_REGISTRY: ${{ vars.AEGIS_ECR_REGISTRY }}
+          CONTROL_PLANE_DIGEST: ${{ inputs.control_plane_digest }}
+          GH_TOKEN: ${{ github.token }}
+          OPERATOR_UI_DIGEST: ${{ inputs.operator_ui_digest }}
+        run: scripts/mirror_promotion_images.sh
+      - name: Create digest-pinned development bundle
+        env:
+          CHANGE_REFERENCE: ${{ inputs.change_reference }}
+          CONTROL_PLANE_DIGEST: ${{ inputs.control_plane_digest }}
+          ECR_REGISTRY: ${{ vars.AEGIS_ECR_REGISTRY }}
+          OPERATOR_UI_DIGEST: ${{ inputs.operator_ui_digest }}
+        run: |
+          python scripts/materialize_kustomize_bundle.py \
+            --environment development \
+            --control-plane-image "${ECR_REGISTRY}/aegis-agent-platform" \
+            --control-plane-digest "${CONTROL_PLANE_DIGEST}" \
+            --operator-ui-image "${ECR_REGISTRY}/aegis-operator-ui" \
+            --operator-ui-digest "${OPERATOR_UI_DIGEST}" \
+            --otel-image "${ECR_REGISTRY}/aegis-otel-collector" \
+            --otel-digest "${OTEL_DIGEST}" \
+            --public-domain "${{ vars.AEGIS_PUBLIC_DOMAIN }}" \
+            --oidc-issuer "${{ vars.AEGIS_OIDC_ISSUER }}" \
+            --oidc-jwks-url "${{ vars.AEGIS_OIDC_JWKS_URL }}" \
+            --aws-region "${{ vars.AWS_REGION }}" \
+            --data-cidr "${{ vars.AEGIS_DATA_CIDR }}" \
+            --egress-proxy-url "${{ vars.AEGIS_EGRESS_PROXY_URL }}" \
+            --otel-server-name "${{ vars.AEGIS_OTEL_SERVER_NAME }}" \
+            --platform-alert-route "${{ vars.AEGIS_PLATFORM_ALERT_ROUTE }}" \
+            --database-alert-route "${{ vars.AEGIS_DATABASE_ALERT_ROUTE }}" \
+            --change-reference "${CHANGE_REFERENCE}" \
+            --output promotion-bundle
+          kubectl kustomize promotion-bundle/deploy/kubernetes/overlays/development >/dev/null
+          (cd promotion-bundle && sha256sum --check SHA256SUMS)
+      - name: Upload immutable development bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: aegis-development-bundle
+          path: promotion-bundle/
+          if-no-files-found: error
+          retention-days: 14
+
+  staging:
+    name: Mirror and materialize staging
+    needs: development
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      attestations: read
+      contents: read
+      id-token: write
+      packages: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Download development bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: aegis-development-bundle
+          path: previous-bundle
+      - name: Verify development bundle
+        run: (cd previous-bundle && sha256sum --check SHA256SUMS)
+      - name: Install cosign
+        uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+      - name: Install ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+        with:
+          version: 1.2.2
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Authenticate to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Assume private-registry promotion role
+        uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c # v4
+        with:
+          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_PROMOTION_ROLE_ARN }}
+      - name: Authenticate to private ECR
+        uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64 # v2
+      - name: Mirror signed OCI graphs without changing digests
+        env:
+          AEGIS_ECR_REGISTRY: ${{ vars.AEGIS_ECR_REGISTRY }}
+          CONTROL_PLANE_DIGEST: ${{ inputs.control_plane_digest }}
+          GH_TOKEN: ${{ github.token }}
+          OPERATOR_UI_DIGEST: ${{ inputs.operator_ui_digest }}
+        run: scripts/mirror_promotion_images.sh
+      - name: Create digest-pinned staging bundle
+        env:
+          CHANGE_REFERENCE: ${{ inputs.change_reference }}
+          CONTROL_PLANE_DIGEST: ${{ inputs.control_plane_digest }}
+          ECR_REGISTRY: ${{ vars.AEGIS_ECR_REGISTRY }}
+          OPERATOR_UI_DIGEST: ${{ inputs.operator_ui_digest }}
+        run: |
+          python scripts/materialize_kustomize_bundle.py \
+            --environment staging \
+            --control-plane-image "${ECR_REGISTRY}/aegis-agent-platform" \
+            --control-plane-digest "${CONTROL_PLANE_DIGEST}" \
+            --operator-ui-image "${ECR_REGISTRY}/aegis-operator-ui" \
+            --operator-ui-digest "${OPERATOR_UI_DIGEST}" \
+            --otel-image "${ECR_REGISTRY}/aegis-otel-collector" \
+            --otel-digest "${OTEL_DIGEST}" \
+            --public-domain "${{ vars.AEGIS_PUBLIC_DOMAIN }}" \
+            --oidc-issuer "${{ vars.AEGIS_OIDC_ISSUER }}" \
+            --oidc-jwks-url "${{ vars.AEGIS_OIDC_JWKS_URL }}" \
+            --aws-region "${{ vars.AWS_REGION }}" \
+            --data-cidr "${{ vars.AEGIS_DATA_CIDR }}" \
+            --egress-proxy-url "${{ vars.AEGIS_EGRESS_PROXY_URL }}" \
+            --otel-server-name "${{ vars.AEGIS_OTEL_SERVER_NAME }}" \
+            --platform-alert-route "${{ vars.AEGIS_PLATFORM_ALERT_ROUTE }}" \
+            --database-alert-route "${{ vars.AEGIS_DATABASE_ALERT_ROUTE }}" \
+            --change-reference "${CHANGE_REFERENCE}" \
+            --output promotion-bundle
+          kubectl kustomize promotion-bundle/deploy/kubernetes/overlays/staging >/dev/null
+          (cd promotion-bundle && sha256sum --check SHA256SUMS)
+      - name: Upload immutable staging bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: aegis-staging-bundle
+          path: promotion-bundle/
+          if-no-files-found: error
+          retention-days: 14
+
+  production:
+    name: Mirror and materialize production
+    needs: staging
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      attestations: read
+      contents: read
+      id-token: write
+      packages: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Download staging bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: aegis-staging-bundle
+          path: previous-bundle
+      - name: Verify staging bundle
+        run: (cd previous-bundle && sha256sum --check SHA256SUMS)
+      - name: Install cosign
+        uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+      - name: Install ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
+        with:
+          version: 1.2.2
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Authenticate to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Assume private-registry promotion role
+        uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c # v4
+        with:
+          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_PROMOTION_ROLE_ARN }}
+      - name: Authenticate to private ECR
+        uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64 # v2
+      - name: Mirror signed OCI graphs without changing digests
+        env:
+          AEGIS_ECR_REGISTRY: ${{ vars.AEGIS_ECR_REGISTRY }}
+          CONTROL_PLANE_DIGEST: ${{ inputs.control_plane_digest }}
+          GH_TOKEN: ${{ github.token }}
+          OPERATOR_UI_DIGEST: ${{ inputs.operator_ui_digest }}
+        run: scripts/mirror_promotion_images.sh
+      - name: Create digest-pinned production bundle
+        env:
+          CHANGE_REFERENCE: ${{ inputs.change_reference }}
+          CONTROL_PLANE_DIGEST: ${{ inputs.control_plane_digest }}
+          ECR_REGISTRY: ${{ vars.AEGIS_ECR_REGISTRY }}
+          OPERATOR_UI_DIGEST: ${{ inputs.operator_ui_digest }}
+        run: |
+          python scripts/materialize_kustomize_bundle.py \
+            --environment production \
+            --control-plane-image "${ECR_REGISTRY}/aegis-agent-platform" \
+            --control-plane-digest "${CONTROL_PLANE_DIGEST}" \
+            --operator-ui-image "${ECR_REGISTRY}/aegis-operator-ui" \
+            --operator-ui-digest "${OPERATOR_UI_DIGEST}" \
+            --otel-image "${ECR_REGISTRY}/aegis-otel-collector" \
+            --otel-digest "${OTEL_DIGEST}" \
+            --public-domain "${{ vars.AEGIS_PUBLIC_DOMAIN }}" \
+            --oidc-issuer "${{ vars.AEGIS_OIDC_ISSUER }}" \
+            --oidc-jwks-url "${{ vars.AEGIS_OIDC_JWKS_URL }}" \
+            --aws-region "${{ vars.AWS_REGION }}" \
+            --data-cidr "${{ vars.AEGIS_DATA_CIDR }}" \
+            --egress-proxy-url "${{ vars.AEGIS_EGRESS_PROXY_URL }}" \
+            --otel-server-name "${{ vars.AEGIS_OTEL_SERVER_NAME }}" \
+            --platform-alert-route "${{ vars.AEGIS_PLATFORM_ALERT_ROUTE }}" \
+            --database-alert-route "${{ vars.AEGIS_DATABASE_ALERT_ROUTE }}" \
+            --change-reference "${CHANGE_REFERENCE}" \
+            --output promotion-bundle
+          kubectl kustomize promotion-bundle/deploy/kubernetes/overlays/production >/dev/null
+          (cd promotion-bundle && sha256sum --check SHA256SUMS)
+          echo "Verified bundle is ready for the separately audited GitOps apply boundary."
+      - name: Upload immutable production bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: aegis-production-bundle
+          path: promotion-bundle/
+          if-no-files-found: error
+          retention-days: 14

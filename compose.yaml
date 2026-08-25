@@ -40,6 +40,7 @@ services:
       AEGIS_OIDC_JWKS_URL: http://keycloak:8080/realms/aegis/protocol/openid-connect/certs
       AEGIS_OIDC_AUDIENCE: aegis-control-plane
       AEGIS_OIDC_CLOCK_SKEW_SECONDS: "30"
+      AEGIS_WRITER_FENCES_FILE: /var/run/secrets/aegis/writer-fences.json
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       OTEL_SERVICE_NAME: aegis-control-plane
       OTEL_RESOURCE_ATTRIBUTES: deployment.environment=development,service.namespace=aegis
@@ -53,6 +54,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migration:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       keycloak:
@@ -60,6 +63,8 @@ services:
       otel-collector:
         condition: service_started
     read_only: true
+    volumes:
+      - ./docker/local-writer-fences.json:/var/run/secrets/aegis/writer-fences.json:ro
     tmpfs:
       - /tmp:size=16m,mode=1777
     cap_drop:
@@ -71,8 +76,36 @@ services:
       - backend
       - telemetry
 
+  migration:
+    build:
+      context: .
+      target: runtime
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        python /opt/aegis/scripts/migrate.py
+        --applied-by local-compose
+        --adopt-existing
+        && python /opt/aegis/scripts/bootstrap_local_compose.py
+    environment:
+      AEGIS_ENVIRONMENT: development
+      AEGIS_MIGRATION_DATABASE_URL: postgresql://${AEGIS_POSTGRES_USER}:${AEGIS_POSTGRES_PASSWORD}@postgres:5432/${AEGIS_POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+    networks:
+      - backend
+
   postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
     environment:
       POSTGRES_USER: ${AEGIS_POSTGRES_USER}
       POSTGRES_PASSWORD: ${AEGIS_POSTGRES_PASSWORD}
@@ -106,7 +139,7 @@ services:
       - backend
 
   redis:
-    image: redis:7.4-alpine
+    image: redis:7.4-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
     command:
       - redis-server
       - --appendonly
@@ -136,7 +169,7 @@ services:
       - backend
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.3
+    image: quay.io/keycloak/keycloak:26.3@sha256:357829ec7c4693397533035092ad13b0644bcc95ded311f33a3738c4d9e9bdba
     command: ["start-dev", "--import-realm", "--health-enabled=true"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${AEGIS_KEYCLOAK_ADMIN}
@@ -148,6 +181,7 @@ services:
       KC_HOSTNAME: http://localhost:${AEGIS_KEYCLOAK_PORT:-8081}
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_HOSTNAME_STRICT: "false"
+      JAVA_OPTS_KC_HEAP: -Xms64m -Xmx256m -XX:MaxMetaspaceSize=192m
     ports:
       - "127.0.0.1:${AEGIS_KEYCLOAK_PORT:-8081}:8080"
     volumes:
@@ -168,7 +202,7 @@ services:
       - backend
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.130.1
+    image: otel/opentelemetry-collector-contrib:0.130.1@sha256:9c247564e65ca19f97d891cca19a1a8d291ce631b890885b44e3503c5fdb3895
     command: ["--config=/etc/otelcol-contrib/config.yaml"]
     volumes:
       - ./deploy/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
@@ -197,7 +231,7 @@ services:
       - telemetry
 
   prometheus:
-    image: prom/prometheus:v3.5.0
+    image: prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -214,7 +248,7 @@ services:
       - telemetry
 
   grafana:
-    image: grafana/grafana:12.1.0
+    image: grafana/grafana:12.1.0@sha256:6ac590e7cabc2fbe8d7b8fc1ce9c9f0582177b334e0df9c927ebd9670469440f
     environment:
       GF_SECURITY_ADMIN_USER: ${AEGIS_GRAFANA_ADMIN_USER}
       GF_SECURITY_ADMIN_PASSWORD: ${AEGIS_GRAFANA_ADMIN_PASSWORD}

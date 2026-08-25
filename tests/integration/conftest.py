@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 
 import psycopg
@@ -22,8 +24,24 @@ def migrated_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA public CASCADE")
         connection.execute("CREATE SCHEMA public")
-        for migration in sorted((ROOT / "migrations").glob("*.sql")):
+        migrations = sorted((ROOT / "migrations").glob("*.sql"))
+        for migration in migrations:
             connection.execute(migration.read_text(encoding="utf-8"))
+        applied_at = datetime.now(UTC)
+        for version, migration in enumerate(migrations, start=1):
+            connection.execute(
+                """
+                INSERT INTO aegis_schema_migrations (
+                    version, migration_name, content_sha256, applied_at, applied_by
+                ) VALUES (%s, %s, %s, %s, 'integration-fixture')
+                """,
+                (
+                    version,
+                    migration.name,
+                    sha256(migration.read_bytes()).hexdigest(),
+                    applied_at,
+                ),
+            )
         connection.execute(
             """
             INSERT INTO tenants (tenant_id, display_name, enabled, created_at)
@@ -36,5 +54,15 @@ def migrated_database() -> None:
                     true,
                     transaction_timestamp()
                 )
+            """
+        )
+        connection.execute(
+            """
+            UPDATE tenant_writer_fences
+            SET home_region = 'local-test',
+                state = 'active',
+                enforcement_enabled = true,
+                approved_change_reference = 'change-ref://integration-writer',
+                updated_at = transaction_timestamp()
             """
         )

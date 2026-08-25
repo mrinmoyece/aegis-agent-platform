@@ -39,6 +39,24 @@ REQUIRED_DOCUMENTS = {
     ROOT / "docs" / "status.md",
     ROOT / "docs" / "operator-ui.md",
     ROOT / "docs" / "operator-accessibility.md",
+    ROOT / "docs" / "kubernetes-deployment.md",
+    ROOT / "docs" / "terraform-aws-reference.md",
+    ROOT / "docs" / "database-lifecycle.md",
+    ROOT / "docs" / "scaling-and-multi-region.md",
+    ROOT / "docs" / "backup-restore-dr.md",
+    ROOT / "docs" / "deployment-and-supply-chain.md",
+    ROOT / "docs" / "privacy-and-compliance.md",
+    ROOT / "docs" / "production-readiness-evidence.md",
+    ROOT / "docs" / "runbooks" / "deployment.md",
+    ROOT / "docs" / "runbooks" / "migration.md",
+    ROOT / "docs" / "runbooks" / "backup-restore.md",
+    ROOT / "docs" / "runbooks" / "regional-failover.md",
+    ROOT / "docs" / "runbooks" / "secrets-break-glass.md",
+    ROOT / "docs" / "adr" / "README.md",
+    ROOT / "docs" / "adr" / "0023-kustomize-and-aws-production-foundations.md",
+    ROOT / "docs" / "adr" / "0024-single-writer-multi-region.md",
+    ROOT / "docs" / "adr" / "0025-ledger-retention-and-partitioning.md",
+    ROOT / "docs" / "adr" / "0026-keyless-supply-chain-verification.md",
     ROOT / "docs" / "adr" / "0021-bff-session-and-derived-operator-views.md",
     ROOT / "docs" / "adr" / "0022-ledger-mediated-mcp-a2a-boundaries.md",
     ROOT / "docs" / "adr" / "0013-durable-evidence-ingestion.md",
@@ -97,7 +115,7 @@ def main() -> None:
         raise SystemExit("broken documentation links:\n" + "\n".join(failures))
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    if "Current status: Layer 14" not in readme:
+    if "Current status: Layer 15" not in readme:
         raise SystemExit("README must state the current implementation layer")
 
 

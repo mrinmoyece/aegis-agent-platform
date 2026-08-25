@@ -10,6 +10,7 @@ from typing import Protocol
 from uuid import UUID
 
 from aegis_agent_platform.domain import EventEnvelope, JsonValue
+from aegis_agent_platform.operations import WriterFence
 from aegis_agent_platform.tenancy import TenantContext
 
 
@@ -149,6 +150,14 @@ class EventStore(Protocol):
         ...
 
 
+class WriterFenceResolver(Protocol):
+    """Resolve deployment credentials from the trusted tenant context."""
+
+    def resolve(self, context: TenantContext) -> WriterFence:
+        """Return the tenant credential or fail closed."""
+        ...
+
+
 __all__ = [
     "AppendResult",
     "ClaimedOutboxMessage",
@@ -162,4 +171,5 @@ __all__ = [
     "ReplayCorruptionError",
     "StorageError",
     "TransientStorageError",
+    "WriterFenceResolver",
 ]

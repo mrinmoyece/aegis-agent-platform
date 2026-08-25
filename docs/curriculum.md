@@ -65,10 +65,10 @@ Implemented only when its document links executable code and tests.
 | Observability and SLOs (`observability-and-slos.md`) | Correlate events/traces safely, select SLIs, control cardinality, and operate alerting | 12 | Local topology scaffolded; production layer planned |
 | Threat model (`threat-model.md`) | Analyze tenant, evidence, model, swarm, tool, memory, sandbox, provider, evaluation, and supply-chain threats | 1–11 | Layer 11 evaluation controls and environment gaps documented |
 | Failure modes and runbooks (`failure-modes.md`, `runbook.md`) | Diagnose crashes, stale leases, partial effects, provider faults, poisoned memory/evidence/evaluation data, and regional failure | 3–12 | Runtime and Layer 11 evaluation responses documented; regional sections planned |
-| Scaling and multi-region (`scaling-and-multi-region.md`) | Estimate capacity, partition tenants, preserve ordering, and choose recovery objectives | 8 | Planned |
-| Privacy, retention, and compliance (`privacy-and-compliance.md`) | Classify data, minimize collection, enforce deletion/legal hold, and produce evidence | 6–8 | Planned |
-| Deployment and supply chain (`deployment-and-supply-chain.md`) | Build least-privilege releases with SBOM, provenance, signing, promotion, and rollback | 8 | CI/container baseline only |
-| Alternatives and ADR index (`adr/README.md`) | Compare orchestration, queues, identity, sandbox, provider, and evaluation choices | 1–11 | Planned index; eighteen ADRs exist |
+| Scaling and multi-region (`scaling-and-multi-region.md`) | Estimate capacity, partition tenants, preserve ordering, and choose recovery objectives | 15 | Design and deterministic fencing evidence; live load/failover deferred |
+| Privacy, retention, and compliance (`privacy-and-compliance.md`) | Classify data, minimize collection, enforce deletion/legal hold, and produce evidence | 15 | Control mapping scaffolded; no certification |
+| Deployment and supply chain (`deployment-and-supply-chain.md`) | Build least-privilege releases with SBOM, provenance, signing, promotion, and rollback | 15 | CI/config implemented; live admission/GitOps deferred |
+| Alternatives and ADR index (`adr/README.md`) | Compare orchestration, queues, identity, sandbox, provider, evaluation, and deployment choices | 1–15 | Documented through ADR 0026 |
 | Interview question bank (`interview-question-bank.md`) | Communicate tradeoffs and defend design under follow-up pressure | 1–11 | Layer 11 release-evidence boundary questions documented |
 | Hands-on labs (`labs.md`) | Turn each invariant into executable evidence and inject realistic failures | 1–12 | Layers 1–11 deterministic labs runnable |
 | Terminology (`glossary.md`) | Use durability, evidence, tenancy, evaluation, and operations terms precisely | 1 | Documented |
@@ -118,3 +118,16 @@ confused-deputy, SSRF/DNS/redirect, replay, schema/Unicode/MIME, tenant, and
 denial-of-wallet attacks; and distinguish deterministic interoperability from
 production PKI/federation evidence. Use [protocols.md](protocols.md),
 [MCP/A2A security](mcp-a2a-security.md), and ADR 0022.
+
+## Layer 15 learning outcomes
+
+Learners can defend Kustomize over Helm for a visible policy surface, evaluate an
+AWS-specific private reference without portability claims, separate namespace from
+tenant authority, design restricted workloads and exact network intent, promote
+signed SBOM-attested digests, execute expand/migrate/contract safely, model capacity
+and connection budgets, preserve ledger truth through restore/redrive, fence regional
+writers, and distinguish local/config evidence from measured production controls.
+Use [Kubernetes deployment](kubernetes-deployment.md),
+[Terraform AWS reference](terraform-aws-reference.md),
+[database lifecycle](database-lifecycle.md), and
+[backup/restore/DR](backup-restore-dr.md).

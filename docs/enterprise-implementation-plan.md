@@ -48,7 +48,10 @@ flowchart LR
   L10[Event-grounded memory and RAG]
   L11[Layered deterministic evaluation gates]
   L12[Observability and enterprise operations]
-  L1 --> L2 --> L3 --> L4 --> L5 --> L6 --> L7 --> L8 --> L9 --> L10 --> L11 --> L12
+  L13[Secure operator UI and BFF]
+  L14[Secure MCP and A2A]
+  L15[Production deployment foundations]
+  L1 --> L2 --> L3 --> L4 --> L5 --> L6 --> L7 --> L8 --> L9 --> L10 --> L11 --> L12 --> L13 --> L14 --> L15
   L3 --> L5
   L4 --> L6
   L2 --> L8
@@ -78,8 +81,9 @@ Each slice is intended to be a reviewable PR with one primary acceptance gate.
 | EP-12 | 10 | Three-tier memory, pgvector retrieval, and compaction | EP-02, EP-04 | tenant isolation, provenance, deletion, fidelity tests |
 | EP-13 | 11 | Layered evaluation harness and release gates | EP-09–EP-12 | known regressions blocked by deterministic/adversarial suites |
 | EP-14 | 12 | Production telemetry, audit, SLOs, and cost controls | EP-03–EP-13 | dashboards, alerts, trace/event correlation, SLO burn tests |
-| EP-15 | 12 | Deployment, secrets, backup/restore, HA, and multi-region | EP-14 | signed release, restore/failover, capacity evidence |
-| EP-16 | 12 | MCP adapters and external A2A interoperability | EP-10, EP-14, EP-15 | conformance, tenant, replay, cancellation, malicious-peer tests |
+| EP-15 | 15 | Deployment, secrets, backup/restore, HA, and bounded multi-region | EP-14, EP-16, EP-17 | signed release config, local restore, mock plan, capacity/fencing evidence |
+| EP-16 | 14 | MCP adapters and external A2A interoperability | EP-10, EP-14 | conformance, tenant, replay, cancellation, malicious-peer tests |
+| EP-17 | 13 | Secure operator UI and BFF | EP-10, EP-14 | session/tenant/approval/browser/accessibility/security evidence |
 
 ## EP-01–EP-02: Identity, tenancy, and RBAC
 
@@ -585,6 +589,9 @@ mapping, and runbook. Safety invariants are not traded against availability.
 
 ## EP-15: Production deployment and enterprise operations
 
+**Layer 15 status: Implemented foundations with code/config and local deterministic
+evidence; live production exit gate remains unmet.**
+
 ### Platform
 
 - Build immutable images, generate SBOM and SLSA provenance, scan dependencies
@@ -626,6 +633,10 @@ until independently reviewed against a defined scope.
 A signed release survives load, restore, failover, credential rotation, rollback,
 and tenant-incident drills within documented objectives, with operator runbooks
 and auditable evidence.
+
+The repository proves render/validation, mocked plans, deterministic fencing/
+readiness/effect invariants, and a small container restore drill. It does not yet
+prove this live exit gate.
 
 ## EP-16: MCP and A2A
 
@@ -705,7 +716,7 @@ attainment. Production qualification, external backends, live production identit
 public protocol federation, 24/7 operations, HA/DR/multi-region, final load/chaos, and compliance
 remain later gates.
 
-## EP-15: Secure operator UI and BFF
+## EP-17: Secure operator UI and BFF
 
 **Layer 13 status: Implemented with deterministic/local evidence.** The
 `aegis_agent_platform.operator` package owns provider-neutral bounded view/command

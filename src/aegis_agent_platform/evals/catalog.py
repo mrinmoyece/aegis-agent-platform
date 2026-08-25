@@ -1,4 +1,4 @@
-"""Versioned deterministic Layer 14 evaluation catalog."""
+"""Versioned deterministic Layer 15 evaluation catalog."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from aegis_agent_platform.evals.contracts import (
 from aegis_agent_platform.evals.faults import FaultCutPoint
 from aegis_agent_platform.evals.scoring import default_scorers
 
-CATALOG_VERSION = "1.3.0"
+CATALOG_VERSION = "1.4.0"
 DATASET_CREATED_AT = datetime(2026, 8, 13, 12, 0, tzinfo=UTC)
 FIXTURE_IDS = (
     "checkout-incident-v1",
@@ -53,19 +53,19 @@ def build_suite() -> EvaluationSuite:
         for scenario_id, case_ids in sorted(grouped.items())
     )
     dataset = DatasetManifest(
-        "aegis-checkout-layer14",
+        "aegis-checkout-layer15",
         1,
         CATALOG_VERSION,
         (
             "Synthetic checkout incident, adversarial channels, recovery cut points, "
-            "observability invariants, and operator safety invariants."
+            "observability, operator safety, protocol, and deployment invariants."
         ),
         DATASET_CREATED_AT,
         _fixtures(),
         tuple(case.case_id for case in cases),
     )
     return EvaluationSuite(
-        "aegis-layer14-enterprise",
+        "aegis-layer15-enterprise",
         CATALOG_VERSION,
         "Hermetic, adversarial, safety, and recovery evaluation gates.",
         dataset,
@@ -169,6 +169,14 @@ def _rows() -> tuple[_CaseRow, ...]:
         ("protocol", "a2a-ambiguous-reconciled", ExpectedOutcome.RECOVERED),
         ("protocol", "revocation", ExpectedOutcome.DENIED),
         ("protocol", "outage-contained", ExpectedOutcome.RECOVERED),
+        ("deployment", "pod-restart", ExpectedOutcome.RECOVERED),
+        ("deployment", "stale-region-writer", ExpectedOutcome.DENIED),
+        ("deployment", "redis-loss", ExpectedOutcome.RECOVERED),
+        ("deployment", "ledger-restore", ExpectedOutcome.RECOVERED),
+        ("deployment", "schema-mismatch", ExpectedOutcome.SAFE_FAILURE),
+        ("deployment", "unsigned-image", ExpectedOutcome.DENIED),
+        ("deployment", "unready-boundaries", ExpectedOutcome.DENIED),
+        ("deployment", "telemetry-loss", ExpectedOutcome.RECOVERED),
     )
     adversarial = tuple(
         ("adversarial", variant, ExpectedOutcome.QUARANTINED)
@@ -259,6 +267,19 @@ def _invariants_for(
         "revocation": ["revocation_blocks_calls"],
         "outage-contained": ["protocol_outage_contained", "replay_convergence"],
     }
+    deployment_invariants = {
+        "pod-restart": ["pod_restart_preserves_correctness", "replay_convergence"],
+        "stale-region-writer": ["stale_region_denied"],
+        "redis-loss": ["redis_loss_recoverable", "replay_convergence"],
+        "ledger-restore": ["restore_integrity", "replay_convergence"],
+        "schema-mismatch": ["schema_mismatch_fails_readiness"],
+        "unsigned-image": ["unsigned_image_rejected"],
+        "unready-boundaries": [
+            "protocol_disabled_without_trust",
+            "sandbox_disabled_without_isolation",
+        ],
+        "telemetry-loss": ["telemetry_outage_contained"],
+    }
     by_family = {
         "identity": ["tenant_isolation", "no_unauthorized_effect", "audit_preserved"],
         "ledger": ["audit_preserved", "replay_convergence"],
@@ -306,6 +327,7 @@ def _invariants_for(
         ],
         "operator": [],
         "protocol": [],
+        "deployment": [],
         "adversarial": [
             "quarantined",
             "no_unauthorized_effect",
@@ -328,6 +350,8 @@ def _invariants_for(
         if family == "operator"
         else protocol_invariants[variant]
         if family == "protocol"
+        else deployment_invariants[variant]
+        if family == "deployment"
         else by_family[family]
     )
     if family == "gateway" and variant == "stale-worker":
@@ -362,6 +386,11 @@ def _invariants_for(
                     "ambiguous_reconciles",
                     "revocation_blocks_calls",
                     "protocol_outage_contained",
+                    "stale_region_denied",
+                    "schema_mismatch_fails_readiness",
+                    "unsigned_image_rejected",
+                    "protocol_disabled_without_trust",
+                    "sandbox_disabled_without_isolation",
                 }
                 else InvariantSeverity.REQUIRED
             ),
@@ -428,6 +457,7 @@ def _layer_for(family: str) -> str:
         "observability": "layer-12",
         "operator": "layer-13",
         "protocol": "layer-14",
+        "deployment": "layer-15",
         "adversarial": "cross-layer",
         "fault": "cross-layer",
     }[family]
@@ -449,6 +479,7 @@ def _scenario_for(case: EvaluationCase) -> str:
         "observability": "observability-and-replay",
         "operator": "operator-safety",
         "protocol": "protocol-boundaries",
+        "deployment": "deployment-invariants",
         "adversarial": "adversarial-pack",
         "fault": "recovery-cut-points",
     }[family]
@@ -456,7 +487,7 @@ def _scenario_for(case: EvaluationCase) -> str:
 
 def _scenario_description(scenario_id: str) -> str:
     return (
-        f"Deterministic Layer 14 coverage for {scenario_id.replace('-', ' ')} "
+        f"Deterministic Layer 15 coverage for {scenario_id.replace('-', ' ')} "
         "using synthetic fixtures and registered runtime probes."
     )
 

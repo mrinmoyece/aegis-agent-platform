@@ -1,0 +1,6 @@
+bucket       = "REPLACE_WITH_DEDICATED_STATE_BUCKET"
+key          = "aegis/production/eu-west-1/terraform.tfstate"
+region       = "eu-west-1"
+encrypt      = true
+use_lockfile = true
+kms_key_id   = "REPLACE_WITH_STATE_KMS_KEY_ARN"

@@ -55,3 +55,12 @@ Collect bounded event/audit identifiers, outcome classes, latency/byte buckets,
 drift/quarantine counters, and projection versions. Exclude tenant IDs and peer
 URLs from metric labels and exclude prompts, resources, artifacts, credentials,
 and tokens from logs/support exports.
+
+## Layer 15 deployment gate
+
+The protocol gateway manifest is scaled to zero and has no route until production
+PKI/mTLS, token brokerage, tenant trust registry, revocation, credential rotation,
+exact egress policy/gateway enforcement, partner qualification, and capacity
+evidence pass readiness. Its service account has no Kubernetes API token or RBAC.
+Regional enablement must preserve tenant home-region/provider locality and current
+writer generation; a regional edge never becomes ledger authority.

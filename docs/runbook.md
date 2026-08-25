@@ -220,7 +220,7 @@ drills remain Layer 12 work.
 ## Rollback policy
 
 Migrations `0002_durable_ledger.sql` through
-`0009_event_grounded_memory_pgvector.sql` are forward-only.
+`0011_production_operations.sql` are forward-only.
 They create authoritative
 facts and security roles; automated downgrade would destroy evidence or weaken
 isolation. Roll forward with an additive corrective migration. Disaster restore
@@ -256,3 +256,19 @@ projections.
 The local synthetic image has no live login or production data. Deployment-specific
 identity/session, TLS, browser/assistive-technology, security, load, and recovery
 runbooks remain required. See [operator-ui.md](operator-ui.md).
+
+## Layer 15 production-foundation operations
+
+- Use [deployment](runbooks/deployment.md) for immutable promotion, migration
+  ordering, canary/halt, drain, and rollback.
+- Use [migration](runbooks/migration.md) for advisory locking, compatibility,
+  large-table limits, RLS verification, and roll-forward.
+- Use [backup/restore](runbooks/backup-restore.md) and
+  [regional failover](runbooks/regional-failover.md) for fencing, isolated
+  integrity/rebuild/redrive, credential rotation, and return-to-service.
+- Use [secrets break glass](runbooks/secrets-break-glass.md) for bootstrap,
+  rotation, revocation, and emergency access.
+
+These procedures are executable locally where stated, but production owners,
+contacts, paging paths, account/cluster identifiers, managed recovery commands,
+and measured objectives remain deployment-specific.

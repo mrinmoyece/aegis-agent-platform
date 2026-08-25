@@ -1,0 +1,11 @@
+aws_region                  = "eu-west-1"
+environment                 = "development"
+owner                       = "platform-engineering"
+enable_reference_environment = false
+vpc_cidr                    = "10.42.0.0/16"
+kubernetes_version          = "1.32"
+route53_zone_id             = ""
+public_domain               = ""
+external_secret_arns        = []
+external_secret_kms_key_arns = []
+eks_admin_principal_arn      = ""

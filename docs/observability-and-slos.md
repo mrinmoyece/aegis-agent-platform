@@ -24,3 +24,18 @@ See [semantic conventions](telemetry-semantic-conventions.md),
 [SLO catalog](slo-catalog.md), [dashboard guide](dashboard-guide.md),
 [on-call runbook](on-call-observability.md), and
 [replay tutorial](replay-debugger.md).
+
+## Layer 15 deployment wiring
+
+The Kustomize base deploys two OTel Collector replicas with restricted contexts,
+PDB/topology spread, explicit OTLP ingress, and constrained telemetry egress.
+Application pods expose Prometheus scrape annotations and carry environment,
+region, service, and immutable-version resource attributes. Existing dashboards
+and rules remain source controlled; alert receivers and external log/metric/trace
+sinks are deployment references, not committed credentials.
+
+Collector pressure or outage drops/degrades telemetry rather than blocking ledger
+work. Correctness-critical PostgreSQL, identity, key/credential, and storage
+checks still fail readiness. Production must separately qualify collector/export
+capacity, sink TLS/authentication, redaction, retention, access/audit, alert
+routing, paging ownership, and measured SLO windows.

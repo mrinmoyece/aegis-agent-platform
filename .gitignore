@@ -39,3 +39,7 @@ secrets/
 data/
 logs/
 .aegis-evals/
+.aegis-evidence/
+.terraform/
+*.tfstate
+*.tfstate.*

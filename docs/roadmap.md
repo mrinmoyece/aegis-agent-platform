@@ -347,3 +347,25 @@ full repository checks, Compose/config/container checks, and CI pass. Production
 readiness remains false until distributed auth/token brokerage, production
 PKI/mTLS and egress, public federation/partner qualification, independent
 conformance/security review, HA/DR/multi-region, and final load/chaos evidence.
+
+## Layer 15 - Production deployment foundations
+
+Implemented as code/config and local deterministic evidence: Kustomize environment
+overlays and hardened workload/policy/network/sandbox shapes; an AWS Terraform
+reference with private networking, EKS, managed PostgreSQL/Redis, registry,
+object/KMS/backup/identity/DNS/log foundations and a paid-resource gate; external
+secret references; immutable digest promotion; SPDX, provenance, keyless signing
+and admission policy; safe migration/schema/retention/writer-fence contracts; HA,
+capacity and bounded single-writer regional design; restore/failover/deployment/
+break-glass runbooks; and eight deployment invariants.
+
+**Acceptance gate:** `make check`, backend/frontend/protocol gates, Kustomize render
+and schema/policy/security checks, Terraform format/init-without-backend/validate/
+lint/security/mock plans, migration/RLS checks, pinned container/Compose checks,
+secret/license/vulnerability gates, and the isolated backup/restore/rebuild/
+redrive drill pass. This gate proves repository foundations only. Production
+readiness remains false until real digests and workload bootstrap, cloud apply,
+cluster/CNI/admission/runtime-class/egress qualification, managed backup/failover
+and measured RPO/RTO, production identity/keys/sessions/PKI, load/chaos and SLO
+history, 24/7 operations, independent security/accessibility/compliance review,
+and partner federation evidence exist. Active-active writes remain out of scope.

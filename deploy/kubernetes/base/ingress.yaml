@@ -1,0 +1,200 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: aegis
+  namespace: aegis-system
+  annotations:
+    aegis.dev/controller-prerequisite: envoy-gateway-v1.8.3
+spec:
+  gatewayClassName: envoy-gateway
+  listeners:
+    - name: http
+      hostname: "*.example.invalid"
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: api-https
+      hostname: api.example.invalid
+      protocol: HTTPS
+      port: 443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - group: ""
+            kind: Secret
+            name: aegis-ingress-tls
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: operator-https
+      hostname: operator.example.invalid
+      protocol: HTTPS
+      port: 443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - group: ""
+            kind: Secret
+            name: aegis-ingress-tls
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: aegis-http-redirect
+  namespace: aegis-system
+spec:
+  parentRefs:
+    - name: aegis
+      sectionName: http
+  hostnames:
+    - api.example.invalid
+    - operator.example.invalid
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: aegis-api
+  namespace: aegis-system
+spec:
+  parentRefs:
+    - name: aegis
+      sectionName: api-https
+  hostnames:
+    - api.example.invalid
+  rules:
+    - filters:
+        - type: ResponseHeaderModifier
+          responseHeaderModifier:
+            set:
+              - name: Content-Security-Policy
+                value: "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+              - name: Referrer-Policy
+                value: no-referrer
+              - name: Permissions-Policy
+                value: "camera=(), microphone=(), geolocation=()"
+              - name: X-Content-Type-Options
+                value: nosniff
+              - name: X-Frame-Options
+                value: DENY
+              - name: Strict-Transport-Security
+                value: max-age=31536000; includeSubDomains
+      timeouts:
+        request: 30s
+        backendRequest: 25s
+      backendRefs:
+        - name: aegis-api
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: aegis-operator-bff
+  namespace: aegis-system
+spec:
+  parentRefs:
+    - name: aegis
+      sectionName: operator-https
+  hostnames:
+    - operator.example.invalid
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /operator/api
+      filters:
+        - type: ResponseHeaderModifier
+          responseHeaderModifier:
+            set:
+              - name: Content-Security-Policy
+                value: "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+              - name: Referrer-Policy
+                value: no-referrer
+              - name: Permissions-Policy
+                value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+              - name: X-Content-Type-Options
+                value: nosniff
+              - name: X-Frame-Options
+                value: DENY
+              - name: Strict-Transport-Security
+                value: max-age=31536000; includeSubDomains
+      timeouts:
+        request: 30s
+        backendRequest: 25s
+      backendRefs:
+        - name: aegis-operator-bff
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: aegis-operator-ui
+  namespace: aegis-system
+spec:
+  parentRefs:
+    - name: aegis
+      sectionName: operator-https
+  hostnames:
+    - operator.example.invalid
+  rules:
+    - filters:
+        - type: ResponseHeaderModifier
+          responseHeaderModifier:
+            set:
+              - name: Content-Security-Policy
+                value: "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+              - name: Referrer-Policy
+                value: no-referrer
+              - name: Permissions-Policy
+                value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+              - name: X-Content-Type-Options
+                value: nosniff
+              - name: X-Frame-Options
+                value: DENY
+              - name: Strict-Transport-Security
+                value: max-age=31536000; includeSubDomains
+      timeouts:
+        request: 30s
+        backendRequest: 25s
+      backendRefs:
+        - name: aegis-operator-ui
+          port: 8080
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: aegis-edge-limits
+  namespace: aegis-system
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: aegis-api
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: aegis-operator-bff
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: aegis-operator-ui
+  requestBuffer:
+    limit: 1Mi
+  circuitBreaker:
+    maxConnections: 1024
+    maxPendingRequests: 256
+    maxParallelRequests: 512
+  rateLimit:
+    local:
+      rules:
+        - limit:
+            requests: 20
+            unit: Second

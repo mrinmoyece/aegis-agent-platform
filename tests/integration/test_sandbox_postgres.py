@@ -64,6 +64,7 @@ from aegis_agent_platform.sandbox import (
     StaticInputSnapshotVerifier,
 )
 from aegis_agent_platform.tenancy import TenantContext
+from integration_helpers import integration_writer_fences
 from remediation_helpers import Clock, plan, policy, principal
 from sandbox_helpers import UUIDs, result, spec
 from sandbox_helpers import policy as sandbox_policy
@@ -182,7 +183,10 @@ def test_canonical_specialist_approval_sandbox_rls_fencing_and_rebuild() -> None
         database_now_row = await database_clock.fetchone()
         assert database_now_row is not None
         database_now = database_now_row[0]
-        event_store = PostgresEventStore(connection)
+        event_store = PostgresEventStore(
+            connection,
+            writer_fence_resolver=integration_writer_fences("local-test", 1),
+        )
         work = PostgresWorkRepository(connection, event_store)
         run_id = uuid4()
         agent_repository = PostgresAgentRepository(connection, event_store, work)
@@ -606,7 +610,10 @@ def test_canonical_specialist_approval_sandbox_rls_fencing_and_rebuild() -> None
             autocommit=True,
         )
         await maintenance.execute("SET ROLE aegis_maintenance")
-        maintenance_events = PostgresEventStore(maintenance)
+        maintenance_events = PostgresEventStore(
+            maintenance,
+            writer_fence_resolver=integration_writer_fences("local-test", 1),
+        )
         maintenance_repository = PostgresSandboxRepository(
             maintenance,
             maintenance_events,

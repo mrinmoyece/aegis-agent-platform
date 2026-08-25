@@ -13,6 +13,7 @@ EVIDENCE_MIGRATION = ROOT / "migrations" / "0005_evidence_connectors.sql"
 AGENT_MIGRATION = ROOT / "migrations" / "0006_specialist_orchestration.sql"
 SANDBOX_MIGRATION = ROOT / "migrations" / "0008_hardened_sandbox_execution.sql"
 PROTOCOL_MIGRATION = ROOT / "migrations" / "0010_mcp_a2a_interoperability.sql"
+PRODUCTION_MIGRATION = ROOT / "migrations" / "0011_production_operations.sql"
 
 
 def test_identity_governance_schema_has_tenant_constraints_and_indexes() -> None:
@@ -209,3 +210,23 @@ def test_protocol_schema_is_tenant_scoped_fenced_and_append_only() -> None:
     assert (
         "revoke update, delete, truncate on protocol_trust_decision_history" in schema
     )
+
+
+def test_production_operations_schema_is_tenant_scoped_and_governed() -> None:
+    schema = PRODUCTION_MIGRATION.read_text(encoding="utf-8").lower()
+    for table in (
+        "tenant_writer_fences",
+        "tenant_retention_policies",
+        "ledger_archive_manifests",
+    ):
+        assert f"alter table {table} force row level security" in schema
+        assert f"{table}_tenant_isolation" in schema
+    assert "aegis_assert_writer_fence" in schema
+    assert "approved_change_reference like 'change-ref://%'" in schema
+    assert "approved_policy_reference like 'policy-ref://%'" in schema
+    assert "ledger_archive_manifests_no_mutation" in schema
+    assert "tenants_seed_writer_fence" in schema
+    assert "raise exception 'writer fence missing'" in schema
+    assert "tenant_writer_fences_require_monotonic_transition" in schema
+    assert "new.generation = old.generation + 1" in schema
+    assert "writer fence enforcement cannot be disabled" in schema

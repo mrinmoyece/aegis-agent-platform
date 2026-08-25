@@ -14,7 +14,7 @@ deployments, Kubernetes/runtime changes, and runbooks. This narrow story makes
 durability, evidence provenance, authorization, and safe effects testable end
 to end.
 
-> **Current status: Layer 14 - Secure MCP and A2A interoperability.** Layers 1-4 add
+> **Current status: Layer 15 - Production deployment foundations.** Layers 1-4 add
 > tenant-bound work events, a crash-reconcilable PostgreSQL outbox publisher,
 > Redis Streams consumer groups, inbox deduplication, PostgreSQL renewable
 > leases and fencing, fair bounded supervision, quota enforcement, cancellation,
@@ -58,14 +58,21 @@ to end.
 > exchange, tenant-scoped digest-pinned peer trust, intent-before-network durable
 > lifecycle events, forced-RLS protocol projections, reconciliation, bounded
 > telemetry, operator trust review, deterministic demos, and eight protocol safety
-> evals. The catalog now contains 111 cases. These are
+> evals. Layer 15 adds Kustomize production-shape manifests, a cost-gated AWS
+> Terraform reference, external-secret/workload-identity and restricted workload
+> policy, immutable digest promotion, SPDX/provenance/keyless signing workflows,
+> additive migration/retention/writer-fence contracts, HA/capacity and single-writer
+> regional design, deterministic deployment evals, and an isolated restore/rebuild/
+> Redis-loss drill. The catalog now contains 119 cases. These are
 > configured and locally validated controls, not evidence of production SLO
-> attainment. Live model/connector and production telemetry qualification,
+> attainment. Managed bootstrap is implemented for API, publisher, and reconciler;
+> workers/BFF/protocol execution remains fail-closed at zero. Live model/connector and
+> production telemetry qualification,
 > model-judge execution, independent penetration testing, human labeling,
 > production identity/browser qualification, public protocol federation and PKI/
 > token-broker qualification, external managed backends,
-> 24/7 on-call evidence,
-> production deployment, HA/DR/multi-region, compliance certification, and final
+> 24/7 on-call evidence, live cloud/cluster apply, measured HA/DR/RPO/RTO,
+> multi-region operation, compliance certification, and final
 > load/chaos certification remain deferred. See
 > [Limitations and production gaps](docs/limitations.md) for the complete,
 > honest gap list.
