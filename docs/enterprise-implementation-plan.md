@@ -682,6 +682,8 @@ load/HA/DR remain exit-gate gaps.
 | Layer 12 | Signed deployment, observability/SLO, restore/failover, capacity, and optional A2A evidence pass |
 | Layer 13 | Tenant-safe operator views and exact trust/approval review remain server-authorized |
 | Layer 14 | MCP/A2A calls are digest-pinned, ledger-mediated, proposal-only for remediation, and reconcilable |
+| Layer 15 | Deployment, migration, supply-chain, restore, HA/capacity, and writer-fence foundations pass local/config gates |
+| Layer 16 | One authenticated local journey exports/replays all subsystem events, rebuilds projections identically, and exposes every live blocker |
 
 ## Production readiness review
 
@@ -702,6 +704,20 @@ Before any real tenant onboarding, reviewers must approve:
 
 Until that review passes, Aegis remains a learning/reference implementation, not
 an enterprise production service.
+
+## EP-18: Final local enterprise qualification
+
+**Layer 16 status: implemented with bounded local/CI evidence.** The
+`aegis_agent_platform.qualification` package composes the existing boundaries,
+captures their complete redacted event envelopes, writes an atomic hash-chained
+archive, reloads and replays it, compares projection digests, and emits bounded
+support evidence. The `qualification/` manifests define readiness, residual
+risk, chaos, performance, compliance, and future-framework parity.
+
+The exit gate is `make qualification` plus the existing backend/frontend/
+protocol/integration/infrastructure/supply-chain/restore/container gates. It
+does not close the production readiness review above: every live/environment/
+organizational blocker remains named and fail closed.
 
 ## Layer 12 acceptance gate
 

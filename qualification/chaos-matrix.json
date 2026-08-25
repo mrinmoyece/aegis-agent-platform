@@ -1,0 +1,239 @@
+{
+  "schema_version": 1,
+  "scenarios": [
+    {
+      "id": "process-crash-after-intent",
+      "failure": "Worker exits after durable intent and before outcome.",
+      "expected_invariants": [
+        "intent_before_effect",
+        "replay_convergence",
+        "bounded_duplicates"
+      ],
+      "tests": [
+        "fault.after_intent_append",
+        "tests/test_remediation_execution.py"
+      ],
+      "runbook": "docs/runbook.md#reconciliation",
+      "alert": "intent_without_terminal_outcome"
+    },
+    {
+      "id": "lease-expiry-stale-worker",
+      "failure": "Expired worker resumes after a new generation claims work.",
+      "expected_invariants": [
+        "stale_worker_denied",
+        "audit_preserved"
+      ],
+      "tests": [
+        "fault.after_lease_acquire",
+        "tests/test_worker_runtime.py"
+      ],
+      "runbook": "docs/runbook.md#pending-entries-and-leases",
+      "alert": "aegis_fence_rejections"
+    },
+    {
+      "id": "redis-loss",
+      "failure": "Redis transport state is lost while PostgreSQL outbox remains.",
+      "expected_invariants": [
+        "ledger_convergence",
+        "bounded_duplicates"
+      ],
+      "tests": [
+        "deployment.redis-loss",
+        "scripts/restore_drill.sh"
+      ],
+      "runbook": "docs/runbook.md#outbox-recovery",
+      "alert": "aegis_outbox_oldest_seconds"
+    },
+    {
+      "id": "postgres-transient",
+      "failure": "Append or transaction fails transiently.",
+      "expected_invariants": [
+        "no_partial_commit",
+        "bounded_retry"
+      ],
+      "tests": [
+        "fault.before_result_append",
+        "tests/test_event_store_contracts.py"
+      ],
+      "runbook": "docs/failure-modes.md#durable-storage-failure-modes",
+      "alert": "aegis_postgres_transient_failures"
+    },
+    {
+      "id": "provider-timeout-ambiguity",
+      "failure": "Provider may accept a call before timeout.",
+      "expected_invariants": [
+        "budget_enforced",
+        "ambiguity_visible",
+        "no_exactly_once_claim"
+      ],
+      "tests": [
+        "fault.after_side_effect",
+        "tests/test_model_gateway.py"
+      ],
+      "runbook": "docs/runbook.md#model-gateway-triage",
+      "alert": "aegis_model_billing_ambiguous"
+    },
+    {
+      "id": "connector-timeout-pagination",
+      "failure": "Connector fails after a bounded page.",
+      "expected_invariants": [
+        "partial_explicit",
+        "cursor_fenced",
+        "provenance_preserved"
+      ],
+      "tests": [
+        "tests/test_evidence.py",
+        "tests/test_evidence_adapters.py"
+      ],
+      "runbook": "docs/runbook.md#evidence-connector-triage",
+      "alert": "aegis_evidence_partial_results"
+    },
+    {
+      "id": "cursor-corruption",
+      "failure": "Replay or source cursor stops advancing or is malformed.",
+      "expected_invariants": [
+        "fail_closed",
+        "no_projection_as_truth"
+      ],
+      "tests": [
+        "ledger.corruption",
+        "tests/test_replay_debugger.py"
+      ],
+      "runbook": "docs/runbook.md#projection-recovery",
+      "alert": "aegis_replay_corruption"
+    },
+    {
+      "id": "projection-loss",
+      "failure": "Derived read models are deleted or drift.",
+      "expected_invariants": [
+        "ledger_convergence",
+        "projection_rebuild_identical"
+      ],
+      "tests": [
+        "ledger.projection-rebuild",
+        "qualification.canonical-replay"
+      ],
+      "runbook": "docs/runbook.md#projection-recovery",
+      "alert": "aegis_projection_lag"
+    },
+    {
+      "id": "action-ambiguity",
+      "failure": "Controlled target acknowledges ambiguously.",
+      "expected_invariants": [
+        "intent_before_effect",
+        "observe_before_retry",
+        "verification_required"
+      ],
+      "tests": [
+        "remediation.ambiguous-reconciled",
+        "qualification.action-ambiguity"
+      ],
+      "runbook": "docs/runbook.md#approval-action-ambiguity-or-verification-incident",
+      "alert": "aegis_action_reconciliation_pending"
+    },
+    {
+      "id": "sandbox-orphan-cleanup",
+      "failure": "Create or delete outcome is ambiguous and workload may remain.",
+      "expected_invariants": [
+        "stable_identity",
+        "cleanup_redrive",
+        "quarantine_on_exhaustion"
+      ],
+      "tests": [
+        "sandbox.ambiguous-provisioning",
+        "sandbox.cleanup-recovery"
+      ],
+      "runbook": "docs/runbook.md#sandbox-lifecycle-quarantine-or-cleanup-incident",
+      "alert": "aegis_sandbox_cleanup_backlog"
+    },
+    {
+      "id": "embedding-index-cache-failure",
+      "failure": "Embedding, index, or Redis cache is unavailable or malformed.",
+      "expected_invariants": [
+        "ledger_authoritative",
+        "tenant_isolation",
+        "rebuildable_index"
+      ],
+      "tests": [
+        "tests/test_memory_recovery_edges.py",
+        "memory.deletion"
+      ],
+      "runbook": "docs/runbook.md#memory-pgvector-compaction-or-retention-incident",
+      "alert": "aegis_memory_index_failures"
+    },
+    {
+      "id": "telemetry-outage",
+      "failure": "Collector/exporter is unavailable or drops data.",
+      "expected_invariants": [
+        "telemetry_not_authority",
+        "work_continues",
+        "drops_counted"
+      ],
+      "tests": [
+        "observability.exporter-outage",
+        "deployment.telemetry-loss"
+      ],
+      "runbook": "docs/on-call-observability.md#exporter-and-drops",
+      "alert": "aegis_telemetry_export_degraded"
+    },
+    {
+      "id": "protocol-peer-drift",
+      "failure": "Agent Card or capability digest changes unexpectedly.",
+      "expected_invariants": [
+        "quarantine_before_network",
+        "authority_not_expanded"
+      ],
+      "tests": [
+        "protocol.capability-drift",
+        "qualification.protocol-drift"
+      ],
+      "runbook": "docs/protocol-operations.md#capability-drift-or-signature-failure",
+      "alert": "aegis_protocol_peer_quarantined"
+    },
+    {
+      "id": "protocol-revocation",
+      "failure": "Peer is revoked with ambiguous work in flight.",
+      "expected_invariants": [
+        "new_calls_denied",
+        "ambiguity_preserved"
+      ],
+      "tests": [
+        "protocol.revocation",
+        "qualification.protocol-revocation"
+      ],
+      "runbook": "docs/protocol-operations.md#emergency-revocation",
+      "alert": "aegis_protocol_revoked_calls"
+    },
+    {
+      "id": "node-or-zone-loss",
+      "failure": "Workers restart or a zone is unavailable.",
+      "expected_invariants": [
+        "lease_reacquire",
+        "stale_generation_denied",
+        "ledger_convergence"
+      ],
+      "tests": [
+        "deployment.pod-restart",
+        "tests/test_deployment_runtime.py"
+      ],
+      "runbook": "docs/runbooks/deployment.md",
+      "alert": "aegis_worker_unavailable"
+    },
+    {
+      "id": "region-generation-fence",
+      "failure": "Old region returns after failover.",
+      "expected_invariants": [
+        "single_writer",
+        "stale_region_denied"
+      ],
+      "tests": [
+        "deployment.stale-region-writer",
+        "tests/test_production_foundations.py"
+      ],
+      "runbook": "docs/runbooks/regional-failover.md",
+      "alert": "aegis_writer_generation_mismatch"
+    }
+  ],
+  "production_ready": false,
+  "certification_claimed": false
+}

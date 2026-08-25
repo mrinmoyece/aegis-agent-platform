@@ -4,8 +4,9 @@
 
 - **Implemented code/config:** typed operations contracts, migration `0011`, Kustomize
   resources, Kyverno policies, AWS Terraform, pinned workflows, Docker/Compose digests.
-- **Local deterministic evidence:** unit/static checks, 119-case eval catalog, Kustomize
-  renders, Terraform mock plans, Trivy scans, container restore/rebuild/redrive drill.
+- **Local deterministic evidence:** unit/static checks, Layer 16 eval catalog,
+  integrated checkout archive/replay, chaos/load smoke, Kustomize renders,
+  Terraform mock plans, Trivy scans, container restore/rebuild/redrive drill.
 - **Unverified production control:** cloud apply, managed failover/PITR, cluster/CNI/
   admission/runtime class, egress, identity/session/keys, partner federation, paging,
   measured SLO/load/chaos, penetration/accessibility/compliance review.
@@ -21,7 +22,8 @@ Every release/deployment evidence bundle should contain:
    and the controller-prerequisite report;
 3. application/operator image digests and multi-arch manifests;
 4. SPDX SBOMs, provenance, cosign verification, vulnerability/license/secret results,
-   and exact waivers;
+   and exact waivers/dispositions (Layer 16 has two expiring per-platform
+   false-positive records for one fixed Python CVE);
 5. Kustomize overlay/render hash, schema/policy/RBAC/network/security scan output;
 6. Terraform version/provider lock, format/validate/lint/security/mock or approved live
    plan hash, cost review, apply identity, and state reference without state contents;
@@ -44,3 +46,12 @@ Kubernetes, Terraform, restore, Compose, secret, and diff checks. GitHub checks 
 pass on the stacked PR. That establishes repository evidence only. A production
 readiness review remains false until the unverified controls above have independent,
 environment-specific evidence.
+
+## Layer 16 acceptance evidence
+
+Add the canonical checkout result and hash-chained ledger, before/after
+projection digests, replay/support digest, chaos result, load profile result,
+readiness and residual-risk manifests, compliance map, framework parity
+manifest, and exact tool/environment versions. Local evidence remains separate
+from live controls. Protected-branch publish/signing is expected to be skipped
+on the PR and must not be reported as proven.

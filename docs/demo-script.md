@@ -78,7 +78,7 @@ reconciled, and provider acceptance does not establish verification.
 
 ## 15-minute implementation demo
 
-- **0–2:** Give the elevator pitch and state current Layer 11 limitations.
+- **0–2:** Give the elevator pitch and state current Layer 16/local-only limitations.
 - **2–5:** Walk the package map and pure-domain dependency test.
 - **5–8:** Show the fixed DAG, role policies, typed artifacts, and replay fold.
 - **8–10:** Run the PostgreSQL/Redis race tests; show stale-fence rejection and
@@ -141,6 +141,16 @@ Layer 15 expands the catalog to 119 cases and adds production-foundation
 configuration plus a local restore drill. It still makes no live production
 readiness claim.
 
+Layer 16 adds the canonical integrated runner:
+
+```bash
+make qualification-demo
+```
+
+It writes the complete captured event export and result under
+`.aegis-qualification/demo/`, verifies its hash chain, rebuilds the release
+projection identically, and emits replay/support evidence.
+
 ## 30-minute architecture interview demo
 
 - **0–5:** Product, current status, and canonical incident.
@@ -148,11 +158,10 @@ readiness claim.
 - **10–16:** Multi-agent DAG, limits, ledger-only communication, and critique.
 - **16–22:** Durable events, duplicate delivery, intent, fencing, and recovery.
 - **22–26:** Approval, controlled rollback, verification, and threat controls.
-- **26–30:** Implemented deterministic evaluation gates, deferred SLOs,
-  production gaps,
-  alternatives, and questions.
+- **26–30:** Run the Layer 16 replay/readiness evidence; distinguish locally
+  verified, environment-gated, live-required, and not-claimed capabilities.
 
-## 60-minute end-to-end target demo
+## 60-minute end-to-end local qualification demo
 
 - **0–10:** Architecture and adversarial assumptions.
 - **10–20:** Ingest the checkout problem and inspect cited Dynatrace evidence.
@@ -173,7 +182,8 @@ execution, independent penetration/accessibility testing, large-scale human
 labeling, live production identity/browser qualification, public protocol federation,
 production PKI/token brokerage, production SLO
 attainment, HA/DR/multi-region, final load/chaos certification, and incident
-update remain planned, so the full production narrative is not yet claimable.
+update against a live incident remains unproven, so a production narrative is
+not claimable.
 
 ## Layer 12 demo
 
@@ -239,3 +249,33 @@ writer-fence/retention contracts, and the bounded restore report. State that
 placeholder digests are not deployable, Terraform uses a mock provider, restore
 has two synthetic events, and no live cloud, cluster, managed failover, measured
 SLO/RPO/RTO, or compliance claim is demonstrated.
+
+## Layer 16 final qualification demo
+
+### 15 minutes
+
+1. State the ledger/intent/tenant/runtime-safety invariants and the local-only
+   claim boundary.
+2. Run `make qualification-demo`.
+3. Inspect four cited evidence records, gateway reservation ordering, DAG
+   fan-out/critic/fan-in, exact two-person approval, ambiguous reconciliation,
+   verification, sandbox quarantine, memory isolation, and MCP/A2A results.
+4. Compare `projection_digest_before` and `projection_digest_after`; open the
+   risk and readiness manifests.
+
+### 30 minutes
+
+Add the authenticated control-plane intake, audit/support report, operator
+authority labels, one archive-tamper test, `make qualification-chaos`, and the
+bounded performance report. Explain why these are release evidence rather than
+runtime or production truth.
+
+### 60 minutes
+
+Trace each archived subsystem stream back to source/tests/ADR/runbook; inject an
+action ambiguity, sandbox orphan, protocol drift, Redis loss, and projection
+loss; rebuild from events; review supply-chain promotion and restore evidence;
+then decide each hard go-live gate. Close by stating that protected-branch
+signing, branch protection, live environments, managed recovery, production
+SLO/capacity/on-call evidence, independent review, and certification remain
+unproven.

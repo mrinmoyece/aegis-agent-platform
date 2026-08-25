@@ -23,13 +23,18 @@ until those fixed packages are available in newly pinned base digests.
 Fixed HIGH/CRITICAL findings block builds and promotion. Findings with no
 available vendor fix are reported but do not block; a newly available fix
 immediately makes the finding blocking. `security/vulnerability-waivers.yaml` is
-executable policy. The current exact Python 3.14.7 waiver covers CVE-2026-15308 only
-because Grype lists no fixed stable release before Python 3.15.0; it expires on
-2026-09-13 and must fail closed unless reviewed against a newly available runtime.
+executable policy. Layer 16 reclassifies the temporary Python 3.14.7 record as an
+exact scanner false positive after the upstream affected-range correction
+confirmed 3.14.7 as patched. Grype 0.117.0 still reports only 3.15.0 as fixed;
+the application has no `html.parser` import or HTML parsing entrypoint. Exact
+amd64 and arm64 dispositions bind the scanner/version and upstream evidence and
+expire after 14 days. Any future fixable HIGH/CRITICAL finding blocks until the dependency is
+updated or an exact, reviewed, unexpired exception is added.
 A waiver needs exact report/image-platform, vulnerability, package/version, owner,
-rationale, compensating control, `change-ref://` approval, issue/expiry dates, and
+rationale, disposition/evidence, compensating control, `change-ref://` approval,
+issue/expiry dates, and
 expiry <= 30 days; expired, duplicate, broad, or unscoped entries fail. It cannot waive
-secret leakage, provenance/signature failure, or a hard safety invariant. Artifact and
+exposure of sensitive material, provenance/signature failure, or a hard safety invariant. Artifact and
 attestation retention must cover rollback, investigation, and policy windows.
 
 ## Promotion and GitOps

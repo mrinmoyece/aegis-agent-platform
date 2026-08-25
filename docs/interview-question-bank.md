@@ -403,3 +403,34 @@ measured restore, not backup status.
 **Can automatic rollback reverse a migration?** No. A compatible application
 digest can roll back across an expand schema. Backfill resumes. Irreversible
 contract changes require roll-forward or isolated restore; downgrade risks truth.
+
+## Layer 16 Staff/Principal questions
+
+**Why is the qualification archive not a second source of truth?** It is an
+atomic, hash-chained export of original subsystem envelopes used only for release
+evidence. Runtime state still folds from each authoritative event stream. The
+archive cannot authorize, schedule, approve, or execute anything.
+
+**What does identical projection digest prove?** For the exact exported fixture
+and projection code, reloading every envelope yields the same derived summary.
+It does not prove managed backup durability, production volume, or all future
+event versions.
+
+**Why avoid an aggregate readiness score?** One critical identity, RLS, sandbox,
+restore, or signing blocker can invalidate go-live even if twenty other
+categories are green. Named statuses and hard gates preserve blockers.
+
+**How should local p95 be used?** As a bounded regression and runaway-work gate
+on a recorded host, never as production SLO/capacity evidence. Production needs
+representative topology, traffic, tenant skew, volume, soak, failures, and
+resource/cost measurements.
+
+**What would justify adopting LangGraph or Temporal?** Measurable removal of
+generic orchestration burden while preserving neutral event truth, intent,
+fencing, reconciliation, tenancy, deterministic replay, safety, and export/
+escape. The framework must pass the same feature/eval/chaos/load manifests.
+
+**What is the top production blocker?** There is no single synthetic answer:
+branch protection/signing, live identity, sandbox enforcement, managed restore,
+capacity/SLO/on-call, and independent governance/security evidence are
+independent hard gates. Any one can block launch.

@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "purpose": "Reusable parity contract for a separate future framework-first repository; Aegis itself remains framework-free.",
+  "candidate_options": [
+    "LangGraph with LangSmith or Langfuse for graph and trace tooling",
+    "Temporal for durable workflows with provider-neutral model/evidence adapters",
+    "A hybrid where Temporal owns durable work and LangGraph remains a non-authoritative decision adapter"
+  ],
+  "required_parity": [
+    "append-only ledger remains sole run-state truth",
+    "durable intent precedes every external effect",
+    "at-least-once effects use exact idempotency or explicit reconciliation",
+    "additive legacy-readable event schemas",
+    "explicit tenant/authentication/authorization/policy/fencing context",
+    "fixed coordinator-owned DAG and non-spawning least-privilege specialists",
+    "typed cited artifacts, critic conflicts, deterministic aggregation, and abstention",
+    "budgets, approvals, sandbox, egress, telemetry, and quotas enforced outside prompts",
+    "MCP/A2A remain untrusted adapters",
+    "projection rebuild, replay, chaos, adversarial, load, and release-manifest evidence"
+  ],
+  "measurable_axes": [
+    "lines and ownership of custom orchestration/retry/checkpoint code removed",
+    "event compatibility and deterministic replay digest",
+    "p50/p95/p99 latency, throughput, queue lag, error rate, cost, and token use",
+    "crash-cut convergence and duplicate/ambiguity bounds",
+    "tenant/RLS/cache/protocol/UI isolation",
+    "citation, critic, safety, approval, and verification eval parity",
+    "operability, telemetry cardinality/redaction, upgrade burden, and incident recovery",
+    "dependency, license, CVE, SBOM, provenance, image, and hosting footprint",
+    "vendor lock-in, data export, self-hosting, protocol stability, and escape cost"
+  ],
+  "framework_removable_custom_code": [
+    "graph scheduling and checkpoint plumbing",
+    "generic retry/timer/cancellation bookkeeping",
+    "workflow visibility UI",
+    "trace/evaluation experiment collection",
+    "worker task routing where framework semantics are proven compatible"
+  ],
+  "controls_that_remain_custom": [
+    "tenant identity, RLS, authorization, and policy",
+    "event contracts, effect intent, fencing, idempotency, and reconciliation",
+    "evidence provenance, citations, confidence, critic policy, and deterministic aggregation",
+    "budgets, exact approvals, controlled adapters, sandbox, memory lifecycle, and deletion",
+    "MCP/A2A trust, telemetry redaction, compliance evidence, supply chain, and go-live gates"
+  ],
+  "escape_hatch_criteria": [
+    "all authoritative state and artifacts export through versioned provider-neutral contracts",
+    "no framework-specific serialized object is required for replay",
+    "workflow migration is rehearsed with identical projection digests",
+    "framework outage cannot bypass policy or effects",
+    "license, pricing, hosting, and telemetry data ownership are reviewed"
+  ],
+  "parity_manifest": {
+    "required_feature_groups": 15,
+    "required_evaluation_catalog": "Aegis Layer 16 case IDs and hard-safety gates",
+    "required_benchmark_manifest": "qualification/performance-budgets.json",
+    "required_failure_manifest": "qualification/chaos-matrix.json",
+    "required_readiness_manifest": "qualification/release-readiness.json"
+  }
+}

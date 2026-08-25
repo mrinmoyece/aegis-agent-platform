@@ -369,3 +369,29 @@ cluster/CNI/admission/runtime-class/egress qualification, managed backup/failove
 and measured RPO/RTO, production identity/keys/sessions/PKI, load/chaos and SLO
 history, 24/7 operations, independent security/accessibility/compliance review,
 and partner federation evidence exist. Active-active writes remain out of scope.
+
+## Layer 16 - Final local enterprise qualification
+
+Compose every implemented boundary into one authenticated, shared-tenant,
+fake-only checkout journey. Persist the complete redacted subsystem envelopes in
+a tamper-evident archive, replay the specialist stream, rebuild disposable
+projections identically, and emit a bounded support report. Add cross-layer
+contract tests, executable adversarial/chaos/load gates, final security and
+supply-chain review, readiness/risk/compliance/operations manifests, governance
+evidence, consolidated learning material, and a framework-comparison handoff.
+
+**Status:** implemented as bounded local/CI evidence in
+`aegis_agent_platform.qualification`, `qualification/`, and the Layer 16
+documents. The supported Python 3.14.7 base is fixed upstream; its exact,
+short-lived Grype false-positive dispositions remain executable until the
+scanner database reflects the corrected affected range.
+
+**Acceptance gate:** `make qualification`, `make check`, all deterministic
+evals, frontend/protocol/integration/infrastructure/supply-chain/restore/
+container gates, and `git diff --check` pass. The result must explicitly keep
+`production_ready=false`, preserve all binding invariants, and list every live
+gate. Protected-branch signing, branch protection, live identity/providers/
+connectors/sandbox/protocol partners, cloud/cluster apply, managed restore/
+failover, production SLO/capacity/on-call history, independent assessment,
+compliance certification, and active-active writes remain unproven or not
+claimed.

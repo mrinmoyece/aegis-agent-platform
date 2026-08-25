@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import timedelta
 from enum import StrEnum
@@ -13,6 +13,7 @@ from hashlib import sha256
 from uuid import UUID
 
 from aegis_agent_platform.domain import (
+    EventEnvelope,
     JsonValue,
     ProtocolArtifact,
     ProtocolCitation,
@@ -68,6 +69,10 @@ class ProtocolDemoScenario(StrEnum):
 
 async def run_protocol_demo(
     scenario: ProtocolDemoScenario,
+    *,
+    tenant_id: str = "tenant-alpha",
+    run_id: UUID | None = None,
+    event_sink: Callable[[tuple[EventEnvelope, ...]], None] | None = None,
 ) -> Mapping[str, JsonValue]:
     family = (
         ProtocolFamily.MCP
@@ -81,10 +86,14 @@ async def run_protocol_demo(
         else ProtocolFamily.A2A
     )
     capabilities = canonical_protocol_capabilities()
-    peer = canonical_protocol_peer(family, capabilities=capabilities)
+    peer = canonical_protocol_peer(
+        family,
+        capabilities=capabilities,
+        tenant_id=tenant_id,
+    )
     policy = canonical_protocol_policy((peer,))
     registry = InMemoryProtocolRegistry()
-    context = TenantContext(TenantId("tenant-alpha"))
+    context = TenantContext(TenantId(tenant_id))
     registry.register(context, peer)
     ledger = InMemoryProtocolLedger()
     artifacts = (
@@ -140,6 +149,7 @@ async def run_protocol_demo(
         capability.digest,
         capability.purpose,
         payload,
+        run_id=run_id,
     )
     status = "not_started"
 
@@ -168,13 +178,13 @@ async def run_protocol_demo(
             emergency_disabled=True,
         )
         try:
-            await gateway.request(_principal(), context, request, policy)
+            await gateway.request(_principal(tenant_id), context, request, policy)
         except ProtocolPolicyDeniedError:
             status = "denied"
     elif scenario is ProtocolDemoScenario.TENANT_ATTACK:
         try:
             await gateway.request(
-                _principal(),
+                _principal(tenant_id),
                 TenantContext(TenantId("tenant-other")),
                 request,
                 policy,
@@ -183,27 +193,29 @@ async def run_protocol_demo(
             status = "denied"
     elif scenario is ProtocolDemoScenario.MALICIOUS_CONTENT:
         try:
-            await gateway.request(_principal(), context, request, policy)
+            await gateway.request(_principal(tenant_id), context, request, policy)
         except ProtocolSecurityError:
             status = "quarantined"
     else:
-        result = await gateway.request(_principal(), context, request, policy)
+        result = await gateway.request(_principal(tenant_id), context, request, policy)
         if scenario is ProtocolDemoScenario.AMBIGUOUS_RECONCILIATION:
             result = await gateway.reconcile(
-                _principal(),
+                _principal(tenant_id),
                 context,
                 request,
                 at=NOW,
             )
         elif scenario is ProtocolDemoScenario.CANCELLATION:
             result = await gateway.cancel(
-                _principal(),
+                _principal(tenant_id),
                 context,
                 request,
                 at=NOW,
             )
         status = result.status.value
 
+    if event_sink is not None:
+        event_sink(ledger.events)
     return {
         "scenario": scenario.value,
         "status": status,
@@ -223,6 +235,8 @@ def _request(
     capability_digest: str,
     purpose: str,
     payload: Mapping[str, JsonValue],
+    *,
+    run_id: UUID | None = None,
 ) -> ProtocolRequest:
     return ProtocolRequest(
         UUID("84c1887a-e5b0-4f08-a319-f2c9a571e759"),
@@ -234,7 +248,7 @@ def _request(
         capability_digest,
         payload,
         content_digest(payload),
-        UUID("c697fbb5-03fb-4aeb-81ef-5266500e9df5"),
+        run_id or UUID("c697fbb5-03fb-4aeb-81ef-5266500e9df5"),
         "protocol-demo-request",
         purpose,
         ProtocolDataClassification.INTERNAL,
@@ -265,8 +279,8 @@ def _artifact() -> ProtocolArtifact:
     )
 
 
-def _principal() -> Principal:
-    tenant_id = TenantId("tenant-alpha")
+def _principal(tenant_value: str = "tenant-alpha") -> Principal:
+    tenant_id = TenantId(tenant_value)
     user_id = UserId("protocol-demo-user")
     bindings = tuple(
         RoleBinding(

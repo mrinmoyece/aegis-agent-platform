@@ -189,6 +189,20 @@ independent penetration testing, large-scale human labeling, operator UI,
 MCP/A2A, observability/SLOs, HA/DR/multi-region, or final load/chaos
 certification.
 
+## Layer 16 lab: final qualification and go-live decision
+
+1. Run `make qualification-demo` and count sources/events.
+2. Verify every intent-order assertion and the before/after projection digest.
+3. Change one byte in a copied archive and confirm replay rejects it.
+4. Run `make qualification-chaos` and map each scenario to
+   `qualification/chaos-matrix.json`.
+5. Run `make qualification-load`; record the host and explain why the p95 is not
+   a production SLO.
+6. Review every open residual risk and hard gate. Produce a no-go decision when
+   any live-required gate lacks evidence.
+7. Compare a proposed framework against
+   `qualification/framework-parity.json` without adding it to Aegis.
+
 ## Planned labs by layer
 
 | Layer | Lab | Failure injection and evidence |

@@ -568,6 +568,25 @@ def _validate_supply_chain() -> None:
     waivers = yaml.safe_load(waiver_path.read_text(encoding="utf-8"))
     if not isinstance(waivers, Mapping) or not isinstance(waivers.get("waivers"), list):
         raise SystemExit("vulnerability waivers must use the reviewed schema")
+    expected_false_positive_reports = {
+        "aegis-agent-platform/linux-amd64",
+        "aegis-agent-platform/linux-arm64",
+    }
+    false_positive_reports = {
+        str(waiver.get("report"))
+        for waiver in waivers["waivers"]
+        if isinstance(waiver, Mapping)
+        and waiver.get("vulnerability_id") == "CVE-2026-15308"
+        and waiver.get("package") == "python"
+        and waiver.get("package_version") == "3.14.7"
+        and waiver.get("disposition") == "false_positive"
+        and waiver.get("scanner") == "grype"
+        and waiver.get("scanner_version") == "0.117.0"
+        and str(waiver.get("advisory_reference", "")).startswith("https://")
+        and bool(waiver.get("verification_evidence"))
+    }
+    if false_positive_reports != expected_false_positive_reports:
+        raise SystemExit("Python scanner false-positive scope is incomplete")
 
 
 def main() -> None:

@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "methodology": {
+    "profile": "bounded-local-deterministic",
+    "warmups": 1,
+    "minimum_samples": 3,
+    "maximum_samples": 20,
+    "statistics": [
+      "p50_ms",
+      "p95_ms",
+      "p99_ms",
+      "throughput_per_second",
+      "error_rate"
+    ],
+    "environment": "Record CPU, memory, operating system, Python/Node/PostgreSQL/Redis versions, revision, and concurrent host load with retained evidence.",
+    "claim_boundary": "Budgets are CI regression guards only and must not be extrapolated to production capacity or SLO attainment."
+  },
+  "profiles": [
+    {
+      "id": "api_event_append_read_replay",
+      "gate": "ci-smoke",
+      "p95_budget_ms": 5000,
+      "maximum_error_rate": 0,
+      "fixture": "full checkout qualification archive and replay"
+    },
+    {
+      "id": "outbox_worker_throughput_queue_lag",
+      "gate": "ci-smoke",
+      "p95_budget_ms": 5000,
+      "maximum_error_rate": 0,
+      "fixture": "ten-node investigation request/outbox/worker flow"
+    },
+    {
+      "id": "provider_gateway_concurrency_budgets",
+      "gate": "ci-smoke",
+      "p95_budget_ms": 5000,
+      "maximum_error_rate": 0,
+      "fixture": "fenced scripted provider reservation and charge"
+    },
+    {
+      "id": "connector_pagination_correlation",
+      "gate": "ci-smoke",
+      "p95_budget_ms": 5000,
+      "maximum_error_rate": 0,
+      "fixture": "four bounded durable evidence queries and cited correlation"
+    },
+    {
+      "id": "dag_fanout_fanin",
+      "gate": "ci-smoke",
+      "p95_budget_ms": 5000,
+      "maximum_error_rate": 0,
+      "fixture": "fixed four-way read-only fan-out, critic, and deterministic fan-in"
+    },
+    {
+      "id": "approval_effect_flow",
+      "gate": "ci-smoke",
+      "p95_budget_ms": 5000,
+      "maximum_error_rate": 0,
+      "fixture": "two-person approval, ambiguous action reconciliation, and verification"
+    },
+    {
+      "id": "sandbox_scheduling_model",
+      "gate": "ci-smoke",
+      "p95_budget_ms": 5000,
+      "maximum_error_rate": 0,
+      "fixture": "fake-only provision/start/result/cleanup lifecycle"
+    },
+    {
+      "id": "pgvector_retrieval_model",
+      "gate": "ci-smoke",
+      "p95_budget_ms": 5000,
+      "maximum_error_rate": 0,
+      "fixture": "deterministic in-memory lexical/vector model; live pgvector is integration-gated"
+    },
+    {
+      "id": "eval_runner",
+      "gate": "ci-smoke",
+      "p95_budget_ms": 5000,
+      "maximum_error_rate": 0,
+      "fixture": "one hermetic ledger replay evaluation case"
+    },
+    {
+      "id": "protocol_boundary_exchange",
+      "gate": "ci-smoke",
+      "p95_budget_ms": 5000,
+      "maximum_error_rate": 0,
+      "fixture": "bounded cited A2A artifact exchange"
+    },
+    {
+      "id": "ui_bundle_large_timeline",
+      "gate": "ci-smoke",
+      "p95_budget_ms": 5000,
+      "maximum_error_rate": 0,
+      "fixture": "100 copies of the bounded operator timeline; bundle size is gated separately"
+    },
+    {
+      "id": "restore_rebuild",
+      "gate": "ci-smoke",
+      "p95_budget_ms": 5000,
+      "maximum_error_rate": 0,
+      "fixture": "203-event local qualification export, reload, replay, and projection rebuild"
+    }
+  ],
+  "environment_gated_profiles": [
+    "fresh PostgreSQL event append/read/replay and pgvector retrieval",
+    "Redis outbox/worker throughput and queue lag",
+    "connector multi-page source limits",
+    "sandbox cluster scheduling and cleanup",
+    "frontend browser large-timeline rendering and bundle transfer",
+    "managed backup restore and full projection rebuild"
+  ],
+  "production_ready": false,
+  "certification_claimed": false
+}

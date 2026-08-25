@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install format format-check lint type test evals eval-behavioral eval-deterministic eval-adversarial eval-recovery eval-baseline eval-fixtures eval-meta eval-integration postgres-test integration-test docs-check manifest-check migration-check observability-check protocol-check production-check kubernetes-check terraform-check restore-drill license-check dependency-audit frontend-install frontend-check frontend-e2e frontend-audit frontend-container-check check compose-config container-check
+.PHONY: help install format format-check lint type test evals eval-behavioral eval-deterministic eval-adversarial eval-recovery eval-baseline eval-fixtures eval-meta eval-integration postgres-test integration-test docs-check manifest-check migration-check observability-check protocol-check production-check qualification-check qualification-demo qualification-chaos qualification-load qualification kubernetes-check terraform-check restore-drill license-check dependency-audit frontend-install frontend-check frontend-e2e frontend-audit frontend-container-check check compose-config container-check
 
 PYTHON ?= python3
 PNPM ?= pnpm
@@ -88,6 +88,20 @@ production-check: ## Validate Layer 15 deployment, supply-chain, and operations 
 	$(PYTHON) scripts/check_production.py
 	$(PYTHON) scripts/check_vulnerability_policy.py
 
+qualification-check: ## Validate Layer 16 readiness, risk, governance, and evidence manifests
+	$(PYTHON) scripts/check_qualification.py
+
+qualification-demo: ## Run the canonical no-network checkout qualification
+	PYTHONPATH=src $(PYTHON) -m aegis_agent_platform.qualification demo --output .aegis-qualification/demo >/dev/null
+
+qualification-chaos: ## Run bounded deterministic cross-layer recovery scenarios
+	PYTHONPATH=src $(PYTHON) -m aegis_agent_platform.qualification chaos-smoke --output .aegis-qualification/chaos.json >/dev/null
+
+qualification-load: ## Run bounded local performance regression profiles
+	PYTHONPATH=src $(PYTHON) -m aegis_agent_platform.qualification load-smoke --samples 3 --output .aegis-qualification/load.json >/dev/null
+
+qualification: qualification-check qualification-demo qualification-chaos qualification-load ## Run every Layer 16 local qualification gate
+
 kubernetes-check: production-check ## Render all Kustomize environments
 	@for environment in development staging production; do \
 		kubectl kustomize "deploy/kubernetes/overlays/$$environment" >/dev/null; \
@@ -119,7 +133,7 @@ frontend-container-check: ## Build the non-root static operator image
 	docker build --check frontend
 	docker build --tag aegis-operator-ui:local frontend
 
-check: format-check lint type test evals docs-check manifest-check migration-check observability-check protocol-check production-check license-check ## Run all fast local checks
+check: format-check lint type test evals docs-check manifest-check migration-check observability-check protocol-check production-check qualification-check license-check ## Run all fast local checks
 
 compose-config: ## Render and validate the local Compose configuration
 	docker compose --env-file .env.example config --quiet

@@ -1,4 +1,4 @@
-"""Versioned deterministic Layer 15 evaluation catalog."""
+"""Versioned deterministic Layer 16 evaluation catalog."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from aegis_agent_platform.evals.contracts import (
 from aegis_agent_platform.evals.faults import FaultCutPoint
 from aegis_agent_platform.evals.scoring import default_scorers
 
-CATALOG_VERSION = "1.4.0"
+CATALOG_VERSION = "1.5.0"
 DATASET_CREATED_AT = datetime(2026, 8, 13, 12, 0, tzinfo=UTC)
 FIXTURE_IDS = (
     "checkout-incident-v1",
@@ -53,19 +53,20 @@ def build_suite() -> EvaluationSuite:
         for scenario_id, case_ids in sorted(grouped.items())
     )
     dataset = DatasetManifest(
-        "aegis-checkout-layer15",
+        "aegis-checkout-layer16",
         1,
         CATALOG_VERSION,
         (
             "Synthetic checkout incident, adversarial channels, recovery cut points, "
-            "observability, operator safety, protocol, and deployment invariants."
+            "observability, operator safety, protocol, deployment, and final "
+            "qualification invariants."
         ),
         DATASET_CREATED_AT,
         _fixtures(),
         tuple(case.case_id for case in cases),
     )
     return EvaluationSuite(
-        "aegis-layer15-enterprise",
+        "aegis-layer16-enterprise",
         CATALOG_VERSION,
         "Hermetic, adversarial, safety, and recovery evaluation gates.",
         dataset,
@@ -177,6 +178,14 @@ def _rows() -> tuple[_CaseRow, ...]:
         ("deployment", "unsigned-image", ExpectedOutcome.DENIED),
         ("deployment", "unready-boundaries", ExpectedOutcome.DENIED),
         ("deployment", "telemetry-loss", ExpectedOutcome.RECOVERED),
+        ("qualification", "canonical-replay", ExpectedOutcome.POSITIVE),
+        ("qualification", "action-ambiguity", ExpectedOutcome.RECOVERED),
+        ("qualification", "protocol-drift", ExpectedOutcome.QUARANTINED),
+        ("qualification", "protocol-revocation", ExpectedOutcome.DENIED),
+        ("qualification", "release-readiness", ExpectedOutcome.POSITIVE),
+        ("qualification", "risk-register", ExpectedOutcome.POSITIVE),
+        ("qualification", "chaos-matrix", ExpectedOutcome.POSITIVE),
+        ("qualification", "performance-budgets", ExpectedOutcome.POSITIVE),
     )
     adversarial = tuple(
         ("adversarial", variant, ExpectedOutcome.QUARANTINED)
@@ -328,6 +337,14 @@ def _invariants_for(
         "operator": [],
         "protocol": [],
         "deployment": [],
+        "qualification": [
+            "intent_before_effect",
+            "tenant_isolation",
+            "approval_exact",
+            "bounded_duplicates",
+            "replay_convergence",
+            "audit_preserved",
+        ],
         "adversarial": [
             "quarantined",
             "no_unauthorized_effect",
@@ -458,6 +475,7 @@ def _layer_for(family: str) -> str:
         "operator": "layer-13",
         "protocol": "layer-14",
         "deployment": "layer-15",
+        "qualification": "layer-16",
         "adversarial": "cross-layer",
         "fault": "cross-layer",
     }[family]
@@ -480,6 +498,7 @@ def _scenario_for(case: EvaluationCase) -> str:
         "operator": "operator-safety",
         "protocol": "protocol-boundaries",
         "deployment": "deployment-invariants",
+        "qualification": "final-qualification",
         "adversarial": "adversarial-pack",
         "fault": "recovery-cut-points",
     }[family]
@@ -487,7 +506,7 @@ def _scenario_for(case: EvaluationCase) -> str:
 
 def _scenario_description(scenario_id: str) -> str:
     return (
-        f"Deterministic Layer 15 coverage for {scenario_id.replace('-', ' ')} "
+        f"Deterministic Layer 16 coverage for {scenario_id.replace('-', ' ')} "
         "using synthetic fixtures and registered runtime probes."
     )
 

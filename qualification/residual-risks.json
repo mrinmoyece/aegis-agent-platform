@@ -1,0 +1,162 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-08-14",
+  "certification_claimed": false,
+  "risks": [
+    {
+      "id": "RR-001",
+      "title": "Production identity and session lifecycle unqualified",
+      "severity": "HIGH",
+      "owner": "identity-platform",
+      "evidence": [
+        "tests/test_identity_security.py",
+        "tests/test_operator_api.py"
+      ],
+      "mitigation": "Keep managed readiness false; require live OIDC/JWKS rotation, logout, revocation, proxy, and distributed-session drills.",
+      "trigger": "Before any real-user or real-tenant onboarding.",
+      "target_date": "2026-11-30",
+      "status": "open"
+    },
+    {
+      "id": "RR-002",
+      "title": "Sandbox environment enforcement not independently proven",
+      "severity": "CRITICAL",
+      "owner": "sandbox-platform",
+      "evidence": [
+        "tests/test_sandbox_execution.py",
+        "deploy/kubernetes/base/sandbox-boundary.yaml"
+      ],
+      "mitigation": "Keep replicas at zero until admission, runtime class, node, PID/cgroup, CNI/egress, artifact, scanner, and cleanup controls pass.",
+      "trigger": "Before enabling any untrusted-code workload.",
+      "target_date": "2027-01-31",
+      "status": "open"
+    },
+    {
+      "id": "RR-003",
+      "title": "Live model and connector behavior unqualified",
+      "severity": "HIGH",
+      "owner": "ai-platform",
+      "evidence": [
+        "tests/test_model_gateway.py",
+        "tests/test_evidence_adapters.py"
+      ],
+      "mitigation": "Use dedicated non-production accounts to verify retention, residency, quotas, TLS, egress, pagination, billing ambiguity, rotation, and semantic quality.",
+      "trigger": "Before enabling each provider or connector.",
+      "target_date": "2026-12-31",
+      "status": "open"
+    },
+    {
+      "id": "RR-004",
+      "title": "Managed backup, restore, and regional fencing unmeasured",
+      "severity": "CRITICAL",
+      "owner": "sre",
+      "evidence": [
+        "scripts/restore_drill.sh",
+        "docs/runbooks/regional-failover.md"
+      ],
+      "mitigation": "Run isolated cross-account/key/PITR restores and regional failover with ledger hashes, generations, projection rebuild, Redis redrive, and measured RPO/RTO.",
+      "trigger": "Before declaring disaster recovery available.",
+      "target_date": "2027-02-28",
+      "status": "open"
+    },
+    {
+      "id": "RR-005",
+      "title": "Production SLO, capacity, soak, and paging evidence absent",
+      "severity": "HIGH",
+      "owner": "sre",
+      "evidence": [
+        "qualification/performance-budgets.json",
+        "deploy/prometheus/rules/aegis-alerts.yml"
+      ],
+      "mitigation": "Run representative topology/load/skew/soak and paging drills; establish observed baselines and rollback thresholds without extrapolating local smoke.",
+      "trigger": "Before production traffic or an availability objective.",
+      "target_date": "2027-01-31",
+      "status": "open"
+    },
+    {
+      "id": "RR-006",
+      "title": "Protected-branch publish and admission evidence absent",
+      "severity": "HIGH",
+      "owner": "platform-security",
+      "evidence": [
+        ".github/workflows/supply-chain.yml",
+        ".github/workflows/promotion.yml"
+      ],
+      "mitigation": "Configure branch/ruleset requirements; execute protected-branch multi-arch signing, provenance/SBOM attestation, private mirroring, and live admission rejection.",
+      "trigger": "Before the first deployable release.",
+      "target_date": "2026-10-31",
+      "status": "open"
+    },
+    {
+      "id": "RR-007",
+      "title": "Production protocol federation and partner trust unqualified",
+      "severity": "HIGH",
+      "owner": "protocols",
+      "evidence": [
+        "tests/test_protocol_adapters.py",
+        "docs/protocol-operations.md"
+      ],
+      "mitigation": "Keep protocol replicas at zero; require PKI/mTLS, token brokerage, egress, rotation/revocation, partner identity, conformance, and load evidence per peer.",
+      "trigger": "Before activating any external MCP/A2A peer.",
+      "target_date": "2027-03-31",
+      "status": "open"
+    },
+    {
+      "id": "RR-008",
+      "title": "Encrypted erasable storage and backup deletion incomplete",
+      "severity": "HIGH",
+      "owner": "data-platform",
+      "evidence": [
+        "tests/test_memory_recovery_edges.py",
+        "docs/privacy-and-compliance.md"
+      ],
+      "mitigation": "Qualify tenant keying, crypto erasure, blob deletion, legal hold, export, backup expiry, and audit reconciliation with counsel-approved retention.",
+      "trigger": "Before storing personal, regulated, or customer-derived content.",
+      "target_date": "2027-02-28",
+      "status": "open"
+    },
+    {
+      "id": "RR-009",
+      "title": "Independent security and accessibility assessments absent",
+      "severity": "MEDIUM",
+      "owner": "governance-risk-compliance",
+      "evidence": [
+        "docs/security-assessment.md",
+        "docs/operator-accessibility.md"
+      ],
+      "mitigation": "Commission scoped penetration and manual WCAG/browser/assistive-technology reviews; track findings to closure.",
+      "trigger": "Before public or regulated-user launch.",
+      "target_date": "2027-03-31",
+      "status": "open"
+    },
+    {
+      "id": "RR-010",
+      "title": "Compliance and operational evidence is organizationally incomplete",
+      "severity": "MEDIUM",
+      "owner": "governance-risk-compliance",
+      "evidence": [
+        "qualification/compliance-map.json",
+        "docs/operational-acceptance.md"
+      ],
+      "mitigation": "Define scope, policies, asset/vendor inventories, training, access reviews, incident records, change approvals, evidence retention, legal basis, and independent audit.",
+      "trigger": "Before any compliance or certification statement.",
+      "target_date": "2027-06-30",
+      "status": "open"
+    },
+    {
+      "id": "RR-011",
+      "title": "Image scanners disagree on upstream Python package inventory",
+      "severity": "LOW",
+      "owner": "platform-security",
+      "evidence": [
+        "security/vulnerability-waivers.yaml",
+        "docs/security-assessment.md"
+      ],
+      "mitigation": "Re-scan on database updates; expire the Grype CPython disposition on 2026-08-28; verify final runtime import metadata and compare Grype, Trivy, and upstream affected ranges.",
+      "trigger": "Any scanner database/base digest change or disposition expiry.",
+      "target_date": "2026-08-28",
+      "status": "open"
+    }
+  ],
+  "production_ready": false
+}

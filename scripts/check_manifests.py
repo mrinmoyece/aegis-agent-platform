@@ -211,6 +211,8 @@ def main() -> None:
         },
     ):
         raise SystemExit("Keycloak client requires audience and tenant claim mappers")
+    if services["keycloak"]["healthcheck"].get("start_period") != "60s":
+        raise SystemExit("Keycloak healthcheck must tolerate bounded augmentation")
 
 
 if __name__ == "__main__":

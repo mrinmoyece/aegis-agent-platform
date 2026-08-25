@@ -181,3 +181,10 @@ assert causal coverage, retry outcome deduplication, injected-secret absence,
 telemetry-outage containment, replay convergence, and bounded safety alert
 registration. They remain synthetic CI evidence and do not qualify a live
 production telemetry or SLO path.
+
+Layer 16 extends the catalog to 127 cases with eight final-qualification cases:
+canonical archive/replay convergence, ambiguous-action recovery, protocol drift
+and revocation, readiness, residual risk, chaos matrix, and performance budget
+contracts. These remain hermetic release probes. The bounded load runner is a
+separate regression gate and is not a model-quality baseline or production
+capacity claim.

@@ -534,6 +534,9 @@ def test_a2a_remediation_skill_returns_artifact_not_local_approval() -> None:
 
 def test_a2a_client_discovers_calls_observes_and_cancels_pinned_peer() -> None:
     original_peer = canonical_protocol_peer(ProtocolFamily.A2A)
+    # Build a card with a JWS signature whose kid matches the peer's pinned
+    # signing_key_digest so the key-ID binding check passes without requiring
+    # a real Ed25519 private key in this unit test.
     _jws_header = (
         base64.urlsafe_b64encode(
             json.dumps(
@@ -574,6 +577,7 @@ def test_a2a_client_discovers_calls_observes_and_cancels_pinned_peer() -> None:
             ),
         }
     }
+    original_peer = canonical_protocol_peer(ProtocolFamily.A2A)
     peer = replace(original_peer, card_digest=content_digest(card))
     capabilities = canonical_protocol_capabilities()
     policy = canonical_protocol_policy((peer,))
