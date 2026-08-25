@@ -121,6 +121,25 @@ export const approvalDecisionResponseSchema = z
   })
   .strict();
 
+export const peerTrustRequestSchema = z
+  .object({
+    peer_id: boundedIdentifier,
+    peer_digest: digest,
+    decision: z.enum(['activate', 'quarantine', 'revoke']),
+    rationale_code: boundedIdentifier,
+  })
+  .strict();
+
+export const peerTrustResponseSchema = z
+  .object({
+    peer_id: boundedIdentifier,
+    status: z.enum(['active', 'quarantined', 'revoked']),
+    version: boundedIdentifier,
+    duplicate: z.boolean(),
+    server_time: isoDateTime,
+  })
+  .strict();
+
 export const errorEnvelopeSchema = z
   .object({
     error: z
@@ -140,6 +159,8 @@ export type OperatorSnapshot = z.infer<typeof operatorSnapshotSchema>;
 export type OperatorEventPage = z.infer<typeof operatorEventPageSchema>;
 export type ApprovalDecisionRequest = z.infer<typeof approvalDecisionRequestSchema>;
 export type ApprovalDecisionResponse = z.infer<typeof approvalDecisionResponseSchema>;
+export type PeerTrustRequest = z.infer<typeof peerTrustRequestSchema>;
+export type PeerTrustResponse = z.infer<typeof peerTrustResponseSchema>;
 
 type OpenApiSnapshot = components['schemas']['OperatorSnapshot'];
 type OpenApiSession = components['schemas']['SessionBootstrap'];

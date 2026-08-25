@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install format format-check lint type test evals eval-behavioral eval-deterministic eval-adversarial eval-recovery eval-baseline eval-fixtures eval-meta eval-integration postgres-test integration-test docs-check manifest-check migration-check observability-check frontend-install frontend-check frontend-e2e frontend-audit frontend-container-check check compose-config container-check
+.PHONY: help install format format-check lint type test evals eval-behavioral eval-deterministic eval-adversarial eval-recovery eval-baseline eval-fixtures eval-meta eval-integration postgres-test integration-test docs-check manifest-check migration-check observability-check protocol-check dependency-audit frontend-install frontend-check frontend-e2e frontend-audit frontend-container-check check compose-config container-check
 
 PYTHON ?= python3
 PNPM ?= pnpm
@@ -71,6 +71,14 @@ observability-check: ## Validate semantic conventions, rules, dashboards, and OT
 	$(PYTHON) scripts/check_observability.py
 	@if command -v promtool >/dev/null 2>&1; then promtool check rules deploy/prometheus/rules/*.yml; else echo "promtool unavailable; structural rule validation passed"; fi
 
+protocol-check: ## Validate MCP/A2A versions, boundaries, contracts, and forced RLS
+	PYTHONPATH=src $(PYTHON) scripts/check_protocols.py
+	PYTHONPATH=src $(PYTHON) -m pytest tests/test_protocols.py tests/test_protocol_adapters.py tests/test_protocol_demo.py
+
+dependency-audit: ## Audit Python vulnerabilities and dependency licenses
+	$(PYTHON) -m pip_audit . --progress-spinner off
+	$(PYTHON) -m piplicenses --format=plain --order=license
+
 frontend-install: ## Install the exact frontend dependency graph
 	$(PNPM) --dir frontend install --frozen-lockfile
 
@@ -87,7 +95,7 @@ frontend-container-check: ## Build the non-root static operator image
 	docker build --check frontend
 	docker build --tag aegis-operator-ui:local frontend
 
-check: format-check lint type test evals docs-check manifest-check migration-check observability-check ## Run all fast local checks
+check: format-check lint type test evals docs-check manifest-check migration-check observability-check protocol-check ## Run all fast local checks
 
 compose-config: ## Render and validate the local Compose configuration
 	docker compose --env-file .env.example config --quiet

@@ -114,6 +114,10 @@ class Permission(StrEnum):
     OBSERVABILITY_READ = "observability:read"
     REPLAY_READ = "observability:replay"
     SUPPORT_EXPORT = "observability:support:export"
+    PROTOCOL_READ = "protocol:read"
+    PROTOCOL_INVOKE = "protocol:invoke"
+    PROTOCOL_TRUST_MANAGE = "protocol:trust:manage"
+    PROTOCOL_RECONCILE = "protocol:reconcile"
 
 
 @dataclass(frozen=True, slots=True)

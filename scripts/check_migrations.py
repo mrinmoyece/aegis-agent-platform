@@ -72,6 +72,16 @@ def main() -> None:
         "create table sandbox_cleanup_projection",
         "create table sandbox_attestations",
         "sandbox_attestations_tenant_isolation",
+        "create table protocol_peer_registry",
+        "create table protocol_trust_decision_history",
+        "create table protocol_capability_snapshots",
+        "create table protocol_operation_projection",
+        "create table protocol_operation_claims",
+        "create table protocol_artifact_projection",
+        "create table protocol_stream_cursors",
+        "create table protocol_quota_projection",
+        "create table protocol_audit_projection",
+        "protocol_trust_decision_history_tenant_isolation",
     )
     missing = [control for control in required if control not in schema]
     if missing:

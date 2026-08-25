@@ -101,7 +101,7 @@ Status meanings:
 | Memory quotas and fenced lifecycle recovery | Implemented | atomic tenant-period reservations, durable intent/results, reconciliation and rebuild tests |
 | Deterministic specialist behavioral evaluations | Implemented | success, ambiguity, contradiction, budget, recovery; `make evals` |
 | Deterministic remediation behavioral evaluations | Implemented | approval success/denial/stale, ambiguity, verification/rollback, policy attack, crash recovery |
-| Layered provider-neutral evaluation contracts and harness | Implemented | `aegis_agent_platform.evals`; ADR 0018; 91-case catalog |
+| Layered provider-neutral evaluation contracts and harness | Implemented | `aegis_agent_platform.evals`; ADR 0018; 111-case catalog |
 | Governed synthetic scenario/adversarial/recovery corpus | Implemented | versioned manifest/fixtures; 12 adversarial cases and 22 fault cuts |
 | Hermetic deterministic release gates and hard safety baselines | Implemented | no live network, secrets, judge, or production effects |
 | Scoped expiring evaluation waivers and reviewed baseline changes | Implemented | non-safety waivers only; explicit reviewed update |
@@ -121,10 +121,11 @@ Status meanings:
 | HA deployment and capacity evidence | Planned | Layer 12 |
 | SBOM, provenance, image signing, and release policy | Planned | Layer 12 |
 | Compliance evidence mapping and access review | Planned | Layer 12 |
-| MCP tool/context adapters under runtime policy | Planned | Layer 12 |
-| External A2A Agent Card and task lifecycle adapter | Planned | Layer 12 |
-| Durable A2A lifecycle mapping and replay protection | Planned | Layer 12 |
-| A2A conformance, tenant, and malicious-peer tests | Planned | Layer 12 |
+| MCP tool/context adapters under runtime policy | Implemented local/deterministic | curated server, allowlisted client, Streamable HTTP, fixed local stdio |
+| External A2A Agent Card and task lifecycle adapter | Implemented local/deterministic | signed card, JSON-RPC task/artifact/status/cancellation |
+| Durable MCP/A2A lifecycle mapping and replay protection | Implemented | intent/result/ambiguity/reconciliation events, idempotency, replay cache |
+| Protocol tenant, drift, and malicious-peer tests | Implemented | deterministic adversarial suite plus environment-gated PostgreSQL RLS |
+| Production PKI/token brokerage and public federation | Planned | readiness fails closed; partner/conformance qualification deferred |
 
 Changing a row to Implemented requires tests or operational evidence in the
 same pull request. Planned capabilities map to concrete EP-01 through EP-16
@@ -157,3 +158,15 @@ delivery slices and exit gates in the enterprise implementation blueprint.
 | WCAG 2.2 AA target | Automated evidence | semantic tests, keyboard flows, themes/reduced motion, axe; independent/manual qualification deferred |
 | Supply chain/static serving | Implemented local/CI | pinned lock/toolchain/actions/images, audit/license/bundle/source-map/CSP/SBOM and non-root smoke |
 | Live production identity/browser/deployment | Planned | OIDC exchange, shared encrypted sessions, TLS proxy, browser/AT matrix, managed rollout |
+
+## Layer 14 protocol evidence
+
+| Control | Status | Evidence |
+| --- | --- | --- |
+| MCP `2026-07-28` compatibility | Implemented | `mcp==2.0.0`, negotiation/initialize/pagination/cancellation tests |
+| A2A `1.0` / spec `v1.0.1` compatibility | Implemented | `a2a-sdk==1.1.2`, signed cards and task/artifact lifecycle tests |
+| Registry, trust, drift, revocation | Implemented | exact digests/revisions, quarantine, tenant-admin confirmation |
+| Durable at-least-once lifecycle | Implemented | intent-before-network, duplicates, ambiguity, reconciliation, fencing |
+| Forced-RLS projections/rebuild | Implemented boundary | migration `0010`; static and environment-gated PostgreSQL tests |
+| Protocol threat controls | Implemented deterministic | schema/Unicode/SSRF/DNS/redirect/replay/tenant/authority tests |
+| Public federation and production PKI | Planned | no partner qualification, live token broker, PKI/mTLS, or conformance certification |

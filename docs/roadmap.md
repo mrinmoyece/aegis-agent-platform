@@ -327,4 +327,23 @@ invariant evals, full repository checks, locked install, accessibility/e2e,
 dependency audit, Compose rendering, and container smoke pass. Production readiness
 stays false until live OIDC/distributed sessions, supported browser and assistive-
 technology qualification, independent audits, managed rollout, HA/DR/multi-region,
-and final load/chaos evidence exist. MCP/A2A remain deferred.
+and final load/chaos evidence exist.
+
+## Layer 14 - Secure MCP and A2A interoperability
+
+Implemented: provider-neutral bounded protocol contracts; curated MCP
+tool/resource server and allowlisted client; current Streamable HTTP and
+local-only fixed stdio controls; signed A2A Agent Cards and external task/
+artifact exchange; tenant-scoped peer trust/digest review; authentication,
+replay, schema, Unicode, SSRF/DNS/IP/redirect defenses; additive intent/result/
+ambiguity/cancellation/reconciliation/drift events; PostgreSQL forced-RLS
+projections and fencing; bounded telemetry; operator quarantine/revocation
+workflow; deterministic demos; and eight CI-gated protocol invariants.
+
+**Acceptance gate:** protocol compatibility/security/contract checks, backend
+unit/adversarial tests, environment-gated PostgreSQL RLS/rebuild evidence,
+operator frontend trust flow/accessibility/e2e, deterministic demos, all evals,
+full repository checks, Compose/config/container checks, and CI pass. Production
+readiness remains false until distributed auth/token brokerage, production
+PKI/mTLS and egress, public federation/partner qualification, independent
+conformance/security review, HA/DR/multi-region, and final load/chaos evidence.

@@ -7,12 +7,16 @@ import {
   operatorConfigSchema,
   operatorEventPageSchema,
   operatorSnapshotSchema,
+  peerTrustRequestSchema,
+  peerTrustResponseSchema,
   sessionBootstrapSchema,
   type ApprovalDecisionRequest,
   type ApprovalDecisionResponse,
   type OperatorConfig,
   type OperatorEventPage,
   type OperatorSnapshot,
+  type PeerTrustRequest,
+  type PeerTrustResponse,
   type SessionBootstrap,
 } from './schema';
 
@@ -130,6 +134,32 @@ export class OperatorApiClient {
       {
         method: 'POST',
         body: approvalDecisionRequestSchema.parse(request),
+        csrfToken: headers.csrfToken,
+        idempotencyKey: headers.idempotencyKey,
+        ifMatch: headers.ifMatch,
+        signal,
+        retries: 0,
+      },
+    );
+  }
+
+  public changePeerTrust(
+    tenantId: string,
+    request: PeerTrustRequest,
+    headers: {
+      readonly csrfToken: string;
+      readonly idempotencyKey: string;
+      readonly ifMatch: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<ApiResult<PeerTrustResponse>> {
+    const peerId = encodeSegment(request.peer_id, RESOURCE_ID);
+    return this.call(
+      `/tenants/${encodeSegment(tenantId, TENANT_ID)}/protocol-peers/${peerId}/trust/record`,
+      peerTrustResponseSchema,
+      {
+        method: 'POST',
+        body: peerTrustRequestSchema.parse(request),
         csrfToken: headers.csrfToken,
         idempotencyKey: headers.idempotencyKey,
         ifMatch: headers.ifMatch,

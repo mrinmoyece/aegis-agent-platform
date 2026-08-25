@@ -93,7 +93,7 @@ def full_report() -> EvaluationReport:
 def test_catalog_covers_every_layer_outcome_and_gate_pack() -> None:
     suite = build_suite()
 
-    assert len(suite.cases) == 103
+    assert len(suite.cases) == 111
     assert {case.layer for case in suite.cases} == {
         "layer-2",
         "layer-3",
@@ -106,6 +106,7 @@ def test_catalog_covers_every_layer_outcome_and_gate_pack() -> None:
         "layer-10",
         "layer-12",
         "layer-13",
+        "layer-14",
         "cross-layer",
     }
     assert set(ExpectedOutcome).issubset(
@@ -152,6 +153,34 @@ def test_catalog_covers_every_layer_outcome_and_gate_pack() -> None:
         },
         "operator.injected-evidence-data": {"injected_evidence_is_data"},
         "operator.ui-outage-contained": {"ui_outage_contained"},
+    }
+    protocol_invariants = {
+        case.case_id: {invariant.invariant_id for invariant in case.invariants}
+        - common_operator_invariants
+        for case in suite.cases
+        if case.layer == "layer-14"
+    }
+    assert protocol_invariants == {
+        "protocol.a2a-ambiguous-reconciled": {
+            "ambiguous_reconciles",
+            "replay_convergence",
+        },
+        "protocol.a2a-self-approval": {
+            "approval_exact",
+            "peer_cannot_self_approve",
+        },
+        "protocol.capability-drift": {"capability_drift_quarantines"},
+        "protocol.external-policy-injection": {"external_content_is_data"},
+        "protocol.mcp-destructive-proposal": {
+            "approval_exact",
+            "destructive_is_proposal",
+        },
+        "protocol.outage-contained": {
+            "protocol_outage_contained",
+            "replay_convergence",
+        },
+        "protocol.revocation": {"revocation_blocks_calls"},
+        "protocol.tenant-isolation": {"tenant_isolation"},
     }
     assert json.loads(catalog_json())[0]["case_id"] == suite.cases[0].case_id
 

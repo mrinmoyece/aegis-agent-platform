@@ -5,10 +5,13 @@ import type {
   ApprovalDecisionResponse,
   OperatorItem,
   OperatorSnapshot,
+  PeerTrustRequest,
+  PeerTrustResponse,
   SessionBootstrap,
 } from './api/schema';
 import { ApprovalDialog } from './components/ApprovalDialog';
 import { OperatorItemView, StatusBadge } from './components/OperatorItemView';
+import { ProtocolRegistry } from './components/ProtocolRegistry';
 import { DemoOperatorDataSource, type OperatorDataSource } from './demo/api';
 import { recordTelemetry } from './telemetry';
 import { TenantEventPoller } from './updates/poller';
@@ -29,6 +32,7 @@ const views = [
   ['evaluations', 'Evaluations'],
   ['audit', 'Audit timeline'],
   ['replay', 'Replay & support'],
+  ['protocols', 'MCP & A2A trust'],
 ] as const;
 
 type ViewKey = (typeof views)[number][0];
@@ -178,6 +182,43 @@ export function App({ source = _defaultSource }: AppProps) {
     );
   }
 
+  async function changePeerTrust(
+    request: PeerTrustRequest,
+    expectedVersion: string,
+    idempotencyKey: string,
+  ): Promise<PeerTrustResponse> {
+    if (session === null) {
+      throw new Error('session_expired');
+    }
+    const response = await source.changePeerTrust(
+      session.tenant_id,
+      request,
+      expectedVersion,
+      idempotencyKey,
+    );
+    setSnapshot((current) => {
+      if (current === null) {
+        return current;
+      }
+      return {
+        ...current,
+        sections: {
+          ...current.sections,
+          protocols: (current.sections.protocols ?? []).map((item) =>
+            item.id === response.peer_id
+              ? {
+                  ...item,
+                  status: response.status,
+                  metadata: { ...item.metadata, version: response.version },
+                }
+              : item,
+          ),
+        },
+      };
+    });
+    return response;
+  }
+
   if (session === null || snapshot === null) {
     return <SignIn loading={loading} error={error} onSignIn={() => void signIn()} />;
   }
@@ -288,7 +329,9 @@ export function App({ source = _defaultSource }: AppProps) {
           items={currentItems}
           snapshot={snapshot}
           supportMode={supportMode}
+          canManageProtocolTrust={session.permissions.includes('protocol:trust:manage')}
           onReviewApproval={setApproval}
+          onChangePeerTrust={changePeerTrust}
         />
       </main>
       <div className="sr-only" aria-live="polite" aria-atomic="true">
@@ -398,13 +441,21 @@ function Screen({
   items,
   snapshot,
   supportMode,
+  canManageProtocolTrust,
   onReviewApproval,
+  onChangePeerTrust,
 }: {
   readonly view: ViewKey;
   readonly items: readonly OperatorItem[];
   readonly snapshot: OperatorSnapshot;
   readonly supportMode: boolean;
+  readonly canManageProtocolTrust: boolean;
   readonly onReviewApproval: (approval: OperatorItem) => void;
+  readonly onChangePeerTrust: (
+    request: PeerTrustRequest,
+    expectedVersion: string,
+    idempotencyKey: string,
+  ) => Promise<PeerTrustResponse>;
 }) {
   if (items.length === 0) {
     return (
@@ -444,6 +495,16 @@ function Screen({
         items={items}
         eventCount={snapshot.sections.timeline?.length ?? 0}
         supportMode={supportMode}
+      />
+    );
+  }
+  if (view === 'protocols') {
+    return (
+      <ProtocolRegistry
+        items={items}
+        canManageTrust={canManageProtocolTrust}
+        supportMode={supportMode}
+        onChangeTrust={onChangePeerTrust}
       />
     );
   }
@@ -745,6 +806,8 @@ function descriptionFor(view: ViewKey): string {
       'Regression baselines and hard safety invariants without aggregate hiding.',
     audit: 'Immutable privileged-read and operator-decision records.',
     replay: 'Redacted ledger chain and bounded support evidence.',
+    protocols:
+      'Digest-pinned MCP servers, A2A agents, trust decisions, and reconciliation.',
   };
   return descriptions[view];
 }
@@ -763,6 +826,7 @@ function navIcon(view: ViewKey): ReactNode {
     evaluations: '✓',
     audit: '≡',
     replay: '◁',
+    protocols: '⌁',
   };
   return icons[view];
 }

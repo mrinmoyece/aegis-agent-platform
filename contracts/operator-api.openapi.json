@@ -282,6 +282,97 @@
           }
         }
       }
+    },
+    "/tenants/{tenantId}/protocol-peers/{peerId}/trust/record": {
+      "post": {
+        "operationId": "recordProtocolPeerTrust",
+        "description": "Records an exact digest/version-bound peer trust decision. It never grants roles, approvals, or direct remediation authority.",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantId"
+          },
+          {
+            "name": "peerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._-]+$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._-]+$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 132
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PeerTrustRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Trust decision durably acknowledged for the exact peer scope.",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string",
+                  "maxLength": 132
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeerTrustResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -705,6 +796,77 @@
           },
           "verification": {
             "const": "pending"
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "duplicate": {
+            "type": "boolean"
+          },
+          "server_time": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PeerTrustRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "peer_id",
+          "peer_digest",
+          "decision",
+          "rationale_code"
+        ],
+        "properties": {
+          "peer_id": {
+            "type": "string",
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "peer_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "activate",
+              "quarantine",
+              "revoke"
+            ]
+          },
+          "rationale_code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9._-]+$"
+          }
+        }
+      },
+      "PeerTrustResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "peer_id",
+          "status",
+          "version",
+          "duplicate",
+          "server_time"
+        ],
+        "properties": {
+          "peer_id": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "quarantined",
+              "revoked"
+            ]
           },
           "version": {
             "type": "string",

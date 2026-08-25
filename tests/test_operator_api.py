@@ -34,6 +34,7 @@ from aegis_agent_platform.operator import (
 )
 from aegis_agent_platform.operator.contracts import DataAuthority, OperatorItem
 from aegis_agent_platform.operator.demo import (
+    DEMO_MCP_PEER_DIGEST,
     DEMO_PLAN_DIGEST,
     DEMO_POLICY_DIGEST,
 )
@@ -281,7 +282,7 @@ def test_snapshot_is_tenant_scoped_bounded_audited_and_openapi_valid() -> None:
     assert status == 200
     assert body["tenant_id"] == "tenant-alpha"
     assert body["demo"] is True
-    assert len(body["sections"]) == 12
+    assert len(body["sections"]) == 13
     assert all(len(items) <= 100 for items in body["sections"].values())
     assert (b"etag", b'"46"') in headers
     document = json.loads(
@@ -402,6 +403,60 @@ def test_mutation_deduplicates_and_never_reports_false_success() -> None:
     assert (b"etag", b'"approval-v4"') in first_headers
     assert audit.query(TenantContext(TENANT_ID))[-1].event_type is (
         AuditEventType.OPERATOR_MUTATION
+    )
+
+
+def test_peer_trust_change_requires_exact_digest_version_csrf_and_permission() -> None:
+    app, audit = operator_app()
+    cookie, csrf = session(app)
+    path = (
+        "/operator/api/tenants/tenant-alpha/protocol-peers/"
+        "peer-mcp-deterministic/trust/record"
+    )
+    headers = [
+        (b"cookie", cookie.encode()),
+        (b"origin", ORIGIN.encode()),
+        (b"x-csrf-token", csrf.encode()),
+        (b"idempotency-key", b"peer-trust-001"),
+        (b"if-match", b'"peer-v1"'),
+    ]
+    body: dict[str, object] = {
+        "peer_id": "peer-mcp-deterministic",
+        "peer_digest": DEMO_MCP_PEER_DIGEST,
+        "decision": "quarantine",
+        "rationale_code": "capability-review",
+    }
+
+    stale_status, stale, _ = request(
+        app,
+        path,
+        method="POST",
+        headers=headers,
+        body={**body, "peer_digest": "0" * 64},
+    )
+    status, result, response_headers = request(
+        app,
+        path,
+        method="POST",
+        headers=headers,
+        body=body,
+    )
+    duplicate_status, duplicate, _ = request(
+        app,
+        path,
+        method="POST",
+        headers=headers,
+        body=body,
+    )
+
+    assert stale_status == 422
+    assert stale["error"]["code"] == "invalid_or_stale_peer_scope"
+    assert status == duplicate_status == 202
+    assert result["status"] == "quarantined"
+    assert duplicate["duplicate"] is True
+    assert (b"etag", b'"peer-v2"') in response_headers
+    assert audit.query(TenantContext(TENANT_ID))[-1].resource == (
+        "tenant/tenant-alpha/operator"
     )
 
 
@@ -1040,6 +1095,7 @@ def test_canonical_demo_contains_all_required_operator_surfaces() -> None:
         "health",
         "incidents",
         "memory",
+        "protocols",
         "replay",
         "sandboxes",
         "specialists",

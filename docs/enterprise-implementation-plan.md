@@ -629,6 +629,8 @@ and auditable evidence.
 
 ## EP-16: MCP and A2A
 
+**Layer 14 status: Implemented with deterministic/local evidence.**
+
 MCP remains a policy-controlled tool/context adapter. A2A remains an external
 agent-interoperability adapter. Neither replaces internal events, queues,
 artifacts, authorization, approvals, or coordinator control.
@@ -642,6 +644,15 @@ artifacts, authorization, approvals, or coordinator control.
   and ambiguous-outcome reconciliation.
 - Test conformance, peer spoofing, downgrade, duplicate delivery, cancellation
   races, cross-tenant attempts, malformed artifacts, and malicious peers.
+
+Implemented evidence includes neutral contracts, current MCP Streamable HTTP and
+fixed local stdio guards, signed A2A Agent Cards/JSON-RPC tasks, exact registry
+digests, proposal-only remediation, durable intent/result/ambiguity/
+reconciliation events, forced-RLS projections, bounded telemetry, operator trust
+review, deterministic fakes/demos, and protocol invariant evals. Live
+distributed auth/token brokerage, production PKI/mTLS, public federation,
+partner qualification, independent conformance certification, and final
+load/HA/DR remain exit-gate gaps.
 
 ## Canonical demo acceptance progression
 
@@ -658,6 +669,8 @@ artifacts, authorization, approvals, or coordinator control.
 | Layer 10 | Curated memory is retrieved/compacted with provenance, tenant filters, and deletion |
 | Layer 11 | Hermetic adversarial/recovery gates block a seeded regression and emit redacted release evidence |
 | Layer 12 | Signed deployment, observability/SLO, restore/failover, capacity, and optional A2A evidence pass |
+| Layer 13 | Tenant-safe operator views and exact trust/approval review remain server-authorized |
+| Layer 14 | MCP/A2A calls are digest-pinned, ledger-mediated, proposal-only for remediation, and reconcilable |
 
 ## Production readiness review
 
@@ -689,7 +702,7 @@ ledger-grounded replay. Acceptance requires `make check`,
 configuration, container build, environment-gated PostgreSQL/pgvector/Redis
 tests, and CI. These validate implementation/configuration, not production
 attainment. Production qualification, external backends, live production identity/browser qualification,
-MCP/A2A, 24/7 operations, HA/DR/multi-region, final load/chaos, and compliance
+public protocol federation, 24/7 operations, HA/DR/multi-region, final load/chaos, and compliance
 remain later gates.
 
 ## EP-15: Secure operator UI and BFF

@@ -11,6 +11,10 @@ export const DEMO_PLAN_DIGEST =
   '06963b1167bba0f8407b4d4825dbc97348ea5ffb45c7a015615678295f825c00';
 export const DEMO_POLICY_DIGEST =
   'b3212707424f5a54994856f5f1840c8ff58ac37f0e0499093bc2a7c42987c59e';
+export const DEMO_MCP_PEER_DIGEST =
+  '8696b902f8f2fc9bcce79e804d6f1456f9fbb939cc7d01131e1d7852c1145db4';
+export const DEMO_A2A_PEER_DIGEST =
+  'b4177769056f162670cf16ab4e21316979085cd7433c69a1b631845dda691a7e';
 
 const base = Date.parse('2026-08-13T08:00:00.000Z');
 
@@ -45,7 +49,7 @@ export const demoSession: SessionBootstrap = sessionBootstrapSchema.parse({
   schema_version: 1,
   actor_id: 'operator-alice',
   tenant_id: DEMO_TENANT,
-  roles: ['approver', 'operator'],
+  roles: ['approver', 'operator', 'tenant_admin'],
   permissions: [
     'tenant:read',
     'resource:read',
@@ -56,6 +60,10 @@ export const demoSession: SessionBootstrap = sessionBootstrapSchema.parse({
     'memory:read',
     'observability:read',
     'observability:replay',
+    'protocol:read',
+    'protocol:invoke',
+    'protocol:trust:manage',
+    'protocol:reconcile',
   ],
   csrf_token: 'demo-csrf-token-is-not-a-production-secret',
   server_time: '2026-08-13T08:42:00.000Z',
@@ -307,6 +315,70 @@ export const demoSnapshot: OperatorSnapshot = operatorSnapshotSchema.parse({
         {
           citation: 'event://checkout/replay/46',
           metadata: { redacted: true, support_bundle: 'available' },
+        },
+      ),
+    ],
+    protocols: [
+      item(
+        'peer-mcp-deterministic',
+        'protocol-peer',
+        'Curated MCP evidence server',
+        'Digest-pinned Streamable HTTP peer; destructive tools are proposal-only.',
+        'active',
+        'derived_state',
+        43,
+        {
+          citation: 'event://protocol/peer-registered',
+          metadata: {
+            family: 'mcp',
+            protocol_version: '2026-07-28',
+            transport: 'streamable_http',
+            trust_tier: 'local_deterministic',
+            capabilities: 4,
+            peer_digest: DEMO_MCP_PEER_DIGEST,
+            version: 'peer-v1',
+            production_ready: false,
+          },
+        },
+      ),
+      item(
+        'peer-a2a-deterministic',
+        'protocol-peer',
+        'External investigation agent',
+        'Capability drift quarantined the signed A2A Agent Card.',
+        'quarantined',
+        'event_fact',
+        44,
+        {
+          severity: 'warning',
+          citation: 'event://protocol/capability-drift',
+          metadata: {
+            family: 'a2a',
+            protocol_version: '1.0',
+            transport: 'jsonrpc_http',
+            trust_tier: 'local_deterministic',
+            capabilities: 4,
+            peer_digest: DEMO_A2A_PEER_DIGEST,
+            version: 'peer-v2',
+            production_ready: false,
+          },
+        },
+      ),
+      item(
+        'protocol-task-ambiguous',
+        'protocol-operation',
+        'External artifact exchange',
+        'Remote completion was ambiguous; status observation is pending.',
+        'ambiguous',
+        'event_fact',
+        45,
+        {
+          severity: 'warning',
+          citation: 'event://a2a/task-ambiguous',
+          metadata: {
+            reconciliation: 'observe_before_retry',
+            content: 'redacted',
+          },
         },
       ),
     ],

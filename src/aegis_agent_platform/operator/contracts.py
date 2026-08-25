@@ -243,6 +243,60 @@ class ApprovalDecisionResult:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class PeerTrustCommand:
+    """Exact digest/version-bound peer trust decision."""
+
+    peer_id: str
+    peer_digest: str
+    decision: str
+    rationale_code: str
+    expected_version: str
+    idempotency_key: str
+
+    def __post_init__(self) -> None:
+        for value, name in (
+            (self.peer_id, "peer_id"),
+            (self.rationale_code, "rationale_code"),
+            (self.expected_version, "expected_version"),
+            (self.idempotency_key, "idempotency_key"),
+        ):
+            _bounded_identifier(value, name)
+        if len(self.peer_digest) != 64 or any(
+            character not in "0123456789abcdef" for character in self.peer_digest
+        ):
+            raise ValueError("peer_digest must be a lowercase SHA-256 digest")
+        if self.decision not in {"activate", "quarantine", "revoke"}:
+            raise ValueError("peer trust decision is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class PeerTrustResult:
+    """Trust acknowledgement; never implies remote protocol health."""
+
+    peer_id: str
+    status: str
+    version: str
+    duplicate: bool
+    server_time: datetime
+
+    def __post_init__(self) -> None:
+        _bounded_identifier(self.peer_id, "peer_id")
+        _bounded_identifier(self.status, "status")
+        _bounded_identifier(self.version, "version")
+        if self.server_time.tzinfo is None:
+            raise ValueError("server_time must be timezone-aware")
+
+    def to_dict(self) -> dict[str, JsonValue]:
+        return {
+            "peer_id": self.peer_id,
+            "status": self.status,
+            "version": self.version,
+            "duplicate": self.duplicate,
+            "server_time": self.server_time.isoformat(),
+        }
+
+
 class OperatorViewService(Protocol):
     """Read only through tenant-scoped application/projection services."""
 
@@ -282,6 +336,17 @@ class OperatorCommandService(Protocol):
         """Record a decision without claiming effect completion."""
         ...
 
+    async def change_peer_trust(
+        self,
+        principal: Principal,
+        context: TenantContext,
+        command: PeerTrustCommand,
+        *,
+        at: datetime,
+    ) -> PeerTrustResult:
+        """Record an exact peer trust decision without exposing credentials."""
+        ...
+
 
 __all__ = [
     "MAX_OPERATOR_ITEMS",
@@ -294,4 +359,6 @@ __all__ = [
     "OperatorItem",
     "OperatorSnapshot",
     "OperatorViewService",
+    "PeerTrustCommand",
+    "PeerTrustResult",
 ]

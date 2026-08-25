@@ -6,6 +6,8 @@ from aegis_agent_platform.operator.contracts import (
     ApprovalDecisionResult,
     OperatorEventPage,
     OperatorSnapshot,
+    PeerTrustCommand,
+    PeerTrustResult,
 )
 from aegis_agent_platform.operator.demo import (
     DemoOperatorCommands,
@@ -33,5 +35,7 @@ __all__ = [
     "OperatorSession",
     "OperatorSessionHandle",
     "OperatorSnapshot",
+    "PeerTrustCommand",
+    "PeerTrustResult",
     "canonical_operator_snapshot",
 ]

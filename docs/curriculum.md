@@ -31,6 +31,9 @@ coordination, safe effects, evaluation, and operations.
 > observability, SLO configuration, dashboards, and ledger replay. Layer 13 adds
 > the secure derived operator BFF, strict React workspace, exact-scope approval
 > UX, accessibility/security/supply-chain gates, and six operator invariants.
+> Layer 14 implements governed MCP tool/context and A2A external-agent
+> boundaries, digest-pinned trust, durable reconciliation, deterministic demos,
+> and eight protocol invariants. Production federation and PKI remain unverified.
 > Live identity/browser environments and production operations remain unverified.
 
 The curriculum is backed by the concrete delivery slices and acceptance
@@ -57,7 +60,7 @@ Implemented only when its document links executable code and tests.
 | Identity, tenancy, and RBAC (`identity-tenancy.md`) | Separate authentication from tenant authorization and prove isolation | 2–3 | PostgreSQL repositories and live RLS denial implemented; live-Keycloak drills planned |
 | Memory, RAG, and compaction (`memory-and-rag.md`, `protocols.md`, ADR 0017) | Design working, episodic, and semantic tiers with provenance, PII controls, retention, relevance/recency, and faithful compaction | 10 | Implemented; deterministic and live pgvector/RLS evidence |
 | Evidence connectors and correlation (`evidence-connectors.md`) | Translate Dynatrace, GitHub, Kubernetes, and runbooks into stable evidence; preserve provenance, partial results, ambiguity, and conflict | 6 | Implemented with mocked transports; live environments unverified |
-| Agent and tool protocols (`protocols.md`) | Distinguish internal correctness ports, MCP adapters, and external A2A interoperability | 6–8 | Position documented; MCP/A2A planned |
+| Agent and tool protocols (`protocols.md`, ADR 0022) | Distinguish internal correctness ports, MCP adapters, and external A2A interoperability | 14 | Implemented deterministic/local; production federation deferred |
 | Evaluation strategy (`evaluation.md`, ADR 0018) | Separate hermetic CI, integration, live/statistical qualification, and production evidence; govern datasets, gates, waivers, judges, reports, and lifecycle | 11 | Implemented deterministic suite/CLI; optional-live boundary limited and no production qualification |
 | Observability and SLOs (`observability-and-slos.md`) | Correlate events/traces safely, select SLIs, control cardinality, and operate alerting | 12 | Local topology scaffolded; production layer planned |
 | Threat model (`threat-model.md`) | Analyze tenant, evidence, model, swarm, tool, memory, sandbox, provider, evaluation, and supply-chain threats | 1–11 | Layer 11 evaluation controls and environment gaps documented |
@@ -104,3 +107,14 @@ resume/deduplication/tenant teardown, XSS/download/CSV/clipboard defenses, WCAG 
 AA patterns, CSP/static serving, dependency policy, SBOM, and honest readiness
 gaps. Use [operator-ui.md](operator-ui.md),
 [operator-accessibility.md](operator-accessibility.md), and ADR 0021.
+
+## Layer 14 learning outcomes
+
+Learners can defend why MCP/A2A remain adapters rather than internal
+orchestration; design exact tenant peer registries, capability/card/schema
+digest pinning, signed Agent Cards, proposal-only remediation, and
+intent-before-network at-least-once reconciliation; prevent poisoning,
+confused-deputy, SSRF/DNS/redirect, replay, schema/Unicode/MIME, tenant, and
+denial-of-wallet attacks; and distinguish deterministic interoperability from
+production PKI/federation evidence. Use [protocols.md](protocols.md),
+[MCP/A2A security](mcp-a2a-security.md), and ADR 0022.

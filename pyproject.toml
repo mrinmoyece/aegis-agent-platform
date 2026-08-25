@@ -18,17 +18,19 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
+  "a2a-sdk==1.1.2",
   "anthropic>=0.64,<1",
-  "cryptography>=45,<49",
+  "cryptography>=50,<51",
   "jsonschema>=4.25,<5",
   "kubernetes>=33,<35",
+  "mcp==2.0.0",
   "openai>=1.99,<3",
   "opentelemetry-api>=1.36,<2",
   "psycopg[binary]>=3.2.9,<4",
   "pyyaml>=6.0.2,<7",
   "pyjwt>=2.10,<3",
   "redis>=6.4,<7",
-  "urllib3>=1.26,<2.4",
+  "urllib3>=2.7,<3",
   "uvicorn>=0.35,<1",
 ]
 
@@ -38,6 +40,8 @@ aegis-replay = "aegis_agent_platform.observability.__main__:main"
 [project.optional-dependencies]
 dev = [
   "mypy>=1.17,<2",
+  "pip-audit==2.10.1",
+  "pip-licenses==5.5.5",
   "pytest>=8.4,<9",
   "pytest-asyncio>=1.1,<2",
   "pytest-cov>=6.2,<7",
@@ -80,7 +84,7 @@ show_error_codes = true
 pretty = true
 
 [[tool.mypy.overrides]]
-module = ["kubernetes", "kubernetes.*"]
+module = ["a2a", "a2a.*", "kubernetes", "kubernetes.*", "mcp", "mcp.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
@@ -104,6 +108,7 @@ omit = [
   "src/aegis_agent_platform/remediation/postgres.py",
   "src/aegis_agent_platform/sandbox/postgres.py",
   "src/aegis_agent_platform/memory/postgres.py",
+  "src/aegis_agent_platform/protocols/postgres.py",
   "src/aegis_agent_platform/memory/redis_cache.py",
   "src/aegis_agent_platform/evidence/transport.py",
   "src/aegis_agent_platform/integrations/kubernetes/official.py",

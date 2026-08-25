@@ -1,7 +1,7 @@
 # Implementation status
 
-The repository currently implements **Layer 13: secure operator UI and BFF** on
-top of Layer 12 observability/replay and the existing durable runtime.
+The repository currently implements **Layer 14: secure MCP and A2A
+interoperability** on top of the Layer 13 operator surface and durable runtime.
 
 Layer 10 adds immutable working/episodic/semantic contracts, additive lifecycle
 events and pure replay, authorized digest-bound ingestion, scanning/quarantine,
@@ -30,7 +30,7 @@ The implementation does not certify a production Kubernetes cluster, live model,
 production blob/key service, external DLP/malware scanner, HA/DR/multi-region
 deployment, or final load profile. The executable embedding profile is fixed at
 eight dimensions for deterministic evidence. Live production operator
-qualification, MCP/A2A, and broad autonomous production mutation remain deferred.
+qualification and broad autonomous production mutation remain deferred.
 See
 [limitations](limitations.md), [memory and RAG](memory-and-rag.md), and
 [sandbox execution](sandbox-execution.md).
@@ -45,7 +45,7 @@ evaluation cases.
 This is configured/local evidence, not measured production SLO attainment.
 Production model/connector/telemetry qualification, external managed backends,
 independent penetration testing, large-scale human labeling, live production
-identity/browser qualification, MCP/A2A, 24/7 on-call evidence, HA/DR,
+identity/browser qualification, public protocol federation, 24/7 on-call evidence, HA/DR,
 multi-region, final load/chaos, and compliance certification are deferred.
 
 Layer 13 implements the provider-neutral operator contracts, secure server-side
@@ -63,3 +63,18 @@ The BFF's live OIDC code exchange and distributed session repository are not
 configured, so production readiness remains false. Automated accessibility and
 browser tests are deterministic evidence, not independent audits or production
 qualification.
+
+Layer 14 implements neutral protocol contracts and additive lifecycle events,
+curated MCP Streamable HTTP/local-fixed-stdio adapters, signed A2A Agent Cards
+and JSON-RPC tasks, exact tenant peer registries and drift quarantine,
+intent-before-network invocation/task orchestration, at-least-once
+reconciliation/cancellation, forced-RLS PostgreSQL projections, bounded
+telemetry, tenant-admin trust review, deterministic fakes/demos, and eight
+protocol evaluation invariants. MCP is pinned to specification `2026-07-28` and
+`mcp==2.0.0`; A2A uses protocol `1.0`, specification tag `v1.0.1`, and
+`a2a-sdk==1.1.2`.
+
+Distributed production token brokerage, PKI/mTLS deployment, public federation,
+partner qualification, independent conformance certification, and production
+load/HA/DR evidence are not implemented. Protocol readiness therefore fails
+closed outside the deterministic/local boundary.

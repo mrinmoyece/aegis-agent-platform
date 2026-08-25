@@ -23,6 +23,8 @@ REQUIRED_DOCUMENTS = {
     ROOT / "docs" / "glossary.md",
     ROOT / "docs" / "limitations.md",
     ROOT / "docs" / "protocols.md",
+    ROOT / "docs" / "mcp-a2a-security.md",
+    ROOT / "docs" / "protocol-operations.md",
     ROOT / "docs" / "enterprise-implementation-plan.md",
     ROOT / "docs" / "identity-tenancy.md",
     ROOT / "docs" / "durable-execution.md",
@@ -38,6 +40,7 @@ REQUIRED_DOCUMENTS = {
     ROOT / "docs" / "operator-ui.md",
     ROOT / "docs" / "operator-accessibility.md",
     ROOT / "docs" / "adr" / "0021-bff-session-and-derived-operator-views.md",
+    ROOT / "docs" / "adr" / "0022-ledger-mediated-mcp-a2a-boundaries.md",
     ROOT / "docs" / "adr" / "0013-durable-evidence-ingestion.md",
     ROOT / "docs" / "adr" / "0014-governed-durable-specialist-dag.md",
     ROOT / "docs" / "adr" / "0015-exact-approvals-at-least-once-effects.md",
@@ -94,7 +97,7 @@ def main() -> None:
         raise SystemExit("broken documentation links:\n" + "\n".join(failures))
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    if "Current status: Layer 13" not in readme:
+    if "Current status: Layer 14" not in readme:
         raise SystemExit("README must state the current implementation layer")
 
 
